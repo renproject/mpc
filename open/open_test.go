@@ -164,6 +164,7 @@ var _ = Describe("Opener", func() {
 						_ = opener.TransitionShare(badShare)
 						Expect(opener.I()).To(Equal(k))
 					})
+
 					Specify("wrong value", func() {
 						ProgressToDone()
 						badShare := shares[k]
@@ -188,6 +189,17 @@ var _ = Describe("Opener", func() {
 		//
 
 		Context("Reconstruction (2)", func() {
+			It("should have the correct secret once Done", func() {
+				ProgressToDone()
+				reconstructed := opener.Secret()
+				Expect(reconstructed.Eq(&secret)).To(BeTrue())
+
+				for i := k; i < n; i++ {
+					_ = opener.TransitionShare(shares[i])
+					reconstructed = opener.Secret()
+					Expect(reconstructed.Eq(&secret)).To(BeTrue())
+				}
+			})
 		})
 
 		//
@@ -310,11 +322,6 @@ var _ = Describe("Opener", func() {
 						shares = make(shamir.VerifiableShares, n+1)
 						c = shamir.NewCommitmentWithCapacity(k)
 						sharer.Share(&shares, &c, secret, k)
-
-						// Randomise the order of the shares.
-						rand.Shuffle(len(shares), func(i, j int) {
-							shares[i], shares[j] = shares[j], shares[i]
-						})
 
 						// Perform the test
 						ProgressToWaitingI(n)
