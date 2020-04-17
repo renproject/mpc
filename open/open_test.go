@@ -49,6 +49,11 @@ var _ = Describe("Opener", func() {
 			shares = make(shamir.VerifiableShares, n)
 			c = shamir.NewCommitmentWithCapacity(k)
 			sharer.Share(&shares, &c, secret, k)
+
+			// Randomise the order of the shares.
+			rand.Shuffle(len(shares), func(i, j int) {
+				shares[i], shares[j] = shares[j], shares[i]
+			})
 		})
 
 		InStateWaitingCK0 := func(k int) bool {
@@ -103,9 +108,8 @@ var _ = Describe("Opener", func() {
 
 				Specify("(i = k-1) Share, Valid(c) -> Done(c)", func() {
 					ProgressToWaitingI(k - 1)
-					event := opener.TransitionShare(shares[k-1])
-					Expect(event).To(Equal(open.Done))
-					Expect(opener.I()).To(Equal(k))
+					_ = opener.TransitionShare(shares[k-1])
+					Expect(opener.I() >= k).To(BeTrue())
 				})
 
 				Context("Share, not Valid(c) -> Do nothing", func() {
@@ -191,6 +195,134 @@ var _ = Describe("Opener", func() {
 		//
 
 		Context("Events (3)", func() {
+			Context("Reset events", func() {
+				Specify("Not yet done in a sharing instance -> Aborted", func() {
+					ProgressToWaitingI(rand.Intn(k - 1))
+					event := opener.TransitionReset(c, k)
+					Expect(event).To(Equal(open.Aborted))
+				})
+
+				Specify("Otherwise -> Reset", func() {
+					// Uninitialised
+					event := opener.TransitionReset(c, k)
+					Expect(event).To(Equal(open.Reset))
+
+					// Done
+					ProgressToDone()
+					for i := 0; i < rand.Intn(n-k); i++ {
+						_ = opener.TransitionShare(shares[i+k])
+					}
+					event = opener.TransitionReset(c, k)
+					Expect(event).To(Equal(open.Reset))
+				})
+			})
+
+			Context("Share events", func() {
+				Specify("Uninitialised -> Ignored", func() {
+					event := opener.TransitionShare(shares[0])
+					Expect(event).To(Equal(open.Ignored))
+				})
+
+				Specify("Waiting, i < k-1 -> ShareAdded", func() {
+					i := rand.Intn(k - 1)
+					ProgressToWaitingI(i)
+					event := opener.TransitionShare(shares[i])
+					Expect(event).To(Equal(open.ShareAdded))
+				})
+
+				Specify("Done -> ShareAdded", func() {
+					ProgressToDone()
+					for i := k; i < n; i++ {
+						event := opener.TransitionShare(shares[i])
+						Expect(event).To(Equal(open.ShareAdded))
+					}
+				})
+
+				Specify("Waiting, i = k-1 -> Done", func() {
+					ProgressToWaitingI(k - 1)
+					event := opener.TransitionShare(shares[k-1])
+					Expect(event).To(Equal(open.Done))
+				})
+
+				Context("Invalid shares", func() {
+					Specify("Invalid share", func() {
+						ProgressToWaitingI(0)
+
+						// Index
+						badShare := shares[0]
+						stu.PerturbIndex(&badShare)
+						event := opener.TransitionShare(badShare)
+						Expect(event).To(Equal(open.InvalidShare))
+
+						// Value
+						badShare = shares[0]
+						stu.PerturbValue(&badShare)
+						event = opener.TransitionShare(badShare)
+						Expect(event).To(Equal(open.InvalidShare))
+
+						// Decommitment
+						badShare = shares[0]
+						stu.PerturbDecommitment(&badShare)
+						event = opener.TransitionShare(badShare)
+						Expect(event).To(Equal(open.InvalidShare))
+
+						for i := 0; i < n; i++ {
+							_ = opener.TransitionShare(shares[i])
+
+							// Index
+							badShare = shares[i]
+							stu.PerturbIndex(&badShare)
+							event := opener.TransitionShare(badShare)
+							Expect(event).To(Equal(open.InvalidShare))
+
+							// Value
+							badShare = shares[i]
+							stu.PerturbValue(&badShare)
+							event = opener.TransitionShare(badShare)
+							Expect(event).To(Equal(open.InvalidShare))
+
+							// Decommitment
+							badShare = shares[i]
+							stu.PerturbDecommitment(&badShare)
+							event = opener.TransitionShare(badShare)
+							Expect(event).To(Equal(open.InvalidShare))
+						}
+					})
+
+					Specify("Duplicate share", func() {
+						ProgressToWaitingI(0)
+						for i := 0; i < n; i++ {
+							_ = opener.TransitionShare(shares[i])
+
+							for j := 0; j <= i; j++ {
+								event := opener.TransitionShare(shares[j])
+								Expect(event).To(Equal(open.IndexDuplicate))
+							}
+						}
+					})
+
+					Specify("Index out of range", func() {
+						// To reach this case, we need a valid share that is
+						// out of the normal range of indices. We thus need to
+						// utilise the sharer to do this.
+						indices = stu.SequentialIndices(n + 1)
+						sharer = shamir.NewVSSharer(indices, h)
+						shares = make(shamir.VerifiableShares, n+1)
+						c = shamir.NewCommitmentWithCapacity(k)
+						sharer.Share(&shares, &c, secret, k)
+
+						// Randomise the order of the shares.
+						rand.Shuffle(len(shares), func(i, j int) {
+							shares[i], shares[j] = shares[j], shares[i]
+						})
+
+						// Perform the test
+						ProgressToWaitingI(n)
+						event := opener.TransitionShare(shares[n])
+						Expect(event).To(Equal(open.IndexOutOfRange))
+					})
+				})
+			})
 		})
 	})
 

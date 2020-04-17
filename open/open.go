@@ -190,7 +190,10 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 		return InvalidShare
 	}
 
-	// Check if a share with this index is already in the buffer.
+	// Check if a share with this index is already in the buffer. Note that
+	// since we have already checked that the share is valid, it is necessarily
+	// the case that if the index is a duplicate, so too will be the entire
+	// share.
 	//
 	// TODO: These temporary variables are gross, and there will probably be an
 	// easier way if we were using shares that assumed the indices of the
@@ -205,7 +208,10 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	}
 
 	// If the share buffer is full and the index is not a duplicate, it must be
-	// out of range.
+	// out of range. Note that since this share has passed the above checks, it
+	// must actually be a valid share. This requires knowledge of the sharing
+	// polynomials which would imply either a malicious dealer or a malicious
+	// player that contructs new valid shares after being able to open.
 	if len(opener.shareBuffer) == cap(opener.shareBuffer) {
 		return IndexOutOfRange
 	}
