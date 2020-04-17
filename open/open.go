@@ -144,10 +144,12 @@ type Opener struct {
 	reconstructor shamir.Reconstructor
 }
 
+// K returns the reconstruction threshold for the current sharing instance.
 func (opener *Opener) K() int {
 	return opener.k
 }
 
+// I returns the current number of valid shares that the opener has received.
 func (opener *Opener) I() int {
 	return len(opener.shareBuffer)
 }
