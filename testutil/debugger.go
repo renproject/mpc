@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"io/ioutil"
+	"os"
 )
 
 type Debugger struct {
@@ -9,12 +9,18 @@ type Debugger struct {
 	machines []Machine
 }
 
-func NewDebugger(file string, machines []Machine, marshaler MessageMarshaler) Debugger {
-	bs, err := ioutil.ReadFile(file)
+func NewDebugger(filename string, marshaler RunMarshaler) Debugger {
+	file, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}
-	messages, err := marshaler.UnmarshalMessages(bs)
+
+	machines, err := marshaler.UnmarshalMachines(file)
+	if err != nil {
+		panic(err)
+	}
+
+	messages, err := marshaler.UnmarshalMessages(file)
 	if err != nil {
 		panic(err)
 	}

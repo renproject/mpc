@@ -48,6 +48,27 @@ const (
 	ShareAdded
 )
 
+func (e ShareEvent) String() string {
+	var s string
+	switch e {
+	case Done:
+		s = "Done"
+	case Ignored:
+		s = "Ignored"
+	case IndexDuplicate:
+		s = "IndexDuplicate"
+	case IndexOutOfRange:
+		s = "IndexOutOfRange"
+	case InvalidShare:
+		s = "InvalidShare"
+	case ShareAdded:
+		s = "ShareAdded"
+	default:
+		s = "?"
+	}
+	return s
+}
+
 // ResetEvent repesents the different outcomes that can occur when the state
 // machine processes a Reset input.
 type ResetEvent uint8
@@ -61,6 +82,19 @@ const (
 	// state or the Done state for a sharing instance when it was reset.
 	Reset
 )
+
+func (e ResetEvent) String() string {
+	var s string
+	switch e {
+	case Aborted:
+		s = "Aborted"
+	case Reset:
+		s = "Reset"
+	default:
+		s = "?"
+	}
+	return s
+}
 
 // Opener is a state machine that handles the collecting of verifiable secret
 // shares and the reconstruction (if possible) of these shares to yield the
@@ -223,7 +257,7 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	opener.shareBuffer = append(opener.shareBuffer, share.Share())
 
 	// If we have just added the kth share, we can reconstruct.
-	if len(opener.shareBuffer) == opener.k {
+	if len(opener.shareBuffer) == opener.k+1 {
 		var err error
 		opener.secret, err = opener.reconstructor.CheckedOpen(opener.shareBuffer, opener.k)
 

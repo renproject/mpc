@@ -1,7 +1,9 @@
 package testutil
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -14,9 +16,11 @@ type Message interface {
 	To() ID
 }
 
-type MessageMarshaler interface {
-	MarshalMessages([]Message) ([]byte, error)
-	UnmarshalMessages([]byte) ([]Message, error)
+type RunMarshaler interface {
+	MarshalMessages(io.Writer, []Message) error
+	UnmarshalMessages(io.Reader) ([]Message, error)
+	MarshalMachines(io.Writer, []Machine) error
+	UnmarshalMachines(io.Reader) ([]Machine, error)
 }
 
 type Machine interface {
@@ -31,12 +35,13 @@ type Network struct {
 	processMsgs            func([]Message)
 	indexOfID              map[ID]int
 
-	captureHist bool
-	msgHist     []Message
-	marshaler   MessageMarshaler
+	captureHist   bool
+	msgHist       []Message
+	initialStates bytes.Buffer
+	marshaler     RunMarshaler
 }
 
-func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler MessageMarshaler) Network {
+func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler RunMarshaler) Network {
 	n := len(machines)
 	indexOfID := make(map[ID]int)
 
@@ -45,6 +50,13 @@ func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler Messa
 			panic(fmt.Sprintf("two machines can't have the same ID: found duplicate ID %v", machine.ID()))
 		}
 		indexOfID[machine.ID()] = i
+	}
+
+	// Save initial machine state.
+	var buf bytes.Buffer
+	err := marshaler.MarshalMachines(&buf, machines)
+	if err != nil {
+		panic(err)
 	}
 
 	return Network{
@@ -58,9 +70,10 @@ func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler Messa
 		indexOfID:   indexOfID,
 
 		// Try to do something clever with the first allocation size?
-		captureHist: false,
-		msgHist:     make([]Message, n)[:0],
-		marshaler:   marshaler,
+		captureHist:   false,
+		msgHist:       make([]Message, n)[:0],
+		initialStates: buf,
+		marshaler:     marshaler,
 	}
 }
 
@@ -77,17 +90,23 @@ func (net *Network) Run() ([]Machine, error) {
 			net.msgBufCurr = append(net.msgBufCurr, messages...)
 		}
 	}
+	net.processMsgs(net.msgBufCurr)
 
 	// Each loop is one round in the protocol.
 	for {
 		for _, msg := range net.msgBufCurr {
+			// Ignore nil messages.
+			if msg == nil {
+				continue
+			}
+
 			// Add the about to be delivered message to the history.
 			if net.captureHist {
 				net.msgHist = append(net.msgHist, msg)
 			}
 
 			err := net.deliver(msg)
-			if err != nil {
+			if err != nil && net.captureHist {
 				// If we get here then the machine we just tried to deliver the
 				// message to panicked.
 				net.Dump()
@@ -137,7 +156,7 @@ func (net *Network) deliver(msg Message) (err error) {
 }
 
 func (net *Network) Dump() {
-	// TODO: Handle errors and save file in a more sensible place.  Consider
+	// TODO: Handle errors and save file in a more sensible place. Consider
 	// taking the file location to be a parameter somewhere.
 	file, err := os.Create("./dump")
 	if err != nil {
@@ -145,12 +164,14 @@ func (net *Network) Dump() {
 	}
 	defer file.Close()
 
-	bs, err := net.marshaler.MarshalMessages(net.msgHist)
+	// Write machine initial states.
+	_, err = file.Write(net.initialStates.Bytes())
 	if err != nil {
-		fmt.Printf("unable to marshal message history: %v", err)
+		fmt.Printf("unable to write initial states to file: %v", err)
 	}
-	_, err = file.Write(bs)
+
+	err = net.marshaler.MarshalMessages(file, net.msgHist)
 	if err != nil {
-		fmt.Printf("unable to write to file: %v", err)
+		fmt.Printf("unable to write message history to file: %v", err)
 	}
 }

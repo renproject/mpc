@@ -114,6 +114,12 @@ github.com/renproject/secp256k1-go v1.0.1-0.20200323035948-0e1ac7e556b5 h1:Mu+Nz
 github.com/renproject/secp256k1-go v1.0.1-0.20200323035948-0e1ac7e556b5/go.mod h1:B2SL4dvuIbfHa0jmXegRo5FMqmq6furaJk7H+NtD4Sw=
 github.com/renproject/shamir v0.0.0-20200407233134-5115280425fd h1:Vb+efX5DnPRxGTL0bkw1/3IyfJ7t/IzDj5BZX7CfrV4=
 github.com/renproject/shamir v0.0.0-20200407233134-5115280425fd/go.mod h1:54u3BeeTqAw0Nkj/ggI8mXdC6nSaWQynOZJhzkoneuY=
+github.com/renproject/shamir v0.0.0-20200417054441-172dc435d5ed h1:eK51fCUnqzPhjoE65E183t5w3puZZhhySaBtx0rXL7o=
+github.com/renproject/shamir v0.0.0-20200417054441-172dc435d5ed/go.mod h1:54u3BeeTqAw0Nkj/ggI8mXdC6nSaWQynOZJhzkoneuY=
+github.com/renproject/shamir v0.0.0-20200417060010-364030845f21 h1:pX8pNrqPPq+Fxq3DA61VfG+qq7K0fzwwEVYKcmPHIEY=
+github.com/renproject/shamir v0.0.0-20200417060010-364030845f21/go.mod h1:54u3BeeTqAw0Nkj/ggI8mXdC6nSaWQynOZJhzkoneuY=
+github.com/renproject/shamir v0.0.0-20200423044524-19e329b20f2d h1:MM1H80+i0mKdEPJvjBzcIOXYZ5BxtbJ3kaI0mMexcyI=
+github.com/renproject/shamir v0.0.0-20200423044524-19e329b20f2d/go.mod h1:oiY25+gjvGrtdxpTVVqG2v6h5z7difM270uyyDet1jU=
 github.com/renproject/surge v1.1.2 h1:Yy3pTlRyaMJGLfn64JHgCnWs3cWbRJjE+aFxZXRGfWU=
 github.com/renproject/surge v1.1.2/go.mod h1:UnnFYpLSD0T9MzCcyHjbNdmxiQsDVyBDCuqcbhcaLCY=
 github.com/rjeczalik/notify v0.9.1/go.mod h1:rKwnCoCGeuQnwBtTSPL9Dad03Vh2n40ePRrjvIXnJho=
