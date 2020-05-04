@@ -169,8 +169,9 @@ func (e ResetEvent) String() string {
 type Opener struct {
 	// Event machine state
 	commitment  shamir.Commitment
-	k           int
 	shareBuffer shamir.Shares
+	// The state variable `k` in the formal description can be computed using
+	// the commitment alone.
 
 	// Other members
 	secret        Fn
@@ -180,7 +181,7 @@ type Opener struct {
 
 // K returns the reconstruction threshold for the current sharing instance.
 func (opener *Opener) K() int {
-	return opener.k
+	return opener.commitment.Len()
 }
 
 // I returns the current number of valid shares that the opener has received.
@@ -202,7 +203,6 @@ func (opener *Opener) Secret() Fn {
 func New(indices []Fn, h curve.Point) Opener {
 	return Opener{
 		commitment:    shamir.Commitment{},
-		k:             0,
 		shareBuffer:   make(shamir.Shares, len(indices))[:0],
 		secret:        Fn{},
 		checker:       shamir.NewVSSChecker(h),
@@ -218,7 +218,7 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	// Do nothing when in the Uninitialised state. This can be checked by
 	// seeing if k is zero, as Resetting the state machine can only be done if
 	// k is greater than 0.
-	if opener.k <= 0 {
+	if opener.K() <= 0 {
 		return Ignored
 	}
 
@@ -257,9 +257,9 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	opener.shareBuffer = append(opener.shareBuffer, share.Share())
 
 	// If we have just added the kth share, we can reconstruct.
-	if len(opener.shareBuffer) == opener.k {
+	if len(opener.shareBuffer) == opener.K() {
 		var err error
-		opener.secret, err = opener.reconstructor.CheckedOpen(opener.shareBuffer, opener.k)
+		opener.secret, err = opener.reconstructor.CheckedOpen(opener.shareBuffer, opener.K())
 
 		// The previous checks should ensure that the error does not occur.
 		//
@@ -284,19 +284,18 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 // for their significance.
 func (opener *Opener) TransitionReset(c shamir.Commitment, k int) ResetEvent {
 	// It is not valid for k to be less than 1
-	if k < 1 {
-		panic(fmt.Sprintf("k must be greater than 0: got %v", k))
+	if c.Len() < 1 {
+		panic(fmt.Sprintf("k must be greater than 0: got %v", c.Len()))
 	}
 
 	var ret ResetEvent
-	if len(opener.shareBuffer) < opener.k {
+	if len(opener.shareBuffer) < opener.K() {
 		ret = Aborted
 	} else {
 		ret = Reset
 	}
 
 	opener.shareBuffer = opener.shareBuffer[:0]
-	opener.k = k
 	opener.commitment = c
 
 	return ret
