@@ -257,7 +257,7 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	opener.shareBuffer = append(opener.shareBuffer, share.Share())
 
 	// If we have just added the kth share, we can reconstruct.
-	if len(opener.shareBuffer) == opener.k+1 {
+	if len(opener.shareBuffer) == opener.k {
 		var err error
 		opener.secret, err = opener.reconstructor.CheckedOpen(opener.shareBuffer, opener.k)
 
