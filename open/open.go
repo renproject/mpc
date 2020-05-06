@@ -2,6 +2,7 @@ package open
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
@@ -179,6 +180,59 @@ type Opener struct {
 	reconstructor shamir.Reconstructor
 }
 
+// SizeHint implements the surge.SizeHinter interface.
+func (opener *Opener) SizeHint() int {
+	return opener.commitment.SizeHint() +
+		opener.shareBuffer.SizeHint() +
+		opener.secret.SizeHint() +
+		opener.checker.SizeHint() +
+		opener.reconstructor.SizeHint()
+}
+
+// Marshal implements the surge.Marshaler interface.
+func (opener *Opener) Marshal(w io.Writer, m int) (int, error) {
+	m, err := opener.commitment.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.shareBuffer.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.secret.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.checker.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.reconstructor.Marshal(w, m)
+	return m, err
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := opener.commitment.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.shareBuffer.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.secret.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.checker.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = opener.reconstructor.Unmarshal(r, m)
+	return m, err
+}
+
 // K returns the reconstruction threshold for the current sharing instance.
 func (opener *Opener) K() int {
 	return opener.commitment.Len()
@@ -282,7 +336,7 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 // message, and returns a ResetEvent that describes the outcome of the state
 // transition. See the documentation for the different ResetEvent possiblities
 // for their significance.
-func (opener *Opener) TransitionReset(c shamir.Commitment, k int) ResetEvent {
+func (opener *Opener) TransitionReset(c shamir.Commitment) ResetEvent {
 	// It is not valid for k to be less than 1
 	if c.Len() < 1 {
 		panic(fmt.Sprintf("k must be greater than 0: got %v", c.Len()))

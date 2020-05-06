@@ -69,7 +69,7 @@ var _ = Describe("Opener", func() {
 		}
 
 		ProgressToWaitingI := func(i int) {
-			_ = opener.TransitionReset(c, k)
+			_ = opener.TransitionReset(c)
 			for j := 0; j < i; j++ {
 				_ = opener.TransitionShare(shares[j])
 			}
@@ -88,7 +88,7 @@ var _ = Describe("Opener", func() {
 				})
 
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
-					_ = opener.TransitionReset(c, k)
+					_ = opener.TransitionReset(c)
 					Expect(InStateWaitingCK0(k)).To(BeTrue())
 				})
 
@@ -102,7 +102,7 @@ var _ = Describe("Opener", func() {
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
 					for i := 0; i < k; i++ {
 						ProgressToWaitingI(i)
-						_ = opener.TransitionReset(c, k)
+						_ = opener.TransitionReset(c)
 						Expect(InStateWaitingCK0(k)).To(BeTrue())
 					}
 				})
@@ -153,7 +153,7 @@ var _ = Describe("Opener", func() {
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
 					for i := 0; i < k; i++ {
 						ProgressToWaitingI(i)
-						_ = opener.TransitionReset(c, k)
+						_ = opener.TransitionReset(c)
 						Expect(InStateWaitingCK0(k)).To(BeTrue())
 					}
 				})
@@ -218,13 +218,13 @@ var _ = Describe("Opener", func() {
 			Context("Reset events", func() {
 				Specify("Not yet done in a sharing instance -> Aborted", func() {
 					ProgressToWaitingI(rand.Intn(k - 1))
-					event := opener.TransitionReset(c, k)
+					event := opener.TransitionReset(c)
 					Expect(event).To(Equal(open.Aborted))
 				})
 
 				Specify("Otherwise -> Reset", func() {
 					// Uninitialised
-					event := opener.TransitionReset(c, k)
+					event := opener.TransitionReset(c)
 					Expect(event).To(Equal(open.Reset))
 
 					// Done
@@ -232,7 +232,7 @@ var _ = Describe("Opener", func() {
 					for i := 0; i < rand.Intn(n-k); i++ {
 						_ = opener.TransitionShare(shares[i+k])
 					}
-					event = opener.TransitionReset(c, k)
+					event = opener.TransitionReset(c)
 					Expect(event).To(Equal(open.Reset))
 				})
 			})
@@ -360,7 +360,7 @@ var _ = Describe("Opener", func() {
 
 		for i := range indices {
 			id := ID(i)
-			machine := newMachine(id, n, k, h, shares[i], c, open.New(indices, h))
+			machine := newMachine(id, n, shares[i], c, open.New(indices, h))
 			machines[i] = &machine
 			ids[i] = id
 		}
@@ -399,33 +399,49 @@ type shareMsg struct {
 func (msg shareMsg) From() ID { return msg.from }
 func (msg shareMsg) To() ID   { return msg.to }
 
-func (msg *shareMsg) writeBytes(dst []byte) {
-	binary.BigEndian.PutUint32(dst[:4], uint32(msg.from))
-	binary.BigEndian.PutUint32(dst[4:8], uint32(msg.to))
-	msg.share.GetBytes(dst[8:])
+func (msg *shareMsg) SizeHint() int {
+	return msg.share.SizeHint() + msg.from.SizeHint() + msg.to.SizeHint()
 }
 
-func (msg *shareMsg) setBytes(bs []byte) {
-	msg.from = ID(binary.BigEndian.Uint32(bs[:4]))
-	msg.to = ID(binary.BigEndian.Uint32(bs[4:8]))
-	msg.share.SetBytes(bs[8:])
+func (msg *shareMsg) Marshal(w io.Writer, m int) (int, error) {
+	m, err := msg.share.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.from.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.to.Marshal(w, m)
+	return m, err
+}
+
+func (msg *shareMsg) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := msg.share.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.from.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.to.Unmarshal(r, m)
+	return m, err
 }
 
 type openMarshaler struct{}
 
 func (m openMarshaler) MarshalMessages(w io.Writer, messages []Message) error {
-	var bs [104]byte
-	binary.BigEndian.PutUint32(bs[:4], uint32(len(messages)))
-
+	var bs [4]byte
+	binary.BigEndian.PutUint32(bs[:], uint32(len(messages)))
 	_, err := w.Write(bs[:4])
 	if err != nil {
 		return err
 	}
 
 	for _, msg := range messages {
-		s := msg.(shareMsg)
-		s.writeBytes(bs[:])
-		_, err := w.Write(bs[:])
+		smsg := msg.(shareMsg)
+		_, err := smsg.Marshal(w, surge.MaxBytes)
 		if err != nil {
 			return err
 		}
@@ -435,8 +451,8 @@ func (m openMarshaler) MarshalMessages(w io.Writer, messages []Message) error {
 }
 
 func (m openMarshaler) UnmarshalMessages(r io.Reader) ([]Message, error) {
-	var bs [104]byte
-	_, err := io.ReadFull(r, bs[:4])
+	var bs [4]byte
+	_, err := io.ReadFull(r, bs[:])
 	if err != nil {
 		return nil, err
 	}
@@ -445,13 +461,12 @@ func (m openMarshaler) UnmarshalMessages(r io.Reader) ([]Message, error) {
 	messages := make([]Message, l)
 
 	for i := range messages {
-		_, err := io.ReadFull(r, bs[:])
+		smsg := shareMsg{}
+		_, err := smsg.Unmarshal(r, surge.MaxBytes)
 		if err != nil {
 			return nil, err
 		}
-		s := shareMsg{}
-		s.setBytes(bs[:])
-		messages[i] = s
+		messages[i] = smsg
 	}
 
 	return messages, nil
@@ -471,44 +486,11 @@ func (m openMarshaler) MarshalMachines(w io.Writer, machines []Machine) error {
 		return nil
 	}
 
-	// k
-	k := machines[0].(*openMachine).k
-	binary.BigEndian.PutUint32(bs[:], uint32(k))
-	_, err = w.Write(bs[:])
-	if err != nil {
-		return err
-	}
-
-	// h
-	h := machines[0].(*openMachine).h
-	_, err = h.Marshal(w, h.SizeHint())
-	if err != nil {
-		return err
-	}
-
-	// shares
 	for i := range machines {
-		share := machines[i].(*openMachine).share
-		_, err = share.Marshal(w, share.SizeHint())
+		_, err := machines[i].(*openMachine).Marshal(w, surge.MaxBytes)
 		if err != nil {
 			return err
 		}
-	}
-
-	// ids
-	for i := range machines {
-		binary.BigEndian.PutUint32(bs[:], uint32(machines[i].(*openMachine).id))
-		_, err = w.Write(bs[:])
-		if err != nil {
-			return err
-		}
-	}
-
-	// commitment
-	com := machines[0].(*openMachine).commitment
-	_, err = com.Marshal(w, com.SizeHint())
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -524,59 +506,12 @@ func (m openMarshaler) UnmarshalMachines(r io.Reader) ([]Machine, error) {
 	}
 	n := int(binary.BigEndian.Uint32(bs[:]))
 
-	// k
-	_, err = io.ReadFull(r, bs[:])
-	if err != nil {
-		return nil, err
-	}
-	k := int(binary.BigEndian.Uint32(bs[:]))
-
-	// h
-	h := curve.New()
-	_, err = h.Unmarshal(r, h.SizeHint())
-	if err != nil {
-		return nil, err
-	}
-
-	// shares
-	shares := make(shamir.VerifiableShares, n)
-	for i := range shares {
-		_, err = shares[i].Unmarshal(r, shares[i].SizeHint())
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// ids
-	ids := make([]ID, n)
-	for i := range ids {
-		_, err = io.ReadFull(r, bs[:])
-		if err != nil {
-			return nil, err
-		}
-		id := binary.BigEndian.Uint32(bs[:])
-		ids[i] = ID(id)
-	}
-
-	// commitment
-	com := shamir.NewCommitmentWithCapacity(k)
-	_, err = com.Unmarshal(r, 4+k*h.SizeHint())
-	if err != nil {
-		return nil, err
-	}
-
-	// Reconstruct indices
-	indices := make([]secp256k1.Secp256k1N, n)
-	for i := range shares {
-		share := shares[i].Share()
-		indices[i] = share.Index()
-	}
-
 	machines := make([]Machine, n)
 	for i := range machines {
-		om := open.New(indices, h)
-		m := newMachine(ids[i], n, k, h, shares[i], com, om)
-		machines[i] = &m
+		_, err := machines[i].(*openMachine).Unmarshal(r, surge.MaxBytes)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return machines, nil
@@ -584,24 +519,83 @@ func (m openMarshaler) UnmarshalMachines(r io.Reader) ([]Machine, error) {
 
 type openMachine struct {
 	id         ID
-	n, k       int
-	h          curve.Point
+	n          int
 	share      shamir.VerifiableShare
 	commitment shamir.Commitment
 	opener     open.Opener
 }
 
+func (om *openMachine) SizeHint() int {
+	return om.id.SizeHint() +
+		4 +
+		om.share.SizeHint() +
+		om.commitment.SizeHint() +
+		om.opener.SizeHint()
+}
+
+func (om *openMachine) Marshal(w io.Writer, m int) (int, error) {
+	m, err := om.id.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+
+	var bs [4]byte
+	binary.BigEndian.PutUint32(bs[:], uint32(om.n))
+	n, err := w.Write(bs[:])
+	m -= n
+	if err != nil {
+		return m, err
+	}
+
+	m, err = om.share.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = om.commitment.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = om.opener.Marshal(w, m)
+	return m, err
+}
+
+func (om *openMachine) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := om.id.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+
+	var bs [4]byte
+	n, err := io.ReadFull(r, bs[:])
+	m -= n
+	if err != nil {
+		return m, err
+	}
+	v := binary.BigEndian.Uint32(bs[:])
+	om.n = int(v)
+
+	m, err = om.share.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = om.commitment.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = om.opener.Unmarshal(r, m)
+	return m, err
+}
+
 func newMachine(
 	id ID,
-	n, k int,
-	h curve.Point,
+	n int,
 	share shamir.VerifiableShare,
 	commitment shamir.Commitment,
 	opener open.Opener,
 ) openMachine {
-	opener.TransitionReset(commitment, k)
+	opener.TransitionReset(commitment)
 	_ = opener.TransitionShare(share)
-	return openMachine{id, n, k, h, share, commitment, opener}
+	return openMachine{id, n, share, commitment, opener}
 }
 
 func (om *openMachine) Secret() open.Fn {

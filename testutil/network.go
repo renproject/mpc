@@ -2,14 +2,45 @@ package testutil
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
 	"os"
+
+	"github.com/renproject/surge"
 )
 
 // ID represents a unique identifier for a Machine.
 type ID int32
+
+func (id *ID) SizeHint() int { return 4 }
+
+func (id *ID) Marshal(w io.Writer, m int) (int, error) {
+	if m < 4 {
+		return m, surge.ErrMaxBytesExceeded
+	}
+	var bs [4]byte
+	binary.BigEndian.PutUint32(bs[:], uint32(*id))
+	n, err := w.Write(bs[:])
+	m -= n
+	return m, err
+}
+
+func (id *ID) Unmarshal(r io.Reader, m int) (int, error) {
+	if m < 4 {
+		return m, surge.ErrMaxBytesExceeded
+	}
+	var bs [4]byte
+	n, err := io.ReadFull(r, bs[:])
+	m -= n
+	if err != nil {
+		return m, err
+	}
+	v := binary.BigEndian.Uint32(bs[:])
+	*id = ID(v)
+	return m, nil
+}
 
 // The Message interface represents a message that can be sent during a network
 // run. Messages must be able to give the IDs for the sender and receiver of
