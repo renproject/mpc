@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/renproject/mpc/testutil"
 	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/surge"
@@ -346,7 +345,7 @@ var _ = Describe("Opener", func() {
 	// Network
 	//
 
-	XContext("Network (4)", func() {
+	Context("Network (4)", func() {
 		n := 20
 		k := 7
 
@@ -388,18 +387,6 @@ var _ = Describe("Opener", func() {
 					network.Dump("test.dump")
 					Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
 				}
-			}
-		})
-	})
-
-	FContext("Debugging", func() {
-		Specify("", func() {
-			debugger := testutil.NewDebugger("test.dump", openMarshaler{})
-			machine := debugger.MachineByID(1)
-			msgs := debugger.MessagesForID(1)
-
-			for _, msg := range msgs {
-				machine.Handle(msg)
 			}
 		})
 	})
@@ -638,8 +625,7 @@ func (om *openMachine) InitialMessages() []Message {
 func (om *openMachine) Handle(msg Message) []Message {
 	switch msg := msg.(type) {
 	case shareMsg:
-		e := om.opener.TransitionShare(msg.share)
-		fmt.Println(e)
+		om.opener.TransitionShare(msg.share)
 		return nil
 
 	default:
