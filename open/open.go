@@ -230,7 +230,24 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 		return m, err
 	}
 	m, err = opener.reconstructor.Unmarshal(r, m)
-	return m, err
+	if err != nil {
+		return m, err
+	}
+
+	// Set the share buffer to have the correct capacity.
+	shareBuffer := make(shamir.Shares, opener.reconstructor.N())
+	n := copy(shareBuffer, opener.shareBuffer)
+	if n < len(opener.shareBuffer) {
+		return m, fmt.Errorf(
+			"invalid marshalled data: "+
+				"%v shares in the share buffer but the reconstructor is instantiated for %v players",
+			len(opener.shareBuffer),
+			opener.reconstructor.N(),
+		)
+	}
+	opener.shareBuffer = shareBuffer[:n]
+
+	return m, nil
 }
 
 // K returns the reconstruction threshold for the current sharing instance.

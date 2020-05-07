@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/mpc/testutil"
 	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/surge"
@@ -345,7 +346,7 @@ var _ = Describe("Opener", func() {
 	// Network
 	//
 
-	Context("Network (4)", func() {
+	XContext("Network (4)", func() {
 		n := 20
 		k := 7
 
@@ -367,6 +368,7 @@ var _ = Describe("Opener", func() {
 
 		// Pick the IDs that will be simulated as offline.
 		offline := rand.Intn(n - k + 1)
+		offline = n - k
 		shuffleMsgs, isOffline := MessageShufflerDropper(ids, offline)
 		network := NewNetwork(machines, shuffleMsgs, openMarshaler{})
 		network.SetCaptureHist(true)
@@ -386,6 +388,18 @@ var _ = Describe("Opener", func() {
 					network.Dump("test.dump")
 					Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
 				}
+			}
+		})
+	})
+
+	FContext("Debugging", func() {
+		Specify("", func() {
+			debugger := testutil.NewDebugger("test.dump", openMarshaler{})
+			machine := debugger.MachineByID(1)
+			msgs := debugger.MessagesForID(1)
+
+			for _, msg := range msgs {
+				machine.Handle(msg)
 			}
 		})
 	})
@@ -476,7 +490,6 @@ func (m openMarshaler) MarshalMachines(w io.Writer, machines []Machine) error {
 	var bs [4]byte
 
 	// n
-	surge.Marshal(w, uint32(len(machines)), 4)
 	binary.BigEndian.PutUint32(bs[:], uint32(len(machines)))
 	_, err := w.Write(bs[:])
 	if err != nil {
@@ -508,6 +521,7 @@ func (m openMarshaler) UnmarshalMachines(r io.Reader) ([]Machine, error) {
 
 	machines := make([]Machine, n)
 	for i := range machines {
+		machines[i] = &openMachine{}
 		_, err := machines[i].(*openMachine).Unmarshal(r, surge.MaxBytes)
 		if err != nil {
 			return nil, err
@@ -624,7 +638,8 @@ func (om *openMachine) InitialMessages() []Message {
 func (om *openMachine) Handle(msg Message) []Message {
 	switch msg := msg.(type) {
 	case shareMsg:
-		om.opener.TransitionShare(msg.share)
+		e := om.opener.TransitionShare(msg.share)
+		fmt.Println(e)
 		return nil
 
 	default:
