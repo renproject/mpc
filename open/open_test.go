@@ -367,7 +367,6 @@ var _ = Describe("Opener", func() {
 
 		// Pick the IDs that will be simulated as offline.
 		offline := rand.Intn(n - k + 1)
-		offline = n - k
 		shuffleMsgs, isOffline := MessageShufflerDropper(ids, offline)
 		network := NewNetwork(machines, shuffleMsgs, openMarshaler{})
 		network.SetCaptureHist(true)

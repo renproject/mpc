@@ -14,8 +14,10 @@ import (
 // ID represents a unique identifier for a Machine.
 type ID int32
 
+// SizeHint implements the surge.SizeHinter interface.
 func (id *ID) SizeHint() int { return 4 }
 
+// Marshal implements the surge.Marshaler interface.
 func (id *ID) Marshal(w io.Writer, m int) (int, error) {
 	if m < 4 {
 		return m, surge.ErrMaxBytesExceeded
@@ -27,6 +29,7 @@ func (id *ID) Marshal(w io.Writer, m int) (int, error) {
 	return m, err
 }
 
+// Unmarshal implements the surge.Unmarshaler interface.
 func (id *ID) Unmarshal(r io.Reader, m int) (int, error) {
 	if m < 4 {
 		return m, surge.ErrMaxBytesExceeded
