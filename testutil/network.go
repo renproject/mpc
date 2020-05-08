@@ -49,23 +49,20 @@ func (id *ID) Unmarshal(r io.Reader, m int) (int, error) {
 // run. Messages must be able to give the IDs for the sender and receiver of
 // the message.
 type Message interface {
+	surge.Marshaler
+	surge.Unmarshaler
+
 	From() ID
 	To() ID
-}
-
-// A RunMarshaler captures the functionality of being able to marshal and
-// unmarshal a message history, and also a list of machines.
-type RunMarshaler interface {
-	MarshalMessages(io.Writer, []Message) error
-	UnmarshalMessages(io.Reader) ([]Message, error)
-	MarshalMachines(io.Writer, []Machine) error
-	UnmarshalMachines(io.Reader) ([]Machine, error)
 }
 
 // The Machine interface represents one of the players in a distributed
 // network. Every machine must have a unique ID, and be able to handle incoming
 // messages.
 type Machine interface {
+	surge.Marshaler
+	surge.Unmarshaler
+
 	ID() ID
 
 	// InitialMessages should return the messages that a Machine sends at the
@@ -89,7 +86,6 @@ type Network struct {
 	captureHist   bool
 	msgHist       []Message
 	initialStates bytes.Buffer
-	marshaler     RunMarshaler
 }
 
 // NewNetwork creates a new Network object from the given machines and message
@@ -97,7 +93,7 @@ type Network struct {
 // of the messages to be sent in a given round, before sending them. For
 // example, this can be used to shuffle or drop messages from certain players
 // to simulate various network conditions.
-func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler RunMarshaler) Network {
+func NewNetwork(machines []Machine, processMsgs func([]Message)) Network {
 	n := len(machines)
 	indexOfID := make(map[ID]int)
 
@@ -110,7 +106,7 @@ func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler RunMa
 
 	// Save initial machine state.
 	var buf bytes.Buffer
-	err := marshaler.MarshalMachines(&buf, machines)
+	_, err := surge.Marshal(&buf, machines, surge.SizeHint(machines))
 	if err != nil {
 		panic(err)
 	}
@@ -129,7 +125,6 @@ func NewNetwork(machines []Machine, processMsgs func([]Message), marshaler RunMa
 		captureHist:   false,
 		msgHist:       make([]Message, n)[:0],
 		initialStates: buf,
-		marshaler:     marshaler,
 	}
 }
 
@@ -238,7 +233,7 @@ func (net *Network) Dump(filename string) {
 		fmt.Printf("unable to write initial states to file: %v", err)
 	}
 
-	err = net.marshaler.MarshalMessages(file, net.msgHist)
+	_, err = surge.Marshal(file, net.msgHist, surge.SizeHint(net.msgHist))
 	if err != nil {
 		fmt.Printf("unable to write message history to file: %v", err)
 	}

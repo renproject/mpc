@@ -12,7 +12,6 @@ import (
 
 	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/secp256k1-go"
-	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/shamir"
@@ -367,8 +366,9 @@ var _ = Describe("Opener", func() {
 
 		// Pick the IDs that will be simulated as offline.
 		offline := rand.Intn(n - k + 1)
+		offline = n - k
 		shuffleMsgs, isOffline := MessageShufflerDropper(ids, offline)
-		network := NewNetwork(machines, shuffleMsgs, openMarshaler{})
+		network := NewNetwork(machines, shuffleMsgs)
 		network.SetCaptureHist(true)
 
 		It("all openers should eventaully open the correct secret", func() {
@@ -386,6 +386,19 @@ var _ = Describe("Opener", func() {
 					network.Dump("test.dump")
 					Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
 				}
+			}
+		})
+	})
+
+	FContext("Debugging", func() {
+		Specify("", func() {
+			debugger := NewDebugger("test.dump", shareMsg{}, openMachine{})
+			id := ID(2)
+			machine := debugger.MachineByID(id)
+			messages := debugger.MessagesForID(id)
+
+			for _, m := range messages {
+				machine.Handle(m)
 			}
 		})
 	})
@@ -427,94 +440,6 @@ func (msg *shareMsg) Unmarshal(r io.Reader, m int) (int, error) {
 	}
 	m, err = msg.to.Unmarshal(r, m)
 	return m, err
-}
-
-type openMarshaler struct{}
-
-func (m openMarshaler) MarshalMessages(w io.Writer, messages []Message) error {
-	var bs [4]byte
-	binary.BigEndian.PutUint32(bs[:], uint32(len(messages)))
-	_, err := w.Write(bs[:4])
-	if err != nil {
-		return err
-	}
-
-	for _, msg := range messages {
-		smsg := msg.(shareMsg)
-		_, err := smsg.Marshal(w, surge.MaxBytes)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m openMarshaler) UnmarshalMessages(r io.Reader) ([]Message, error) {
-	var bs [4]byte
-	_, err := io.ReadFull(r, bs[:])
-	if err != nil {
-		return nil, err
-	}
-	l := binary.BigEndian.Uint32(bs[:4])
-
-	messages := make([]Message, l)
-
-	for i := range messages {
-		smsg := shareMsg{}
-		_, err := smsg.Unmarshal(r, surge.MaxBytes)
-		if err != nil {
-			return nil, err
-		}
-		messages[i] = smsg
-	}
-
-	return messages, nil
-}
-
-func (m openMarshaler) MarshalMachines(w io.Writer, machines []Machine) error {
-	var bs [4]byte
-
-	// n
-	binary.BigEndian.PutUint32(bs[:], uint32(len(machines)))
-	_, err := w.Write(bs[:])
-	if err != nil {
-		return err
-	}
-	if len(machines) == 0 {
-		return nil
-	}
-
-	for i := range machines {
-		_, err := machines[i].(*openMachine).Marshal(w, surge.MaxBytes)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m openMarshaler) UnmarshalMachines(r io.Reader) ([]Machine, error) {
-	var bs [4]byte
-
-	// n
-	_, err := io.ReadFull(r, bs[:])
-	if err != nil {
-		return nil, err
-	}
-	n := int(binary.BigEndian.Uint32(bs[:]))
-
-	machines := make([]Machine, n)
-	for i := range machines {
-		machines[i] = &openMachine{}
-		_, err := machines[i].(*openMachine).Unmarshal(r, surge.MaxBytes)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return machines, nil
 }
 
 type openMachine struct {
@@ -612,7 +537,7 @@ func (om *openMachine) InitialMessages() []Message {
 		if ID(i) == om.id {
 			continue
 		}
-		messages = append(messages, shareMsg{
+		messages = append(messages, &shareMsg{
 			share: om.share,
 			from:  om.id,
 			to:    ID(i),
@@ -623,8 +548,9 @@ func (om *openMachine) InitialMessages() []Message {
 
 func (om *openMachine) Handle(msg Message) []Message {
 	switch msg := msg.(type) {
-	case shareMsg:
-		om.opener.TransitionShare(msg.share)
+	case *shareMsg:
+		e := om.opener.TransitionShare(msg.share)
+		fmt.Println(e)
 		return nil
 
 	default:
