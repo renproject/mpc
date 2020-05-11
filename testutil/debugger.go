@@ -14,7 +14,9 @@ type Debugger struct {
 	messages []Message
 	machines []Machine
 
-	pos int
+	pos     int
+	machbps []machineBreakPoint
+	msgbps  []messageBreakPoint
 }
 
 // NewDebugger creates a new Debugger from the file with the given filename.
@@ -57,20 +59,22 @@ func NewDebugger(filename string, messageType, machineType interface{}) Debugger
 	}
 
 	pos := 0
+	var machbps []machineBreakPoint
+	var msgbps []messageBreakPoint
 
-	return Debugger{messages, machines, pos}
+	return Debugger{messages, machines, pos, machbps, msgbps}
 }
 
 // Step processes the next message in the message history. It returns true if
 // there are more messages in the hostory, and false otherwise
 func (dbg *Debugger) Step() bool {
-	if dbg.pos == len(dbg.messages) {
-		return false
-	}
 	msg := dbg.messages[dbg.pos]
 	_ = dbg.machines[msg.To()].Handle(msg)
 	dbg.pos++
 
+	if dbg.pos == len(dbg.messages) {
+		return false
+	}
 	return true
 }
 
@@ -97,4 +101,73 @@ func (dbg *Debugger) MessagesForID(id ID) []Message {
 	}
 
 	return msgsForID
+}
+
+// SetMachineBreakPoint registers and enables a breakpoint for the machine with
+// the given ID. The breakpoint will trigger the first time that the machine is
+// in a state such that the predicate returns true.
+func (dbg *Debugger) SetMachineBreakPoint(id ID, pred func(Machine) bool) {
+	enabled := true
+	bp := machineBreakPoint{id, enabled, pred}
+	dbg.machbps = append(dbg.machbps, bp)
+}
+
+// SetMessageBreakPoint registers and enables a breakpoint that will trigger
+// when the next message to be handled (by any machine) satisfies the given
+// predicate.
+func (dbg *Debugger) SetMessageBreakPoint(pred func(Message) bool) {
+	enabled := true
+	bp := messageBreakPoint{enabled, pred}
+	dbg.msgbps = append(dbg.msgbps, bp)
+}
+
+// Continue handles messages either until a breakpoint is triggered or there
+// are no more messages to handle.
+func (dbg *Debugger) Continue() {
+	for {
+		if dbg.machBpTriggered() || dbg.msgBpTriggered(dbg.messages[dbg.pos]) {
+			break
+		}
+
+		if !dbg.Step() {
+			break
+		}
+	}
+}
+
+func (dbg *Debugger) machBpTriggered() bool {
+	for i := range dbg.machbps {
+		if !dbg.machbps[i].enabled {
+			continue
+		}
+		if dbg.machbps[i].pred(dbg.MachineByID(dbg.machbps[i].id)) {
+			dbg.machbps[i].enabled = false
+			return true
+		}
+	}
+	return false
+}
+
+func (dbg *Debugger) msgBpTriggered(msg Message) bool {
+	for i := range dbg.msgbps {
+		if !dbg.msgbps[i].enabled {
+			continue
+		}
+		if dbg.msgbps[i].pred(msg) {
+			dbg.msgbps[i].enabled = false
+			return true
+		}
+	}
+	return false
+}
+
+type machineBreakPoint struct {
+	id      ID
+	enabled bool
+	pred    func(Machine) bool
+}
+
+type messageBreakPoint struct {
+	enabled bool
+	pred    func(Message) bool
 }

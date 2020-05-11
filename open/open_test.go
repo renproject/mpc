@@ -389,19 +389,6 @@ var _ = Describe("Opener", func() {
 			}
 		})
 	})
-
-	FContext("Debugging", func() {
-		Specify("", func() {
-			debugger := NewDebugger("test.dump", shareMsg{}, openMachine{})
-			id := ID(2)
-			machine := debugger.MachineByID(id)
-			messages := debugger.MessagesForID(id)
-
-			for _, m := range messages {
-				machine.Handle(m)
-			}
-		})
-	})
 })
 
 type shareMsg struct {
@@ -448,6 +435,8 @@ type openMachine struct {
 	share      shamir.VerifiableShare
 	commitment shamir.Commitment
 	opener     open.Opener
+
+	lastE open.ShareEvent
 }
 
 func (om *openMachine) SizeHint() int {
@@ -520,7 +509,8 @@ func newMachine(
 ) openMachine {
 	opener.TransitionReset(commitment)
 	_ = opener.TransitionShare(share)
-	return openMachine{id, n, share, commitment, opener}
+	lastE := open.ShareEvent(0)
+	return openMachine{id, n, share, commitment, opener, lastE}
 }
 
 func (om *openMachine) Secret() open.Fn {
@@ -549,8 +539,7 @@ func (om *openMachine) InitialMessages() []Message {
 func (om *openMachine) Handle(msg Message) []Message {
 	switch msg := msg.(type) {
 	case *shareMsg:
-		e := om.opener.TransitionShare(msg.share)
-		fmt.Println(e)
+		om.lastE = om.opener.TransitionShare(msg.share)
 		return nil
 
 	default:
