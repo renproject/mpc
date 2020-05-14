@@ -7,12 +7,12 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/mpc/open"
+	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
-	
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/testutil"
@@ -35,23 +35,31 @@ var _ = Describe("Opener", func() {
 	h := curve.Random()
 
 	Describe("Properties", func() {
-		var n, k int
-		var indices []open.Fn
-		var opener open.Opener
-		var secret open.Fn
-		var shares shamir.VerifiableShares
-		var c shamir.Commitment
-		var sharer shamir.VSSharer
+		n := 20
+		k := 7
 
-		JustBeforeEach(func() {
-			n = 20
-			k = 7
+		var (
+			indices []open.Fn
+			opener  open.Opener
+			secret  open.Fn
+			shares  shamir.VerifiableShares
+			c       shamir.Commitment
+			sharer  shamir.VSSharer
+		)
 
-			indices = stu.SequentialIndices(n)
-			secret = secp256k1.RandomSecp256k1N()
-			sharer = shamir.NewVSSharer(indices, h)
-			shares = make(shamir.VerifiableShares, n)
-			c = shamir.NewCommitmentWithCapacity(k)
+		Setup := func() (
+			[]open.Fn,
+			open.Opener,
+			open.Fn,
+			shamir.VerifiableShares,
+			shamir.Commitment,
+			shamir.VSSharer,
+		) {
+			indices := stu.SequentialIndices(n)
+			secret := secp256k1.RandomSecp256k1N()
+			sharer := shamir.NewVSSharer(indices, h)
+			shares := make(shamir.VerifiableShares, n)
+			c := shamir.NewCommitmentWithCapacity(k)
 			sharer.Share(&shares, &c, secret, k)
 
 			// Randomise the order of the shares.
@@ -60,6 +68,12 @@ var _ = Describe("Opener", func() {
 			})
 
 			opener = open.New(indices, h)
+
+			return indices, opener, secret, shares, c, sharer
+		}
+
+		JustBeforeEach(func() {
+			indices, opener, secret, shares, c, sharer = Setup()
 		})
 
 		InStateWaitingCK0 := func(k int) bool {
