@@ -140,6 +140,8 @@ github.com/renproject/shamir v0.0.0-20200507043839-a40aee7c608b h1:T0RFxXktO7ILM
 github.com/renproject/shamir v0.0.0-20200507043839-a40aee7c608b/go.mod h1:4Kt4FvSiXvqPHjMnLbqMzC/pHgZM6flUiuvFh9hBkvM=
 github.com/renproject/surge v1.1.2 h1:Yy3pTlRyaMJGLfn64JHgCnWs3cWbRJjE+aFxZXRGfWU=
 github.com/renproject/surge v1.1.2/go.mod h1:UnnFYpLSD0T9MzCcyHjbNdmxiQsDVyBDCuqcbhcaLCY=
+github.com/renproject/surge v1.1.4 h1:vSwmZU/K43HAVFW/Jx4VJ56ieZRALLN72oxDgR09Uro=
+github.com/renproject/surge v1.1.4/go.mod h1:UnnFYpLSD0T9MzCcyHjbNdmxiQsDVyBDCuqcbhcaLCY=
 github.com/rjeczalik/notify v0.9.1/go.mod h1:rKwnCoCGeuQnwBtTSPL9Dad03Vh2n40ePRrjvIXnJho=
 github.com/rs/cors v0.0.0-20160617231935-a62a804a8a00/go.mod h1:gFx+x8UowdsKA9AchylcLynDq+nNFfI8FkUZdN/jGCU=
 github.com/rs/xhandler v0.0.0-20160618193221-ed27b6fd6521/go.mod h1:RvLn4FgxWubrpZHtQLnOf6EwhN2hEMusxZOhcW9H3UQ=
