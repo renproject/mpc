@@ -147,18 +147,18 @@ func (e ResetEvent) String() string {
 //
 //	- Uninitialised
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Otherwise 				-> Do nothing
+//		- Otherwise 			-> Do nothing
 //	- Waiting(`c`, `k`, `k-1`)
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
 //		- Share, Valid(`c`) 		-> Done(`c`)
-//		- Otherwise -> Do nothing
+//		- Otherwise 			-> Do nothing
 //	- Waiting(`c`, `k`, `i`), `i` < `k-1`
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
 //		- Share, Valid(`c`) 		-> Waiting(`c`, `k`, `i+1`)
-//		- Otherwise -> Do nothing
+//		- Otherwise 			-> Do nothing
 //	- Done(`c`)
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Otherwise 				-> Do nothing
+//		- Otherwise 			-> Do nothing
 //
 // Alternatively, the state transitions can be grouped by message.
 //
