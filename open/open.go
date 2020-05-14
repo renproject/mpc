@@ -181,7 +181,7 @@ type Opener struct {
 }
 
 // SizeHint implements the surge.SizeHinter interface.
-func (opener *Opener) SizeHint() int {
+func (opener Opener) SizeHint() int {
 	return opener.commitment.SizeHint() +
 		opener.shareBuffer.SizeHint() +
 		opener.secret.SizeHint() +
