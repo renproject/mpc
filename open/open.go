@@ -165,7 +165,7 @@ func (e ResetEvent) String() string {
 //	- New instance(`c`, `k`)
 //		- Any -> Waiting(`c`, `k`, `0`)
 //	- Share, Valid(`c`)
-//		- Waiting(`c`, `k`, `k-1`) 				-> Done(`c`)
+//		- Waiting(`c`, `k`, `k-1`) 		-> Done(`c`)
 //		- Waiting(`c`, `k`, `i`), `i` < `k-1` 	-> Waiting(`c`, `k`, `i+1`)
 type Opener struct {
 	// Event machine state
