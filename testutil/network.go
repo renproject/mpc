@@ -49,8 +49,7 @@ func (id *ID) Unmarshal(r io.Reader, m int) (int, error) {
 // run. Messages must be able to give the IDs for the sender and receiver of
 // the message.
 type Message interface {
-	surge.Marshaler
-	surge.Unmarshaler
+	surge.Surger
 
 	From() ID
 	To() ID
@@ -60,8 +59,7 @@ type Message interface {
 // network. Every machine must have a unique ID, and be able to handle incoming
 // messages.
 type Machine interface {
-	surge.Marshaler
-	surge.Unmarshaler
+	surge.Surger
 
 	ID() ID
 
