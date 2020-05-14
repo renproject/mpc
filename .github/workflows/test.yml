@@ -15,7 +15,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - name: Configure git for private modules
-        run: git config --global url."git@github.com:".insteadOf "https://github.com/"
+        env:
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: git config --global url."https://loongy:${PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
       - name: Run vetting
         run: |
           cd $GITHUB_WORKSPACE
