@@ -7,16 +7,15 @@ import (
 	"math/rand"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
-	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/secp256k1-go"
-
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
+	
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	. "github.com/renproject/mpc/testutil"
 )
 
 // The main properties that we want to test for the Opener state machine are
@@ -399,11 +398,11 @@ type shareMsg struct {
 func (msg shareMsg) From() ID { return msg.from }
 func (msg shareMsg) To() ID   { return msg.to }
 
-func (msg *shareMsg) SizeHint() int {
+func (msg shareMsg) SizeHint() int {
 	return msg.share.SizeHint() + msg.from.SizeHint() + msg.to.SizeHint()
 }
 
-func (msg *shareMsg) Marshal(w io.Writer, m int) (int, error) {
+func (msg shareMsg) Marshal(w io.Writer, m int) (int, error) {
 	m, err := msg.share.Marshal(w, m)
 	if err != nil {
 		return m, err
@@ -439,7 +438,7 @@ type openMachine struct {
 	lastE open.ShareEvent
 }
 
-func (om *openMachine) SizeHint() int {
+func (om openMachine) SizeHint() int {
 	return om.id.SizeHint() +
 		4 +
 		om.share.SizeHint() +
@@ -447,7 +446,7 @@ func (om *openMachine) SizeHint() int {
 		om.opener.SizeHint()
 }
 
-func (om *openMachine) Marshal(w io.Writer, m int) (int, error) {
+func (om openMachine) Marshal(w io.Writer, m int) (int, error) {
 	m, err := om.id.Marshal(w, m)
 	if err != nil {
 		return m, err
@@ -513,15 +512,15 @@ func newMachine(
 	return openMachine{id, n, share, commitment, opener, lastE}
 }
 
-func (om *openMachine) Secret() open.Fn {
+func (om openMachine) Secret() open.Fn {
 	return om.opener.Secret()
 }
 
-func (om *openMachine) ID() ID {
+func (om openMachine) ID() ID {
 	return om.id
 }
 
-func (om *openMachine) InitialMessages() []Message {
+func (om openMachine) InitialMessages() []Message {
 	messages := make([]Message, om.n-1)[:0]
 	for i := 0; i < om.n; i++ {
 		if ID(i) == om.id {

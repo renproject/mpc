@@ -15,10 +15,10 @@ import (
 type ID int32
 
 // SizeHint implements the surge.SizeHinter interface.
-func (id *ID) SizeHint() int { return 4 }
+func (id ID) SizeHint() int { return 4 }
 
 // Marshal implements the surge.Marshaler interface.
-func (id *ID) Marshal(w io.Writer, m int) (int, error) {
+func (id ID) Marshal(w io.Writer, m int) (int, error) {
 	if m < 4 {
 		return m, surge.ErrMaxBytesExceeded
 	}
@@ -216,7 +216,7 @@ func (net *Network) deliver(msg Message) (err error) {
 // Dump saves the initial state of the machines and the message history to the
 // file with the given name. This file can be loaded by a Debugger to start a
 // debugging session.
-func (net *Network) Dump(filename string) {
+func (net Network) Dump(filename string) {
 	file, err := os.Create(filename)
 	if err != nil {
 		fmt.Printf("unable to create dump file: %v", err)
