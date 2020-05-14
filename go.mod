@@ -1,6 +1,6 @@
 module github.com/renproject/mpc
 
-go 1.14
+go 1.13
 
 require (
 	github.com/onsi/ginkgo v1.12.0
