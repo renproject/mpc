@@ -1,15 +1,65 @@
 package brng
 
-import "github.com/renproject/shamir"
+import (
+	"fmt"
+	"io"
+
+	"github.com/renproject/shamir"
+	"github.com/renproject/surge"
+)
 
 type Sharing struct {
 	shares     shamir.VerifiableShares
 	commitment shamir.Commitment
 }
 
+// SizeHint implements the surge.SizeHinter interface.
+func (sharing Sharing) SizeHint() int {
+	return sharing.shares.SizeHint() + sharing.commitment.SizeHint()
+}
+
+// Marshal implements the surge.Marshaler interface.
+func (sharing Sharing) Marshal(w io.Writer, m int) (int, error) {
+	m, err := sharing.shares.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling shares: %v", err)
+	}
+	m, err = sharing.commitment.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling commitment: %v", err)
+	}
+	return m, nil
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (sharing *Sharing) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := sharing.shares.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling shares: %v", err)
+	}
+	m, err = sharing.commitment.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling commitment: %v", err)
+	}
+	return m, nil
+}
+
 func (sharing Sharing) N() int { return len(sharing.shares) }
 
 type Row []Sharing
+
+// SizeHint implements the surge.SizeHinter interface.
+func (row Row) SizeHint() int { return surge.SizeHint(row) }
+
+// Marshal implements the surge.Marshaler interface.
+func (row Row) Marshal(w io.Writer, m int) (int, error) {
+	return surge.Marshal(w, row, m)
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
+	return surge.Unmarshal(r, row, m)
+}
 
 func MakeRow(n, k, b int) Row {
 	sharings := make([]Sharing, b)
@@ -43,6 +93,37 @@ type Col struct {
 	commitments []shamir.Commitment
 }
 
+// SizeHint implements the surge.SizeHinter interface.
+func (col Col) SizeHint() int {
+	return col.shares.SizeHint() + surge.SizeHint(col.commitments)
+}
+
+// Marshal implements the surge.Marshaler interface.
+func (col Col) Marshal(w io.Writer, m int) (int, error) {
+	m, err := col.shares.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling shares: %v", err)
+	}
+	m, err = surge.Marshal(w, col.commitments, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling commitments: %v", err)
+	}
+	return m, nil
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := col.shares.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling shares: %v", err)
+	}
+	m, err = surge.Unmarshal(r, col.commitments, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling commitments: %v", err)
+	}
+	return m, nil
+}
+
 func (col Col) HasValidForm() bool {
 	if len(col.shares) == 0 {
 		return false
@@ -66,6 +147,19 @@ func (col Col) HasValidForm() bool {
 }
 
 type Slice []Col
+
+// SizeHint implements the surge.SizeHinter interface.
+func (slice Slice) SizeHint() int { return surge.SizeHint(slice) }
+
+// Marshal implements the surge.Marshaler interface.
+func (slice Slice) Marshal(w io.Writer, m int) (int, error) {
+	return surge.Marshal(w, slice, m)
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (slice *Slice) Unmarshal(r io.Reader, m int) (int, error) {
+	return surge.Unmarshal(r, slice, m)
+}
 
 func (slice Slice) BatchSize() int {
 	return len(slice)

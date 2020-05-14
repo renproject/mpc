@@ -1,9 +1,13 @@
 package brng
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
+	"github.com/renproject/surge"
 )
 
 // State is an enumeration of the possible states for the BRNG state machine.
@@ -16,11 +20,63 @@ const (
 	Error
 )
 
+// SizeHint implements the surge.SizeHinter interface.
+func (s State) SizeHint() int { return 1 }
+
+// Marshal implements the surge.Marshaler interface.
+func (s State) Marshal(w io.Writer, m int) (int, error) {
+	return surge.Marshal(w, s, m)
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
+	return surge.Unmarshal(r, s, m)
+}
+
 type BRNGer struct {
 	state State
 
 	sharer  shamir.VSSharer
 	checker shamir.VSSChecker
+}
+
+// SizeHint implements the surge.SizeHinter interface.
+func (brnger BRNGer) SizeHint() int {
+	return brnger.state.SizeHint() + brnger.sharer.SizeHint() + brnger.checker.SizeHint()
+}
+
+// Marshal implements the surge.Marshaler interface.
+func (brnger BRNGer) Marshal(w io.Writer, m int) (int, error) {
+	m, err := brnger.state.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling state: %v", err)
+	}
+	m, err = brnger.sharer.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling sharer: %v", err)
+	}
+	m, err = brnger.checker.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling checker: %v", err)
+	}
+	return m, nil
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (brnger *BRNGer) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := brnger.state.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling state: %v", err)
+	}
+	m, err = brnger.sharer.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling sharer: %v", err)
+	}
+	m, err = brnger.checker.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling checker: %v", err)
+	}
+	return m, nil
 }
 
 // State returns the current state of the state machine.
