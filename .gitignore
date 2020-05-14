@@ -1,1 +1,27 @@
-**/*.dump
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# IDE files
+.idea
+.vscode
+
+# Output of the go coverage tool
+*.out
+*.coverprofile
+
+.direnv.*
+.envrc
+shell.nix
+
+# Binaries
+releases
+
+# Debuggers
+*.dump
