@@ -190,7 +190,7 @@ func (opener Opener) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (opener *Opener) Marshal(w io.Writer, m int) (int, error) {
+func (opener Opener) Marshal(w io.Writer, m int) (int, error) {
 	m, err := opener.commitment.Marshal(w, m)
 	if err != nil {
 		return m, err
