@@ -23,7 +23,7 @@ func (id ID) Marshal(w io.Writer, m int) (int, error) {
 		return m, surge.ErrMaxBytesExceeded
 	}
 	var bs [4]byte
-	binary.BigEndian.PutUint32(bs[:], uint32(*id))
+	binary.BigEndian.PutUint32(bs[:], uint32(id))
 	n, err := w.Write(bs[:])
 	m -= n
 	return m, err
