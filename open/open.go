@@ -75,7 +75,7 @@ func (e ShareEvent) String() string {
 type ResetEvent uint8
 
 const (
-	// Aborted indicates that the state machine was reset without having reaced
+	// Aborted indicates that the state machine was reset without having reached
 	// the Done state for the given sharing instance.
 	Aborted = ResetEvent(iota)
 
