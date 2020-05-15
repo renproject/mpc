@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/surge"
 )
@@ -88,55 +89,83 @@ func (row Row) N() int {
 	return n
 }
 
-type Col struct {
-	shares      shamir.VerifiableShares
-	commitments []shamir.Commitment
+// TODO: Probably think of a better name.
+type Element struct {
+	from       secp256k1.Secp256k1N
+	share      shamir.VerifiableShare
+	commitment shamir.Commitment
 }
 
 // SizeHint implements the surge.SizeHinter interface.
-func (col Col) SizeHint() int {
-	return col.shares.SizeHint() + surge.SizeHint(col.commitments)
+func (e Element) SizeHint() int {
+	return e.from.SizeHint() + e.share.SizeHint() + e.commitment.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (col Col) Marshal(w io.Writer, m int) (int, error) {
-	m, err := col.shares.Marshal(w, m)
+func (e Element) Marshal(w io.Writer, m int) (int, error) {
+	m, err := e.from.Marshal(w, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling shares: %v", err)
+		return m, fmt.Errorf("marshaling from: %v", err)
 	}
-	m, err = surge.Marshal(w, col.commitments, m)
+	m, err = e.share.Marshal(w, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling commitments: %v", err)
+		return m, fmt.Errorf("marshaling share: %v", err)
+	}
+	m, err = e.commitment.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling commitment: %v", err)
 	}
 	return m, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := col.shares.Unmarshal(r, m)
+func (e Element) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := e.from.Unmarshal(r, m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling shares: %v", err)
+		return m, fmt.Errorf("unmarshaling from: %v", err)
 	}
-	m, err = surge.Unmarshal(r, col.commitments, m)
+	m, err = e.share.Unmarshal(r, m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling commitments: %v", err)
+		return m, fmt.Errorf("unmarshaling share: %v", err)
+	}
+	m, err = e.commitment.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
 	return m, nil
 }
 
+func (e *Element) Set(other Element) {
+	e.from = other.from
+	e.share = other.share
+	e.commitment.Set(other.commitment)
+}
+
+type Col []Element
+
+// SizeHint implements the surge.SizeHinter interface.
+func (col Col) SizeHint() int { return surge.SizeHint(col) }
+
+// Marshal implements the surge.Marshaler interface.
+func (col Col) Marshal(w io.Writer, m int) (int, error) {
+	return surge.Marshal(w, col, m)
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
+	return surge.Unmarshal(r, col, m)
+}
+
 func (col Col) HasValidForm() bool {
-	if len(col.shares) == 0 {
-		return false
-	}
-	if len(col.shares) != len(col.commitments) {
+	if len(col) == 0 {
 		return false
 	}
 
-	share := col.shares[0].Share()
-	for i := 1; i < len(col.shares); i++ {
+	share := col[0].share.Share()
+	for i := 1; i < len(col); i++ {
 		// FIXME: Create and use an IndexEq method on the
 		// shamir.VerifiableShare type.
-		s := col.shares[i].Share()
+		s := col[i].share.Share()
 		index := s.Index()
 		if !share.IndexEq(&index) {
 			return false
@@ -172,6 +201,25 @@ func (slice Slice) HasValidForm() bool {
 		}
 	}
 	return true
+}
+
+func (slice Slice) Faults(checker *shamir.VSSChecker) []Element {
+	var faults []Element
+	for _, c := range slice {
+		for _, e := range c {
+			if !checker.IsValid(&e.commitment, &e.share) {
+				var fault Element
+				fault.Set(e)
+				faults = append(faults, fault)
+			}
+		}
+	}
+
+	if len(faults) == 0 {
+		return nil
+	}
+
+	return faults
 }
 
 type Table []Row

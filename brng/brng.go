@@ -13,12 +13,29 @@ import (
 // State is an enumeration of the possible states for the BRNG state machine.
 type State uint8
 
+// Constants that represent the different possible states for the BRNGer.
 const (
 	Init = State(iota)
 	Waiting
 	Ok
 	Error
 )
+
+// String implements the Stringer interface.
+func (s State) String() string {
+	switch s {
+	case Init:
+		return "Init"
+	case Waiting:
+		return "Waiting"
+	case Ok:
+		return "Ok"
+	case Error:
+		return "Error"
+	default:
+		return fmt.Sprintf("Unknown(%v)", uint8(s))
+	}
+}
 
 // SizeHint implements the surge.SizeHinter interface.
 func (s State) SizeHint() int { return 1 }
@@ -122,30 +139,26 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 
 	// TODO: Should we try to reconstruct on a per column basis? Or just give
 	// up if any of the columns in the slice are invalid?
-	for _, c := range slice {
-		for i := 0; i < len(c.shares); i++ {
-			if !brnger.checker.IsValid(&c.commitments[i], &c.shares[i]) {
-				brnger.state = Error
-				return nil, nil
-			}
-		}
+	faults := slice.Faults(&brnger.checker)
+	if faults != nil {
+		brnger.state = Error
+
+		// TODO: Decide the best way to return the faults.
+		return nil, nil
 	}
 
 	// Construct the output share(s).
 	shares := make(shamir.VerifiableShares, slice.BatchSize())
 	commitments := make([]shamir.Commitment, slice.BatchSize())
 	for i, c := range slice {
-		share := c.shares[0]
-		for j := 1; j < len(c.shares); j++ {
-			share.Add(&share, &c.shares[j])
+		var commitment shamir.Commitment
+		commitment.Set(c[0].commitment)
+		share := c[0].share
+		for j := 1; j < len(c); j++ {
+			share.Add(&share, &c[j].share)
+			commitment.Add(&commitment, &c[j].commitment)
 		}
 		shares[i] = share
-
-		var commitment shamir.Commitment
-		commitment.Set(c.commitments[0])
-		for j := 1; j < len(c.commitments); j++ {
-			commitment.Add(&commitment, &c.commitments[j])
-		}
 		commitments[i] = commitment
 	}
 
