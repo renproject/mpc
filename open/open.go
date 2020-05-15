@@ -49,6 +49,7 @@ const (
 	ShareAdded
 )
 
+// String implements the Stringer interface.
 func (e ShareEvent) String() string {
 	var s string
 	switch e {
@@ -65,7 +66,7 @@ func (e ShareEvent) String() string {
 	case ShareAdded:
 		s = "ShareAdded"
 	default:
-		s = "?"
+		s = fmt.Sprintf("Unknown(%v)", uint8(e))
 	}
 	return s
 }
