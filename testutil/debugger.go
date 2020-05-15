@@ -28,11 +28,6 @@ func NewDebugger(filename string, messageType, machineType interface{}) Debugger
 		panic(err)
 	}
 
-	/*
-		if _, ok := v.(Machine); !ok {
-			panic("given type does not implement the Machine interface")
-		}
-	*/
 
 	// Unmarshal machines.
 	sl := reflect.New(reflect.SliceOf(reflect.TypeOf(machineType)))
@@ -79,7 +74,7 @@ func (dbg *Debugger) Step() bool {
 }
 
 // MachineByID returns the machine for the given ID in its current state.
-func (dbg *Debugger) MachineByID(id ID) Machine {
+func (dbg Debugger) MachineByID(id ID) Machine {
 	for _, machine := range dbg.machines {
 		if machine.ID() == id {
 			return machine
@@ -91,7 +86,7 @@ func (dbg *Debugger) MachineByID(id ID) Machine {
 
 // MessagesForID returns all of the messages in the message history that are
 // addressed to the given ID.
-func (dbg *Debugger) MessagesForID(id ID) []Message {
+func (dbg Debugger) MessagesForID(id ID) []Message {
 	msgsForID := make([]Message, 0)
 
 	for _, m := range dbg.messages {

@@ -76,7 +76,7 @@ func (e ShareEvent) String() string {
 type ResetEvent uint8
 
 const (
-	// Aborted indicates that the state machine was reset without having reaced
+	// Aborted indicates that the state machine was reset without having reached
 	// the Done state for the given sharing instance.
 	Aborted = ResetEvent(iota)
 
@@ -148,25 +148,25 @@ func (e ResetEvent) String() string {
 //
 //	- Uninitialised
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Otherwise 				-> Do nothing
+//		- Otherwise 			-> Do nothing
 //	- Waiting(`c`, `k`, `k-1`)
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
 //		- Share, Valid(`c`) 		-> Done(`c`)
-//		- Otherwise -> Do nothing
+//		- Otherwise 			-> Do nothing
 //	- Waiting(`c`, `k`, `i`), `i` < `k-1`
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
 //		- Share, Valid(`c`) 		-> Waiting(`c`, `k`, `i+1`)
-//		- Otherwise -> Do nothing
+//		- Otherwise 			-> Do nothing
 //	- Done(`c`)
 //		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Otherwise 				-> Do nothing
+//		- Otherwise 			-> Do nothing
 //
 // Alternatively, the state transitions can be grouped by message.
 //
 //	- New instance(`c`, `k`)
 //		- Any -> Waiting(`c`, `k`, `0`)
 //	- Share, Valid(`c`)
-//		- Waiting(`c`, `k`, `k-1`) 				-> Done(`c`)
+//		- Waiting(`c`, `k`, `k-1`) 		-> Done(`c`)
 //		- Waiting(`c`, `k`, `i`), `i` < `k-1` 	-> Waiting(`c`, `k`, `i+1`)
 type Opener struct {
 	// Event machine state
@@ -182,7 +182,7 @@ type Opener struct {
 }
 
 // SizeHint implements the surge.SizeHinter interface.
-func (opener *Opener) SizeHint() int {
+func (opener Opener) SizeHint() int {
 	return opener.commitment.SizeHint() +
 		opener.shareBuffer.SizeHint() +
 		opener.secret.SizeHint() +
@@ -191,48 +191,51 @@ func (opener *Opener) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (opener *Opener) Marshal(w io.Writer, m int) (int, error) {
+func (opener Opener) Marshal(w io.Writer, m int) (int, error) {
 	m, err := opener.commitment.Marshal(w, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("marshaling commitment: %v", err)
 	}
 	m, err = opener.shareBuffer.Marshal(w, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("marshaling share buffer: %v", err)
 	}
 	m, err = opener.secret.Marshal(w, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("marshaling secret: %v", err)
 	}
 	m, err = opener.checker.Marshal(w, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("marshaling checker: %v", err)
 	}
 	m, err = opener.reconstructor.Marshal(w, m)
-	return m, err
+	if err != nil {
+		return m, fmt.Errorf("marshaling reconstructor: %v", err)
+	}
+	return m, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err := opener.commitment.Unmarshal(r, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
 	m, err = opener.shareBuffer.Unmarshal(r, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("unmarshaling share buffer: %v", err)
 	}
 	m, err = opener.secret.Unmarshal(r, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("unmarshaling secret: %v", err)
 	}
 	m, err = opener.checker.Unmarshal(r, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("unmarshaling checker: %v", err)
 	}
 	m, err = opener.reconstructor.Unmarshal(r, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("unmarshaling reconstructor: %v", err)
 	}
 
 	// Set the share buffer to have the correct capacity.
@@ -252,12 +255,12 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 // K returns the reconstruction threshold for the current sharing instance.
-func (opener *Opener) K() int {
+func (opener Opener) K() int {
 	return opener.commitment.Len()
 }
 
 // I returns the current number of valid shares that the opener has received.
-func (opener *Opener) I() int {
+func (opener Opener) I() int {
 	return len(opener.shareBuffer)
 }
 
@@ -265,7 +268,7 @@ func (opener *Opener) I() int {
 // but only if the state is Done. Otherwise, it will return the secret for the
 // last sharing instance that made it to state Done. If the state machine has
 // never been in the state Done, then the zero share is returned.
-func (opener *Opener) Secret() Fn {
+func (opener Opener) Secret() Fn {
 	return opener.secret
 }
 
@@ -275,7 +278,7 @@ func (opener *Opener) Secret() Fn {
 func New(indices []Fn, h curve.Point) Opener {
 	return Opener{
 		commitment:    shamir.Commitment{},
-		shareBuffer:   make(shamir.Shares, len(indices))[:0],
+		shareBuffer:   make(shamir.Shares, 0, len(indices)),
 		secret:        Fn{},
 		checker:       shamir.NewVSSChecker(h),
 		reconstructor: shamir.NewReconstructor(indices),

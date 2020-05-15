@@ -15,15 +15,15 @@ import (
 type ID int32
 
 // SizeHint implements the surge.SizeHinter interface.
-func (id *ID) SizeHint() int { return 4 }
+func (id ID) SizeHint() int { return 4 }
 
 // Marshal implements the surge.Marshaler interface.
-func (id *ID) Marshal(w io.Writer, m int) (int, error) {
+func (id ID) Marshal(w io.Writer, m int) (int, error) {
 	if m < 4 {
 		return m, surge.ErrMaxBytesExceeded
 	}
 	var bs [4]byte
-	binary.BigEndian.PutUint32(bs[:], uint32(*id))
+	binary.BigEndian.PutUint32(bs[:], uint32(id))
 	n, err := w.Write(bs[:])
 	m -= n
 	return m, err
@@ -49,8 +49,7 @@ func (id *ID) Unmarshal(r io.Reader, m int) (int, error) {
 // run. Messages must be able to give the IDs for the sender and receiver of
 // the message.
 type Message interface {
-	surge.Marshaler
-	surge.Unmarshaler
+	surge.Surger
 
 	From() ID
 	To() ID
@@ -60,8 +59,7 @@ type Message interface {
 // network. Every machine must have a unique ID, and be able to handle incoming
 // messages.
 type Machine interface {
-	surge.Marshaler
-	surge.Unmarshaler
+	surge.Surger
 
 	ID() ID
 
@@ -218,7 +216,7 @@ func (net *Network) deliver(msg Message) (err error) {
 // Dump saves the initial state of the machines and the message history to the
 // file with the given name. This file can be loaded by a Debugger to start a
 // debugging session.
-func (net *Network) Dump(filename string) {
+func (net Network) Dump(filename string) {
 	file, err := os.Create(filename)
 	if err != nil {
 		fmt.Printf("unable to create dump file: %v", err)
