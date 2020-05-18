@@ -1,6 +1,7 @@
 package brng
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -43,6 +44,20 @@ func (sharing *Sharing) Unmarshal(r io.Reader, m int) (int, error) {
 		return m, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
 	return m, nil
+}
+
+func (sharing Sharing) Commitment() shamir.Commitment {
+	return sharing.commitment
+}
+
+func (sharing Sharing) ShareWithIndex(index secp256k1.Secp256k1N) (shamir.VerifiableShare, error) {
+	for _, share := range sharing.shares {
+		s := share.Share()
+		if s.IndexEq(&index) {
+			return share, nil
+		}
+	}
+	return shamir.VerifiableShare{}, errors.New("no share with the given index was found")
 }
 
 func (sharing Sharing) N() int { return len(sharing.shares) }
