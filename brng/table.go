@@ -111,6 +111,15 @@ type Element struct {
 	commitment shamir.Commitment
 }
 
+// NewElement constructs a new Element from the given arguments.
+func NewElement(
+	from secp256k1.Secp256k1N,
+	share shamir.VerifiableShare,
+	commitment shamir.Commitment,
+) Element {
+	return Element{from, share, commitment}
+}
+
 // SizeHint implements the surge.SizeHinter interface.
 func (e Element) SizeHint() int {
 	return e.from.SizeHint() + e.share.SizeHint() + e.commitment.SizeHint()
