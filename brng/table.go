@@ -10,6 +10,54 @@ import (
 	"github.com/renproject/surge"
 )
 
+// The goal of BRNG is to generate a batch of biased random numbers. At the end
+// of running the BRNG protocol successfully, we should have `b` biased random
+// numbers (also called the `batch size` of the BRNGer).
+//
+// Each of those biased random numbers is produced by the contribution of shares
+// from all players participating in the protocol. Generally, we would say, `n`
+// players contribute a set of `n` shares for a random number, such that each
+// random number is represented by `k-1` degree polynomial.
+//
+// The protocol can be visualised by the illustration below.
+//
+//                            Slice
+//                              |
+//                           ___|__________________
+//                         /    |   /|/|           /|
+//                       /      V / /| | <-- Col /  |
+//                     /        / /  | |       /    |
+//                   /_______ /_/____|_|____ /     /|
+//                   |       | |     | |    |    / /|
+//                ^  |       | |     | |    |  / / <--- Row
+//                |  |_______|_|_____|_|____|/ /    |
+//           From |  |_|_E_|_|_|_|_|_|_|_|__|/      |
+//                |  |       | |     | |    |       |
+//                   |       | |    / /     |      /
+//                   |       | |  / /       |    /   Batch
+//                   |       | |/ /         |  /
+//                   |_______|/|/___________|/
+//                          ------>
+//                            To
+//
+// Sharing holds the set of verifiable shares from a single player representing
+// a single random number.
+//
+// Row defines a batch of Sharings, all coming from a single player. So a row
+// would hold the `b` sets of verifiable shares, basically, the player's potential
+// contribution for `b` biased random numbers.
+//
+// Element is a single verifiable share, marked as `E` in the above diagram. We
+// therefore require a `from` field in an element, to tell us which player this
+// verifiable share comes from.
+//
+// Col defines a list of elements, but specific to a particular index. It holds
+// the jth share from each of the players.
+//
+// Slice is vertical slice of the above cube. It represents shares from all players
+// for a specific index (Col) and `b` such Cols. Therefore a slice is basically
+// a list of Cols.
+
 type Sharing struct {
 	shares     shamir.VerifiableShares
 	commitment shamir.Commitment
