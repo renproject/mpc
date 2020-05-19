@@ -11,14 +11,19 @@ import (
 	stu "github.com/renproject/shamir/testutil"
 )
 
-func RandomValidElement(to, from secp256k1.Secp256k1N, h curve.Point) brng.Element {
+func RandomValidElement(
+	to, from secp256k1.Secp256k1N, h curve.Point,
+) (brng.Element, shamir.VerifiableShare, shamir.Commitment) {
 	indices := []secp256k1.Secp256k1N{to}
 	shares := make(shamir.VerifiableShares, 1)
 	commitment := shamir.NewCommitmentWithCapacity(1)
 	vssharer := shamir.NewVSSharer(indices, h)
 	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
 
-	return brng.NewElement(from, shares[0], commitment)
+	var c shamir.Commitment
+	c.Set(commitment)
+
+	return brng.NewElement(from, shares[0], commitment), shares[0], c
 }
 
 func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point) brng.Element {
@@ -44,12 +49,23 @@ func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point) brng.Ele
 	return brng.NewElement(from, shares[0], commitment)
 }
 
-func RandomValidCol(to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h curve.Point) brng.Col {
+func RandomValidCol(
+	to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h curve.Point,
+) (brng.Col, shamir.VerifiableShare, shamir.Commitment) {
 	col := make(brng.Col, len(indices))
-	for i, from := range indices {
-		col[i] = RandomValidElement(to, from, h)
+
+	element, sumShares, sumCommitments := RandomValidElement(to, indices[0], h)
+	col[0] = element
+
+	for i := 1; i < len(indices); i++ {
+		element, share, commitment := RandomValidElement(to, indices[i], h)
+
+		col[i] = element
+		sumShares.Add(&sumShares, &share)
+		sumCommitments.Add(&sumCommitments, &commitment)
 	}
-	return col
+
+	return col, sumShares, sumCommitments
 }
 
 func RandomInvalidCol(
@@ -63,7 +79,7 @@ func RandomInvalidCol(
 		if _, ok := badIndex[i]; ok {
 			col[i] = RandomInvalidElement(to, from, h)
 		} else {
-			col[i] = RandomValidElement(to, from, h)
+			col[i], _, _ = RandomValidElement(to, from, h)
 		}
 	}
 	return col
@@ -74,12 +90,16 @@ func RandomValidSlice(
 	indices []secp256k1.Secp256k1N,
 	h curve.Point,
 	b int,
-) brng.Slice {
+) (brng.Slice, []shamir.VerifiableShare, []shamir.Commitment) {
 	slice := make(brng.Slice, b)
+	shares := make([]shamir.VerifiableShare, b)
+	commitments := make([]shamir.Commitment, b)
+
 	for i := range slice {
-		slice[i] = RandomValidCol(to, indices, h)
+		slice[i], shares[i], commitments[i] = RandomValidCol(to, indices, h)
 	}
-	return slice
+
+	return slice, shares, commitments
 }
 
 func RandomInvalidSlice(

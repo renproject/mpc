@@ -62,7 +62,7 @@ var _ = Describe("BRNG", func() {
 		k, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		slice := testutil.RandomValidSlice(to, indices, h, b)
+		slice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 		_, _ = brnger.TransitionSlice(slice)
 	}
 
@@ -97,7 +97,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 
 				brnger.TransitionSlice(validSlice)
 
@@ -124,7 +124,7 @@ var _ = Describe("BRNG", func() {
 			Specify("Valid Slice -> Ok", func() {
 				TransitionToWaiting(&brnger, k, b)
 
-				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Ok))
@@ -161,7 +161,7 @@ var _ = Describe("BRNG", func() {
 			Specify("Slice -> Do nothing", func() {
 				TransitionToOk(&brnger, to, indices, k, b)
 
-				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Ok))
@@ -188,7 +188,7 @@ var _ = Describe("BRNG", func() {
 			Specify("Slice -> Do nothing", func() {
 				TransitionToError(&brnger, to, indices, k, t, b)
 
-				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Error))
@@ -232,6 +232,24 @@ var _ = Describe("BRNG", func() {
 		// On receiving a valid slice in the Waiting state, the state machine
 		// should return the correct shares and commitment that correspond to
 		// the slice.
+		It("should correctly process a valid slice", func() {
+			brnger.TransitionStart(k, b)
+
+			validSlice, expectedShares, expectedCommitments := btu.RandomValidSlice(to, indices, h, b)
+
+			shares, commitments := brnger.TransitionSlice(validSlice)
+
+			Expect(len(shares)).To(Equal(b))
+			Expect(len(commitments)).To(Equal(b))
+
+			for i, share := range shares {
+				Expect(share.Eq(&expectedShares[i])).To(BeTrue())
+			}
+
+			for i, commitment := range commitments {
+				Expect(commitment.Eq(&expectedCommitments[i])).To(BeTrue())
+			}
+		})
 	})
 
 	Context("Invalid slice processing (4)", func() {
