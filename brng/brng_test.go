@@ -63,7 +63,7 @@ var _ = Describe("BRNG", func() {
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
 		slice, _, _ := btu.RandomValidSlice(to, indices, h, b)
-		_, _ = brnger.TransitionSlice(slice)
+		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
 	TransitionToError := func(
@@ -74,8 +74,8 @@ var _ = Describe("BRNG", func() {
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
 		badIndices := testutil.RandomBadIndices(t, len(indices), b)
-		slice := testutil.RandomInvalidSlice(to, indices, badIndices, h, b)
-		_, _ = brnger.TransitionSlice(slice)
+		slice, _ := testutil.RandomInvalidSlice(to, indices, badIndices, h, b)
+		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
 	JustBeforeEach(func() {
@@ -134,7 +134,7 @@ var _ = Describe("BRNG", func() {
 				TransitionToWaiting(&brnger, k, b)
 
 				badIndices := btu.RandomBadIndices(t, n, b)
-				invalidSlice := btu.RandomInvalidSlice(to, indices, badIndices, h, b)
+				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, badIndices, h, b)
 				brnger.TransitionSlice(invalidSlice)
 
 				Expect(brnger.State()).To(Equal(Error))
@@ -237,7 +237,7 @@ var _ = Describe("BRNG", func() {
 
 			validSlice, expectedShares, expectedCommitments := btu.RandomValidSlice(to, indices, h, b)
 
-			shares, commitments := brnger.TransitionSlice(validSlice)
+			shares, commitments, _ := brnger.TransitionSlice(validSlice)
 
 			Expect(len(shares)).To(Equal(b))
 			Expect(len(commitments)).To(Equal(b))
@@ -256,6 +256,21 @@ var _ = Describe("BRNG", func() {
 		// On receiving an invalid slice in the Waiting state, the state
 		// machine should return a list of faults that correctly identifies the
 		// invalid shares.
+		It("should correctly identify faulty elements", func() {
+			brnger.TransitionStart(k, b)
+
+			badIndices := btu.RandomBadIndices(t, n, b)
+			invalidSlice, expectedFaults := btu.RandomFaultySlice(to, indices, badIndices, h, b)
+
+			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)
+
+			Expect(len(shares)).To(Equal(0))
+			Expect(len(commitments)).To(Equal(0))
+			Expect(len(faults)).To(Equal(len(expectedFaults)))
+			for i, expectedFault := range expectedFaults {
+				Expect(faults[i]).To(Equal(expectedFault))
+			}
+		})
 	})
 
 	Context("Network (5)", func() {

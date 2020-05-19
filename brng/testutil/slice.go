@@ -26,7 +26,7 @@ func RandomValidElement(
 	return brng.NewElement(from, shares[0], commitment), shares[0], c
 }
 
-func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point) brng.Element {
+func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point, perturbPart int) brng.Element {
 	indices := []secp256k1.Secp256k1N{to}
 	shares := make(shamir.VerifiableShares, 1)
 	commitment := shamir.NewCommitmentWithCapacity(1)
@@ -34,14 +34,17 @@ func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point) brng.Ele
 	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
 
 	// Randomly peturb the share.
-	r := rand.Intn(3)
+	// pass perturbPart = 2 to only make the commitments invalid
+	// while keeping the indices valid
+	if perturbPart <= 0 || perturbPart > 3 { perturbPart = 3 }
+	r := rand.Intn(perturbPart)
 	switch r {
 	case 0:
-		stu.PerturbIndex(&shares[0])
-	case 1:
 		stu.PerturbValue(&shares[0])
-	case 2:
+	case 1:
 		stu.PerturbDecommitment(&shares[0])
+	case 2:
+		stu.PerturbIndex(&shares[0])
 	default:
 		panic("invalid case")
 	}
@@ -73,16 +76,21 @@ func RandomInvalidCol(
 	indices []secp256k1.Secp256k1N,
 	badIndex map[int]struct{},
 	h curve.Point,
-) brng.Col {
+	perturbPart int,
+) (brng.Col, []brng.Element) {
 	col := make(brng.Col, len(indices))
+	var faults []brng.Element
+
 	for i, from := range indices {
 		if _, ok := badIndex[i]; ok {
-			col[i] = RandomInvalidElement(to, from, h)
+			element := RandomInvalidElement(to, from, h, perturbPart)
+			col[i] = element
+			faults = append(faults, element)
 		} else {
 			col[i], _, _ = RandomValidElement(to, from, h)
 		}
 	}
-	return col
+	return col, faults
 }
 
 func RandomValidSlice(
@@ -108,12 +116,34 @@ func RandomInvalidSlice(
 	badIndices []map[int]struct{},
 	h curve.Point,
 	b int,
-) brng.Slice {
+) (brng.Slice, []brng.Element) {
 	slice := make(brng.Slice, b)
+	var faults []brng.Element
+
 	for i := range slice {
-		slice[i] = RandomInvalidCol(to, indices, badIndices[i], h)
+		col, colFaults := RandomInvalidCol(to, indices, badIndices[i], h, 3)
+		slice[i] = col
+		faults = append(faults, colFaults...)
 	}
-	return slice
+	return slice, faults
+}
+
+func RandomFaultySlice(
+	to secp256k1.Secp256k1N,
+	indices []secp256k1.Secp256k1N,
+	badIndices []map[int]struct{},
+	h curve.Point,
+	b int,
+) (brng.Slice, []brng.Element) {
+	slice := make(brng.Slice, b)
+	var faults []brng.Element
+
+	for i := range slice {
+		col, colFaults := RandomInvalidCol(to, indices, badIndices[i], h, 2)
+		slice[i] = col
+		faults = append(faults, colFaults...)
+	}
+	return slice, faults
 }
 
 func RandomBadIndices(t, n, b int) []map[int]struct{} {

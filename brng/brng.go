@@ -102,6 +102,12 @@ func (brnger *BRNGer) State() State {
 	return brnger.state
 }
 
+// N returns the total number of players participating
+// in the BRNG protocol
+func (brnger *BRNGer) N() int {
+	return brnger.sharer.N()
+}
+
 // BatchSize returns the expected batch size of the state machine.
 func (brnger *BRNGer) BatchSize() int {
 	return brnger.batchSize
@@ -136,14 +142,16 @@ func (brnger *BRNGer) TransitionStart(k, b int) Row {
 	return row
 }
 
-func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []shamir.Commitment) {
+func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []shamir.Commitment, []Element) {
 	if brnger.state != Waiting {
-		return nil, nil
+		return nil, nil, nil
 	}
 
+	// TODO: The `faults` don't account for invalid index errors
+	// Is it required to add them to the list of faults?
 	if !slice.HasValidForm(brnger.batchSize) {
 		brnger.state = Error
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// TODO: Should we try to reconstruct on a per column basis? Or just give
@@ -153,7 +161,7 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 		brnger.state = Error
 
 		// TODO: Decide the best way to return the faults.
-		return nil, nil
+		return nil, nil, faults
 	}
 
 	// Construct the output share(s).
@@ -172,7 +180,7 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 	}
 
 	brnger.state = Ok
-	return shares, commitments
+	return shares, commitments, nil
 }
 
 // Reset sets the state of the state machine to the Init state.
