@@ -98,10 +98,14 @@ func RandomInvalidSlice(
 
 func RandomBadIndices(t, n, b int) []map[int]struct{} {
 	badIndices := make([]map[int]struct{}, b)
-	badPlayers := randomIndices(t, n)
+	for i := range badIndices {
+		badIndices[i] = make(map[int]struct{})
+	}
+
+	badPlayers := randomIndices(n, t)
 	for _, player := range badPlayers {
 		r := rand.Intn(b) + 1
-		badBatches := randomIndices(r, b)
+		badBatches := randomIndices(b, r)
 		for _, batch := range badBatches {
 			badIndices[batch][player] = struct{}{}
 		}

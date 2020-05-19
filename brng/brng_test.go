@@ -2,11 +2,14 @@ package brng_test
 
 import (
 	. "github.com/onsi/ginkgo"
-	// . "github.com/onsi/gomega"
+	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/brng"
 	"github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/secp256k1-go"
+
+	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/shamir/curve"
+	stu "github.com/renproject/shamir/testutil"
 )
 
 // The main properties that we want to test for the BRNGer state machine are
@@ -24,7 +27,29 @@ import (
 //	correctly the output commitments. In the presence of dishonest nodes, any
 //	node that sends an incorrect share/commitment should be identified.
 var _ = Describe("BRNG", func() {
+
+	// Pedersem paramter.
 	h := curve.Random()
+
+	n := 20
+	k := 7
+
+	var (
+		brnger  BRNGer
+		indices []secp256k1.Secp256k1N
+		b, t    int
+		to      secp256k1.Secp256k1N
+	)
+
+	Setup := func() (BRNGer, int, int, secp256k1.Secp256k1N, []secp256k1.Secp256k1N) {
+		b := 5
+		t := k - 1
+		to := secp256k1.OneSecp256k1N()
+		indices := stu.RandomIndices(n)
+		brnger := New(indices, h)
+
+		return brnger, t, b, to, indices
+	}
 
 	TransitionToWaiting := func(brnger *BRNGer, k, b int) Row {
 		return brnger.TransitionStart(k, b)
@@ -53,6 +78,10 @@ var _ = Describe("BRNG", func() {
 		_, _ = brnger.TransitionSlice(slice)
 	}
 
+	JustBeforeEach(func() {
+		brnger, t, b, to, indices = Setup()
+	})
+
 	Context("State transitions (1)", func() {
 		Context("Init state", func() {
 			Specify("Start -> Waiting", func() {
@@ -67,6 +96,9 @@ var _ = Describe("BRNG", func() {
 
 		Context("Waiting state", func() {
 			Specify("Start -> Do nothing", func() {
+				TransitionToWaiting(&brnger, k, b)
+
+				Expect(brnger.State()).To(Equal(Waiting))
 			})
 
 			Specify("Valid Slice -> Ok", func() {
@@ -81,6 +113,9 @@ var _ = Describe("BRNG", func() {
 
 		Context("Ok state", func() {
 			Specify("Start -> Do nothing", func() {
+				TransitionToOk(&brnger, to, indices, k, b)
+
+				Expect(brnger.State()).To(Equal(Ok))
 			})
 
 			Specify("Slice -> Do nothing", func() {
@@ -92,6 +127,9 @@ var _ = Describe("BRNG", func() {
 
 		Context("Error state", func() {
 			Specify("Start -> Do nothing", func() {
+				TransitionToError(&brnger, to, indices, k, t, b)
+
+				Expect(brnger.State()).To(Equal(Error))
 			})
 
 			Specify("Slice -> Do nothing", func() {
@@ -105,6 +143,16 @@ var _ = Describe("BRNG", func() {
 	Context("Share creation (2)", func() {
 		// On receiving a start message in the Init state, the state machine
 		// should return a valid Row.
+		Specify("the returned row should be valid", func() {
+			row := brnger.TransitionStart(k, b)
+			Expect(btu.RowIsValid(row, k, indices, h)).To(BeTrue())
+		})
+
+		Specify("", func() {
+		})
+
+		Specify("", func() {
+		})
 	})
 
 	Context("Valid slice processing (3)", func() {

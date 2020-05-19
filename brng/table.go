@@ -1,15 +1,5 @@
 package brng
 
-import (
-	"errors"
-	"fmt"
-	"io"
-
-	"github.com/renproject/secp256k1-go"
-	"github.com/renproject/shamir"
-	"github.com/renproject/surge"
-)
-
 // The goal of BRNG is to generate a batch of biased random numbers. At the end
 // of running the BRNG protocol successfully, we should have `b` biased random
 // numbers (also called the `batch size` of the BRNGer).
@@ -57,6 +47,16 @@ import (
 // Slice is vertical slice of the above cube. It represents shares from all players
 // for a specific index (Col) and `b` such Cols. Therefore a slice is basically
 // a list of Cols.
+
+import (
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/shamir"
+	"github.com/renproject/surge"
+)
 
 type Sharing struct {
 	shares     shamir.VerifiableShares
