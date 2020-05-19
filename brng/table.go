@@ -46,6 +46,10 @@ func (sharing *Sharing) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, nil
 }
 
+func (sharing Sharing) Shares() shamir.VerifiableShares {
+	return sharing.shares
+}
+
 func (sharing Sharing) Commitment() shamir.Commitment {
 	return sharing.commitment
 }

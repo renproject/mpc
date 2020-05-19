@@ -123,3 +123,23 @@ func randomIndices(n, k int) []int {
 	sort.Ints(ret)
 	return ret
 }
+
+func RowIsValid(row brng.Row, k int, indices []secp256k1.Secp256k1N, h curve.Point) bool {
+	reconstructor := shamir.NewReconstructor(indices)
+	checker := shamir.NewVSSChecker(h)
+
+	for _, sharing := range row {
+		c := sharing.Commitment()
+		for _, share := range sharing.Shares() {
+			if !checker.IsValid(&c, &share) {
+				return false
+			}
+		}
+
+		if !stu.VsharesAreConsistent(sharing.Shares(), &reconstructor, k) {
+			return false
+		}
+	}
+
+	return true
+}

@@ -48,7 +48,7 @@ var _ = Describe("BRNG", func() {
 		k, t, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		badIndices := testutil.RandomBadIndices(t, b)
+		badIndices := testutil.RandomBadIndices(t, len(indices), b)
 		slice := testutil.RandomInvalidSlice(to, indices, badIndices, h, b)
 		_, _ = brnger.TransitionSlice(slice)
 	}
