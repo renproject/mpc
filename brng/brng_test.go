@@ -83,14 +83,31 @@ var _ = Describe("BRNG", func() {
 	})
 
 	Context("State transitions (1)", func() {
+		// Given that the BRNGer is in a particular state, it should transition
+		// to the appropriate state or continue being in the same state
+		// depending on the message supplied to it
 		Context("Init state", func() {
 			Specify("Start -> Waiting", func() {
+				Expect(brnger.BatchSize()).To(Equal(0))
+
+				brnger.TransitionStart(k, b)
+
+				Expect(brnger.State()).To(Equal(Waiting))
+				Expect(brnger.BatchSize()).To(Equal(b))
 			})
 
 			Specify("Slice -> Do nothing", func() {
+				validSlice := btu.RandomValidSlice(to, indices, h, b)
+
+				brnger.TransitionSlice(validSlice)
+
+				Expect(brnger.State()).To(Equal(Init))
 			})
 
 			Specify("Reset -> Init", func() {
+				brnger.Reset()
+
+				Expect(brnger.State()).To(Equal(Init))
 			})
 		})
 
@@ -98,16 +115,37 @@ var _ = Describe("BRNG", func() {
 			Specify("Start -> Do nothing", func() {
 				TransitionToWaiting(&brnger, k, b)
 
+				brnger.TransitionStart(k, b)
+
 				Expect(brnger.State()).To(Equal(Waiting))
+				Expect(brnger.BatchSize()).To(Equal(b))
 			})
 
 			Specify("Valid Slice -> Ok", func() {
+				TransitionToWaiting(&brnger, k, b)
+
+				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				brnger.TransitionSlice(validSlice)
+
+				Expect(brnger.State()).To(Equal(Ok))
 			})
 
 			Specify("Invalid Slice -> Error", func() {
+				TransitionToWaiting(&brnger, k, b)
+
+				badIndices := btu.RandomBadIndices(t, n, b)
+				invalidSlice := btu.RandomInvalidSlice(to, indices, badIndices, h, b)
+				brnger.TransitionSlice(invalidSlice)
+
+				Expect(brnger.State()).To(Equal(Error))
 			})
 
 			Specify("Reset -> Init", func() {
+				TransitionToWaiting(&brnger, k, b)
+
+				brnger.Reset()
+
+				Expect(brnger.State()).To(Equal(Init))
 			})
 		})
 
@@ -115,13 +153,26 @@ var _ = Describe("BRNG", func() {
 			Specify("Start -> Do nothing", func() {
 				TransitionToOk(&brnger, to, indices, k, b)
 
+				brnger.TransitionStart(k, b)
+
 				Expect(brnger.State()).To(Equal(Ok))
 			})
 
 			Specify("Slice -> Do nothing", func() {
+				TransitionToOk(&brnger, to, indices, k, b)
+
+				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				brnger.TransitionSlice(validSlice)
+
+				Expect(brnger.State()).To(Equal(Ok))
 			})
 
 			Specify("Reset -> Init", func() {
+				TransitionToOk(&brnger, to, indices, k, b)
+
+				brnger.Reset()
+
+				Expect(brnger.State()).To(Equal(Init))
 			})
 		})
 
@@ -129,13 +180,26 @@ var _ = Describe("BRNG", func() {
 			Specify("Start -> Do nothing", func() {
 				TransitionToError(&brnger, to, indices, k, t, b)
 
+				brnger.TransitionStart(k, b)
+
 				Expect(brnger.State()).To(Equal(Error))
 			})
 
 			Specify("Slice -> Do nothing", func() {
+				TransitionToError(&brnger, to, indices, k, t, b)
+
+				validSlice := btu.RandomValidSlice(to, indices, h, b)
+				brnger.TransitionSlice(validSlice)
+
+				Expect(brnger.State()).To(Equal(Error))
 			})
 
 			Specify("Reset -> Init", func() {
+				TransitionToError(&brnger, to, indices, k, t, b)
+
+				brnger.Reset()
+
+				Expect(brnger.State()).To(Equal(Init))
 			})
 		})
 	})
@@ -145,13 +209,22 @@ var _ = Describe("BRNG", func() {
 		// should return a valid Row.
 		Specify("the returned row should be valid", func() {
 			row := brnger.TransitionStart(k, b)
+
 			Expect(btu.RowIsValid(row, k, indices, h)).To(BeTrue())
 		})
 
-		Specify("", func() {
+		Specify("the reconstruction threshold is correct", func() {
+			row := brnger.TransitionStart(k, b)
+
+			Expect(btu.RowIsValid(row, k-1, indices, h)).To(BeFalse())
+			Expect(btu.RowIsValid(row, k, indices, h)).To(BeTrue())
 		})
 
-		Specify("", func() {
+		Specify("the returned row should have the correct batch size", func() {
+			row := brnger.TransitionStart(k, b)
+
+			Expect(row.BatchSize()).To(Equal(b))
+			Expect(brnger.BatchSize()).To(Equal(b))
 		})
 	})
 

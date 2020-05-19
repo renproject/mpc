@@ -270,7 +270,11 @@ func (slice Slice) BatchSize() int {
 	return len(slice)
 }
 
-func (slice Slice) HasValidForm() bool {
+func (slice Slice) HasValidForm(b int) bool {
+	if b != slice.BatchSize() {
+		return false
+	}
+
 	for _, c := range slice {
 		if !c.HasValidForm() {
 			return false

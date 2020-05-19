@@ -51,7 +51,8 @@ func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 type BRNGer struct {
-	state State
+	state     State
+	batchSize int
 
 	sharer  shamir.VSSharer
 	checker shamir.VSSChecker
@@ -101,6 +102,11 @@ func (brnger *BRNGer) State() State {
 	return brnger.state
 }
 
+// BatchSize returns the expected batch size of the state machine.
+func (brnger *BRNGer) BatchSize() int {
+	return brnger.batchSize
+}
+
 // New creates a new BRNG state machine for the given indices and pedersen
 // parameter h.
 func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
@@ -108,7 +114,9 @@ func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
 	sharer := shamir.NewVSSharer(indices, h)
 	checker := shamir.NewVSSChecker(h)
 
-	return BRNGer{state, sharer, checker}
+	// initialise the batch size as 0
+	// it will be updated when state machine transitions to start
+	return BRNGer{state, 0, sharer, checker}
 }
 
 func (brnger *BRNGer) TransitionStart(k, b int) Row {
@@ -123,6 +131,7 @@ func (brnger *BRNGer) TransitionStart(k, b int) Row {
 	}
 
 	brnger.state = Waiting
+	brnger.batchSize = b
 
 	return row
 }
@@ -132,7 +141,7 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 		return nil, nil
 	}
 
-	if !slice.HasValidForm() {
+	if !slice.HasValidForm(brnger.batchSize) {
 		brnger.state = Error
 		return nil, nil
 	}
@@ -148,8 +157,8 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 	}
 
 	// Construct the output share(s).
-	shares := make(shamir.VerifiableShares, slice.BatchSize())
-	commitments := make([]shamir.Commitment, slice.BatchSize())
+	shares := make(shamir.VerifiableShares, brnger.batchSize)
+	commitments := make([]shamir.Commitment, brnger.batchSize)
 	for i, c := range slice {
 		var commitment shamir.Commitment
 		commitment.Set(c[0].commitment)
