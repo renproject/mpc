@@ -63,6 +63,10 @@ type Sharing struct {
 	commitment shamir.Commitment
 }
 
+func NewSharing(shares shamir.VerifiableShares, commitment shamir.Commitment) Sharing {
+	return Sharing{shares, commitment}
+}
+
 // SizeHint implements the surge.SizeHinter interface.
 func (sharing Sharing) SizeHint() int {
 	return sharing.shares.SizeHint() + sharing.commitment.SizeHint()
@@ -310,6 +314,30 @@ func (slice Slice) Faults(checker *shamir.VSSChecker) []Element {
 }
 
 type Table []Row
+
+func (t Table) Slice(index secp256k1.Secp256k1N, fromIndices []secp256k1.Secp256k1N) Slice {
+	// NOTE: Assumes that the table is well formed.
+	slice := make(Slice, t.BatchSize())
+	for i := range slice {
+		slice[i] = make(Col, t.Height())
+	}
+
+	for i, row := range t {
+		for j, sharing := range row {
+			from := fromIndices[i]
+			share, err := sharing.ShareWithIndex(index)
+			if err != nil {
+				panic("index missing from table")
+			}
+			var commitment shamir.Commitment
+			commitment.Set(sharing.Commitment())
+
+			slice[j][i] = NewElement(from, share, commitment)
+		}
+	}
+
+	return slice
+}
 
 func (t Table) Height() int {
 	return len(t)

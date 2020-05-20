@@ -6,6 +6,7 @@ import (
 	. "github.com/renproject/mpc/brng"
 	"github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/shamir"
 
 	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/shamir/curve"
@@ -62,7 +63,7 @@ var _ = Describe("BRNG", func() {
 		k, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		slice, _, _ := btu.RandomValidSlice(to, indices, h, b)
+		slice := btu.RandomValidSlice(to, indices, h, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
@@ -74,7 +75,7 @@ var _ = Describe("BRNG", func() {
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
 		badIndices := testutil.RandomBadIndices(t, len(indices), b)
-		slice, _ := testutil.RandomInvalidSlice(to, indices, badIndices, h, b)
+		slice, _ := testutil.RandomInvalidSlice(to, indices, badIndices, h, n, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
@@ -97,7 +98,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
+				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
 
 				brnger.TransitionSlice(validSlice)
 
@@ -124,7 +125,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Valid Slice -> Ok", func() {
-				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
+				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Ok))
@@ -132,7 +133,7 @@ var _ = Describe("BRNG", func() {
 
 			Specify("Invalid Slice -> Error", func() {
 				badIndices := btu.RandomBadIndices(t, n, b)
-				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, badIndices, h, b)
+				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, badIndices, h, k, k, b, k-1)
 				brnger.TransitionSlice(invalidSlice)
 
 				Expect(brnger.State()).To(Equal(Error))
@@ -157,7 +158,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
+				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Ok))
@@ -182,7 +183,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
+				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Error))
@@ -227,7 +228,11 @@ var _ = Describe("BRNG", func() {
 		It("should correctly process a valid slice", func() {
 			brnger.TransitionStart(k, b)
 
-			validSlice, expectedShares, expectedCommitments := btu.RandomValidSlice(to, indices, h, b)
+			expectedShares := make(shamir.VerifiableShares, b)
+			expectedCommitments := make([]shamir.Commitment, b)
+			validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
+
+			// FIXME: Compute expectedShares and expectedCommitments.
 
 			shares, commitments, _ := brnger.TransitionSlice(validSlice)
 
@@ -252,7 +257,7 @@ var _ = Describe("BRNG", func() {
 			brnger.TransitionStart(k, b)
 
 			badIndices := btu.RandomBadIndices(t, n, b)
-			invalidSlice, expectedFaults := btu.RandomFaultySlice(to, indices, badIndices, h, b)
+			invalidSlice, expectedFaults := btu.RandomInvalidSlice(to, indices, badIndices, h, k, k, b, k-1)
 
 			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)
 

@@ -11,104 +11,103 @@ import (
 	stu "github.com/renproject/shamir/testutil"
 )
 
-func RandomValidElement(
-	to, from secp256k1.Secp256k1N, h curve.Point,
-) brng.Element {
-	indices := []secp256k1.Secp256k1N{to}
-	shares := make(shamir.VerifiableShares, 1)
-	commitment := shamir.NewCommitmentWithCapacity(1)
+func RandomValidSharing(indices []secp256k1.Secp256k1N, k int, h curve.Point) brng.Sharing {
+	shares := make(shamir.VerifiableShares, len(indices))
+	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
 
-	return brng.NewElement(from, shares[0], commitment)
+	return brng.NewSharing(shares, commitment)
 }
 
-func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point, perturbPart int) brng.Element {
-	indices := []secp256k1.Secp256k1N{to}
-	shares := make(shamir.VerifiableShares, 1)
-	commitment := shamir.NewCommitmentWithCapacity(1)
-	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
-
-	// Randomly peturb the share.
-	// pass perturbPart = 2 to only make the commitments invalid
-	// while keeping the indices valid
-	if perturbPart <= 0 || perturbPart > 3 { perturbPart = 3 }
-	r := rand.Intn(perturbPart)
-	switch r {
-	case 0:
-		stu.PerturbValue(&shares[0])
-	case 1:
-		stu.PerturbDecommitment(&shares[0])
-	case 2:
-		stu.PerturbIndex(&shares[0])
-	default:
-		panic("invalid case")
-	}
-
-	return brng.NewElement(from, shares[0], commitment)
-}
-
-func RandomValidCol(
-	to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h curve.Point,
-) (brng.Col, shamir.VerifiableShare, shamir.Commitment) {
-	col := make(brng.Col, len(indices))
-	var sumShares shamir.VerifiableShare
-	var sumCommitments shamir.Commitment
-
-	col[0] = RandomValidElement(to, indices[0], h)
-	sumShares = col[0].Share()
-	sumCommitments.Set(col[0].Commitment())
-
-	for i := 1; i < len(indices); i++ {
-		col[i] = RandomValidElement(to, indices[i], h)
-
-		share := col[i].Share()
-		commitment := col[i].Commitment()
-		sumShares.Add(&sumShares, &share)
-		sumCommitments.Add(&sumCommitments, &commitment)
-	}
-
-	return col, sumShares, sumCommitments
-}
-
-func RandomInvalidCol(
-	to secp256k1.Secp256k1N,
+func RandomInvalidSharing(
 	indices []secp256k1.Secp256k1N,
-	badIndex map[int]struct{},
+	k int,
 	h curve.Point,
-	perturbPart int,
-) (brng.Col, []brng.Element) {
-	col := make(brng.Col, len(indices))
-	var faults []brng.Element
+	badIndex int,
+) brng.Sharing {
+	shares := make(shamir.VerifiableShares, len(indices))
+	commitment := shamir.NewCommitmentWithCapacity(k)
+	vssharer := shamir.NewVSSharer(indices, h)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
 
-	for i, from := range indices {
-		if _, ok := badIndex[i]; ok {
-			element := RandomInvalidElement(to, from, h, perturbPart)
-			col[i] = element
-			faults = append(faults, element)
+	// Perturb the bad indice.
+	perturbShare(&shares[badIndex])
+
+	return brng.NewSharing(shares, commitment)
+}
+
+func RandomValidRow(indices []secp256k1.Secp256k1N, k, b int, h curve.Point) brng.Row {
+	row := make(brng.Row, b)
+	for i := range row {
+		row[i] = RandomValidSharing(indices, k, h)
+	}
+	return row
+}
+
+func RandomInvalidRow(
+	indices []secp256k1.Secp256k1N,
+	k, b int,
+	h curve.Point,
+	badIndex int,
+	badBatches []int,
+) brng.Row {
+	row := make(brng.Row, b)
+
+	j := 0
+	for i := range row {
+		if i == badBatches[j] {
+			row[i] = RandomInvalidSharing(indices, k, h, badIndex)
+			j++
 		} else {
-			col[i] = RandomValidElement(to, from, h)
+			row[i] = RandomValidSharing(indices, k, h)
 		}
 	}
-	return col, faults
+
+	return row
+}
+
+func RandomValidTable(indices []secp256k1.Secp256k1N, h curve.Point, k, b, t int) brng.Table {
+	table := make(brng.Table, t)
+	for i := range table {
+		table[i] = RandomValidRow(indices, k, b, h)
+	}
+	return table
+}
+
+func RandomInvalidTable(
+	indices []secp256k1.Secp256k1N,
+	h curve.Point,
+	n, k, b, t, badIndex int,
+) (brng.Table, map[int][]int) {
+	table := make(brng.Table, n)
+	badIndices := randomIndices(t, 1)
+	faultLocations := make(map[int][]int)
+
+	j := 0
+	for i := range table {
+		if i == badIndices[j] {
+			badBatches := randomIndices(b, 1)
+			faultLocations[badIndices[j]] = badBatches
+			table[i] = RandomInvalidRow(indices, k, b, h, badIndex, badBatches)
+			j++
+		} else {
+			table[i] = RandomValidRow(indices, k, b, h)
+		}
+	}
+
+	return table, faultLocations
 }
 
 func RandomValidSlice(
 	to secp256k1.Secp256k1N,
 	indices []secp256k1.Secp256k1N,
 	h curve.Point,
-	b int,
-) (brng.Slice, []shamir.VerifiableShare, []shamir.Commitment) {
-	slice := make(brng.Slice, b)
-	shares := make([]shamir.VerifiableShare, b)
-	commitments := make([]shamir.Commitment, b)
-
-	for i := range slice {
-		slice[i], shares[i], commitments[i] = RandomValidCol(to, indices, h)
-	}
-
-	return slice, shares, commitments
+	k, b, t int,
+) brng.Slice {
+	table := RandomValidTable(indices, h, k, b, t)
+	slice := table.Slice(to, indices)
+	return slice
 }
 
 func RandomInvalidSlice(
@@ -116,34 +115,31 @@ func RandomInvalidSlice(
 	indices []secp256k1.Secp256k1N,
 	badIndices []map[int]struct{},
 	h curve.Point,
-	b int,
+	n, k, b, t int,
 ) (brng.Slice, []brng.Element) {
-	slice := make(brng.Slice, b)
+	badIndex := -1
+	for i, index := range indices {
+		if index.Eq(&to) {
+			badIndex = i
+		}
+	}
+	if badIndex == -1 {
+		panic("to index was not found in indices")
+	}
+
+	table, faultLocations := RandomInvalidTable(indices, h, n, k, b, t, badIndex)
+	slice := table.Slice(to, indices)
+
 	var faults []brng.Element
 
-	for i := range slice {
-		col, colFaults := RandomInvalidCol(to, indices, badIndices[i], h, 3)
-		slice[i] = col
-		faults = append(faults, colFaults...)
+	for player, batches := range faultLocations {
+		for _, batch := range batches {
+			var fault brng.Element
+			fault.Set(slice[batch][player])
+			faults = append(faults, fault)
+		}
 	}
-	return slice, faults
-}
 
-func RandomFaultySlice(
-	to secp256k1.Secp256k1N,
-	indices []secp256k1.Secp256k1N,
-	badIndices []map[int]struct{},
-	h curve.Point,
-	b int,
-) (brng.Slice, []brng.Element) {
-	slice := make(brng.Slice, b)
-	var faults []brng.Element
-
-	for i := range slice {
-		col, colFaults := RandomInvalidCol(to, indices, badIndices[i], h, 2)
-		slice[i] = col
-		faults = append(faults, colFaults...)
-	}
 	return slice, faults
 }
 
@@ -164,21 +160,6 @@ func RandomBadIndices(t, n, b int) []map[int]struct{} {
 	return badIndices
 }
 
-func randomIndices(n, k int) []int {
-	indices := make([]int, n)
-	for i := range indices {
-		indices[i] = i
-	}
-
-	rand.Shuffle(len(indices), func(i, j int) {
-		indices[i], indices[j] = indices[j], indices[i]
-	})
-	ret := indices[:k]
-
-	sort.Ints(ret)
-	return ret
-}
-
 func RowIsValid(row brng.Row, k int, indices []secp256k1.Secp256k1N, h curve.Point) bool {
 	reconstructor := shamir.NewReconstructor(indices)
 	checker := shamir.NewVSSChecker(h)
@@ -197,4 +178,33 @@ func RowIsValid(row brng.Row, k int, indices []secp256k1.Secp256k1N, h curve.Poi
 	}
 
 	return true
+}
+
+func randomIndices(n, k int) []int {
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
+
+	rand.Shuffle(len(indices), func(i, j int) {
+		indices[i], indices[j] = indices[j], indices[i]
+	})
+	ret := indices[:k]
+
+	sort.Ints(ret)
+	return ret
+}
+
+func perturbShare(share *shamir.VerifiableShare) {
+	r := rand.Intn(3)
+	switch r {
+	case 0:
+		stu.PerturbValue(share)
+	case 1:
+		stu.PerturbDecommitment(share)
+	case 2:
+		stu.PerturbIndex(share)
+	default:
+		panic("invalid case")
+	}
 }
