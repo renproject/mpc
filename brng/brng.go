@@ -172,16 +172,8 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 	// Construct the output share(s).
 	shares := make(shamir.VerifiableShares, brnger.batchSize)
 	commitments := make([]shamir.Commitment, brnger.batchSize)
-	for i, c := range slice {
-		var commitment shamir.Commitment
-		commitment.Set(c[0].commitment)
-		share := c[0].share
-		for j := 1; j < len(c); j++ {
-			share.Add(&share, &c[j].share)
-			commitment.Add(&commitment, &c[j].commitment)
-		}
-		shares[i] = share
-		commitments[i] = commitment
+	for i, col := range slice {
+		shares[i], commitments[i] = col.Sum()
 	}
 
 	brnger.state = Ok

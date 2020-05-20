@@ -56,7 +56,7 @@ func RandomInvalidRow(
 
 	j := 0
 	for i := range row {
-		if i == badBatches[j] {
+		if j < len(badBatches) && i == badBatches[j] {
 			row[i] = RandomInvalidSharing(indices, k, h, badIndex)
 			j++
 		} else {
@@ -86,7 +86,7 @@ func RandomInvalidTable(
 
 	j := 0
 	for i := range table {
-		if i == badIndices[j] {
+		if j < len(badIndices) && i == badIndices[j] {
 			badBatches := randomIndices(b, 1)
 			faultLocations[badIndices[j]] = badBatches
 			table[i] = RandomInvalidRow(indices, k, b, h, badIndex, badBatches)

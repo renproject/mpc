@@ -266,6 +266,25 @@ func (col Col) HasValidForm() bool {
 	return true
 }
 
+func (col Col) Sum() (shamir.VerifiableShare, shamir.Commitment) {
+	var share shamir.VerifiableShare
+	var commitment shamir.Commitment
+
+	if len(col) == 0 {
+		return share, commitment
+	}
+
+	share = col[0].Share()
+	commitment.Set(col[0].Commitment())
+
+	for i := 1; i < len(col); i++ {
+		share.Add(&share, &col[i].share)
+		commitment.Add(&commitment, &col[i].commitment)
+	}
+
+	return share, commitment
+}
+
 type Slice []Col
 
 // SizeHint implements the surge.SizeHinter interface.

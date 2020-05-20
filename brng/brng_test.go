@@ -45,8 +45,8 @@ var _ = Describe("BRNG", func() {
 	Setup := func() (BRNGer, int, int, secp256k1.Secp256k1N, []secp256k1.Secp256k1N) {
 		b := 5
 		t := k - 1
-		to := secp256k1.OneSecp256k1N()
 		indices := stu.RandomIndices(n)
+		to := indices[0]
 		brnger := New(indices, h)
 
 		return brnger, t, b, to, indices
@@ -232,7 +232,9 @@ var _ = Describe("BRNG", func() {
 			expectedCommitments := make([]shamir.Commitment, b)
 			validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
 
-			// FIXME: Compute expectedShares and expectedCommitments.
+			for i, col := range validSlice {
+				expectedShares[i], expectedCommitments[i] = col.Sum()
+			}
 
 			shares, commitments, _ := brnger.TransitionSlice(validSlice)
 
