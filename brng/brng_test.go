@@ -1,12 +1,17 @@
 package brng_test
 
 import (
+	"errors"
+	"io"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/brng"
 	"github.com/renproject/mpc/brng/testutil"
+	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
+	"github.com/renproject/surge"
 
 	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/shamir/curve"
@@ -272,3 +277,245 @@ var _ = Describe("BRNG", func() {
 	Context("Network (5)", func() {
 	})
 })
+
+type TypeID byte
+
+func (id TypeID) SizeHint() int { return 1 }
+
+func (id TypeID) Marshal(w io.Writer, m int) (int, error) {
+	return surge.Marshal(w, id, m)
+}
+
+func (id *TypeID) Unmarshal(r io.Reader, m int) (int, error) {
+	return surge.Unmarshal(r, id, m)
+}
+
+type PlayerMessage struct {
+	from, to ID
+	row      Row
+}
+
+func (pm PlayerMessage) From() ID {
+	return pm.from
+}
+
+func (pm PlayerMessage) To() ID {
+	return pm.to
+}
+
+func (msg PlayerMessage) SizeHint() int {
+	return msg.from.SizeHint() + msg.to.SizeHint() + msg.row.SizeHint()
+}
+
+func (msg PlayerMessage) Marshal(w io.Writer, m int) (int, error) {
+	m, err := msg.from.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.to.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.row.Marshal(w, m)
+	return m, err
+}
+
+func (msg *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := msg.from.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.to.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.row.Unmarshal(r, m)
+	return m, err
+}
+
+type ConsensusMessage struct {
+	from, to ID
+	table    Table
+}
+
+func (cm ConsensusMessage) From() ID {
+	return cm.from
+}
+
+func (cm ConsensusMessage) To() ID {
+	return cm.to
+}
+
+func (msg ConsensusMessage) SizeHint() int {
+	return msg.from.SizeHint() + msg.to.SizeHint() + msg.table.SizeHint()
+}
+
+func (msg ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
+	m, err := msg.from.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.to.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.table.Marshal(w, m)
+	return m, err
+}
+
+func (msg *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := msg.from.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.to.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = msg.table.Unmarshal(r, m)
+	return m, err
+}
+
+const (
+	BRNG_MSG_TYPE_PLAYER    = 1
+	BRNG_MSG_TYPE_CONSENSUS = 2
+)
+
+type BrngMessage struct {
+	msgType TypeID
+	pmsg    *PlayerMessage
+	cmsg    *ConsensusMessage
+}
+
+func (bm BrngMessage) From() ID {
+	if bm.pmsg != nil {
+		return bm.pmsg.From()
+	} else if bm.cmsg != nil {
+		return bm.cmsg.From()
+	} else {
+		panic("BRNG Message not initialised")
+	}
+}
+
+func (bm BrngMessage) To() ID {
+	if bm.pmsg != nil {
+		return bm.pmsg.To()
+	} else if bm.cmsg != nil {
+		return bm.cmsg.To()
+	} else {
+		panic("BRNG Message not initialised")
+	}
+}
+
+func (bm BrngMessage) SizeHint() int {
+	return bm.msgType.SizeHint() + bm.pmsg.SizeHint() + bm.cmsg.SizeHint()
+}
+
+func (msg BrngMessage) Marshal(w io.Writer, m int) (int, error) {
+	m, err := msg.msgType.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+
+	if msg.pmsg != nil {
+		return msg.pmsg.Marshal(w, m)
+	} else if msg.cmsg != nil {
+		return msg.cmsg.Marshal(w, m)
+	} else {
+		return m, errors.New("error in marshalling msg")
+	}
+}
+
+func (msg *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := msg.msgType.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+
+	if msg.msgType == BRNG_MSG_TYPE_PLAYER {
+		return msg.pmsg.Unmarshal(r, m)
+	} else if msg.msgType == BRNG_MSG_TYPE_CONSENSUS {
+		return msg.cmsg.Unmarshal(r, m)
+	} else {
+		return m, errors.New("error in unmarshalling msg")
+	}
+}
+
+type PlayerMachine struct {
+	id     ID
+	row    Row
+	brnger BRNGer
+}
+
+func (pm PlayerMachine) ID() ID {
+	return pm.id
+}
+
+type ConsensusMachine struct {
+	id    ID
+	table Table
+}
+
+func (cm ConsensusMachine) ID() ID {
+	return cm.id
+}
+
+type BrngMachine struct {
+	machineType TypeID
+	n           int
+	pm          *PlayerMachine
+	cm          *ConsensusMachine
+}
+
+func (bm BrngMachine) ID() ID {
+	if bm.pm != nil {
+		return bm.pm.ID()
+	} else if bm.cm != nil {
+		return bm.cm.ID()
+	} else {
+		panic("BRNG Machine not initialised")
+	}
+}
+
+func (bm BrngMachine) InitialMessages() []Message {
+	messages := make([]Message, bm.n-1)
+	for i := 0; i < bm.n; i++ {
+		if ID(i) == bm.pm.id {
+			continue
+		}
+		messages = append(messages, &BrngMessage{
+			msgType: BRNG_MSG_TYPE_PLAYER,
+			pmsg: &PlayerMessage{
+				from: bm.pm.id,
+				to:   ID(i),
+				row:  bm.pm.row,
+			},
+			cmsg: nil,
+		})
+	}
+	return messages
+}
+
+func (bm *BrngMachine) Handle(msg Message) []Message {
+	switch msg := msg.(type) {
+	case *BrngMessage:
+		if msg.msgType == BRNG_MSG_TYPE_CONSENSUS {
+			if msg.cmsg != nil {
+				slice := btu.TableToSlice(msg.cmsg.table, bm.pm.id)
+				_, _, _ = bm.pm.brnger.TransitionSlice(slice)
+				return nil
+			} else if msg.msgType == BRNG_MSG_TYPE_PLAYER {
+				// TODO
+				// Handle player message (consensus machine)
+				return nil
+			} else {
+				panic("unexpected consensus message")
+			}
+		} else {
+			panic("unexpected message type")
+		}
+
+	default:
+		panic("unexpected message")
+	}
+}
