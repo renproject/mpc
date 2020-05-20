@@ -112,9 +112,11 @@ var _ = Describe("BRNG", func() {
 		})
 
 		Context("Waiting state", func() {
-			Specify("Start -> Do nothing", func() {
+			JustBeforeEach(func() {
 				TransitionToWaiting(&brnger, k, b)
+			})
 
+			Specify("Start -> Do nothing", func() {
 				brnger.TransitionStart(k, b)
 
 				Expect(brnger.State()).To(Equal(Waiting))
@@ -122,8 +124,6 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Valid Slice -> Ok", func() {
-				TransitionToWaiting(&brnger, k, b)
-
 				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 				brnger.TransitionSlice(validSlice)
 
@@ -131,8 +131,6 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Invalid Slice -> Error", func() {
-				TransitionToWaiting(&brnger, k, b)
-
 				badIndices := btu.RandomBadIndices(t, n, b)
 				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, badIndices, h, b)
 				brnger.TransitionSlice(invalidSlice)
@@ -141,8 +139,6 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Reset -> Init", func() {
-				TransitionToWaiting(&brnger, k, b)
-
 				brnger.Reset()
 
 				Expect(brnger.State()).To(Equal(Init))
@@ -150,17 +146,17 @@ var _ = Describe("BRNG", func() {
 		})
 
 		Context("Ok state", func() {
-			Specify("Start -> Do nothing", func() {
+			JustBeforeEach(func() {
 				TransitionToOk(&brnger, to, indices, k, b)
+			})
 
+			Specify("Start -> Do nothing", func() {
 				brnger.TransitionStart(k, b)
 
 				Expect(brnger.State()).To(Equal(Ok))
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				TransitionToOk(&brnger, to, indices, k, b)
-
 				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 				brnger.TransitionSlice(validSlice)
 
@@ -168,8 +164,6 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Reset -> Init", func() {
-				TransitionToOk(&brnger, to, indices, k, b)
-
 				brnger.Reset()
 
 				Expect(brnger.State()).To(Equal(Init))
@@ -177,17 +171,17 @@ var _ = Describe("BRNG", func() {
 		})
 
 		Context("Error state", func() {
-			Specify("Start -> Do nothing", func() {
+			JustBeforeEach(func() {
 				TransitionToError(&brnger, to, indices, k, t, b)
+			})
 
+			Specify("Start -> Do nothing", func() {
 				brnger.TransitionStart(k, b)
 
 				Expect(brnger.State()).To(Equal(Error))
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				TransitionToError(&brnger, to, indices, k, t, b)
-
 				validSlice, _, _ := btu.RandomValidSlice(to, indices, h, b)
 				brnger.TransitionSlice(validSlice)
 
@@ -195,8 +189,6 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Reset -> Init", func() {
-				TransitionToError(&brnger, to, indices, k, t, b)
-
 				brnger.Reset()
 
 				Expect(brnger.State()).To(Equal(Init))

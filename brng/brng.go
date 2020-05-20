@@ -147,9 +147,14 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 		return nil, nil, nil
 	}
 
+	if brnger.batchSize != slice.BatchSize() {
+		brnger.state = Error
+		return nil, nil, nil
+	}
+
 	// TODO: The `faults` don't account for invalid index errors
 	// Is it required to add them to the list of faults?
-	if !slice.HasValidForm(brnger.batchSize) {
+	if !slice.HasValidForm() {
 		brnger.state = Error
 		return nil, nil, nil
 	}

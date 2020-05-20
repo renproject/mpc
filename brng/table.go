@@ -172,6 +172,17 @@ func NewElement(
 	return Element{from, share, commitment}
 }
 
+// Share returns the share of the element
+func (e Element) Share() shamir.VerifiableShare {
+	return e.share
+}
+
+// Commitment returns the pedersen commitment for the
+// share held in the element
+func (e Element) Commitment() shamir.Commitment {
+	return e.commitment
+}
+
 // SizeHint implements the surge.SizeHinter interface.
 func (e Element) SizeHint() int {
 	return e.from.SizeHint() + e.share.SizeHint() + e.commitment.SizeHint()
@@ -270,11 +281,7 @@ func (slice Slice) BatchSize() int {
 	return len(slice)
 }
 
-func (slice Slice) HasValidForm(b int) bool {
-	if b != slice.BatchSize() {
-		return false
-	}
-
+func (slice Slice) HasValidForm() bool {
 	for _, c := range slice {
 		if !c.HasValidForm() {
 			return false

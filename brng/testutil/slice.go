@@ -13,17 +13,14 @@ import (
 
 func RandomValidElement(
 	to, from secp256k1.Secp256k1N, h curve.Point,
-) (brng.Element, shamir.VerifiableShare, shamir.Commitment) {
+) brng.Element {
 	indices := []secp256k1.Secp256k1N{to}
 	shares := make(shamir.VerifiableShares, 1)
 	commitment := shamir.NewCommitmentWithCapacity(1)
 	vssharer := shamir.NewVSSharer(indices, h)
 	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
 
-	var c shamir.Commitment
-	c.Set(commitment)
-
-	return brng.NewElement(from, shares[0], commitment), shares[0], c
+	return brng.NewElement(from, shares[0], commitment)
 }
 
 func RandomInvalidElement(to, from secp256k1.Secp256k1N, h curve.Point, perturbPart int) brng.Element {
@@ -56,14 +53,18 @@ func RandomValidCol(
 	to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h curve.Point,
 ) (brng.Col, shamir.VerifiableShare, shamir.Commitment) {
 	col := make(brng.Col, len(indices))
+	var sumShares shamir.VerifiableShare
+	var sumCommitments shamir.Commitment
 
-	element, sumShares, sumCommitments := RandomValidElement(to, indices[0], h)
-	col[0] = element
+	col[0] = RandomValidElement(to, indices[0], h)
+	sumShares = col[0].Share()
+	sumCommitments.Set(col[0].Commitment())
 
 	for i := 1; i < len(indices); i++ {
-		element, share, commitment := RandomValidElement(to, indices[i], h)
+		col[i] = RandomValidElement(to, indices[i], h)
 
-		col[i] = element
+		share := col[i].Share()
+		commitment := col[i].Commitment()
 		sumShares.Add(&sumShares, &share)
 		sumCommitments.Add(&sumCommitments, &commitment)
 	}
@@ -87,7 +88,7 @@ func RandomInvalidCol(
 			col[i] = element
 			faults = append(faults, element)
 		} else {
-			col[i], _, _ = RandomValidElement(to, from, h)
+			col[i] = RandomValidElement(to, from, h)
 		}
 	}
 	return col, faults
