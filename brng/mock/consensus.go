@@ -21,9 +21,6 @@ func (pc *PullConsensus) HandleRow(row brng.Row) bool {
 
 	for _, sharing := range row {
 		for _, index := range pc.honestIndices {
-			// Only check the share corresponding to the leader index; in
-			// practice the shares will be encrypted for each party and so the
-			// leader can only check their own indices.
 			share, err := sharing.ShareWithIndex(index)
 			if err != nil {
 				panic("row should contain all honest indices")
@@ -42,27 +39,4 @@ func (pc *PullConsensus) HandleRow(row brng.Row) bool {
 	}
 
 	return pc.done
-}
-
-func (pc PullConsensus) TableIsValid() bool {
-	for _, row := range pc.table {
-		for _, sharing := range row {
-			for _, index := range pc.honestIndices {
-				// Only check the share corresponding to the leader index; in
-				// practice the shares will be encrypted for each party and so the
-				// leader can only check their own indices.
-				share, err := sharing.ShareWithIndex(index)
-				if err != nil {
-					panic("row should contain all honest indices")
-				}
-
-				c := sharing.Commitment()
-				if !pc.checker.IsValid(&c, &share) {
-					return false
-				}
-			}
-		}
-	}
-
-	return true
 }
