@@ -483,18 +483,3 @@ func (t Table) HasValidDimensions() bool {
 
 	return true
 }
-
-// SizeHint implements the surge.SizeHinter interface
-func (table Table) SizeHint() int {
-	return surge.SizeHint(table)
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (table Table) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, table, m)
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (table *Table) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, table, m)
-}

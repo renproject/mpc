@@ -15,7 +15,6 @@ import (
 	"github.com/renproject/surge"
 
 	btu "github.com/renproject/mpc/brng/testutil"
-	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
 )
