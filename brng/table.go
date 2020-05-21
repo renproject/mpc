@@ -354,14 +354,23 @@ func (t Table) Slice(index secp256k1.Secp256k1N, fromIndices []secp256k1.Secp256
 		slice[i] = make(Col, t.Height())
 	}
 
+	// Get the integer index of the given index.
+	ind := -1
+	for i := range fromIndices {
+		if index.Eq(&fromIndices[i]) {
+			ind = i
+		}
+	}
+	if ind == -1 {
+		panic("index missing from fromIndices")
+	}
+
 	for i, row := range t {
 		for j, sharing := range row {
-			from := fromIndices[i]
-			share, err := sharing.ShareWithIndex(index)
-			if err != nil {
-				panic("index missing from table")
-			}
 			var commitment shamir.Commitment
+
+			from := fromIndices[i]
+			share := sharing.shares[ind]
 			commitment.Set(sharing.Commitment())
 
 			slice[j][i] = NewElement(from, share, commitment)

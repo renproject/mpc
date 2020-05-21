@@ -125,6 +125,8 @@ func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
 	return BRNGer{state, 0, sharer, checker}
 }
 
+// TransitionStart performs the state transition for the BRNGer state machine
+// upon receiving a start message.
 func (brnger *BRNGer) TransitionStart(k, b int) Row {
 	if brnger.state != Init {
 		return nil
@@ -142,6 +144,8 @@ func (brnger *BRNGer) TransitionStart(k, b int) Row {
 	return row
 }
 
+// TransitionSlice performs the state transition for the BRNger state machine
+// upon receiving a slice.
 func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []shamir.Commitment, []Element) {
 	if brnger.state != Waiting {
 		return nil, nil, nil

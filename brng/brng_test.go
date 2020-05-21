@@ -74,12 +74,11 @@ var _ = Describe("BRNG", func() {
 		k, t, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		badIndices := testutil.RandomBadIndices(t, len(indices), b)
-		slice, _ := testutil.RandomInvalidSlice(to, indices, badIndices, h, n, k, b, k)
+		slice, _ := testutil.RandomInvalidSlice(to, indices, h, n, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
-	JustBeforeEach(func() {
+	BeforeEach(func() {
 		brnger, t, b, to, indices = Setup()
 	})
 
@@ -132,8 +131,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Invalid Slice -> Error", func() {
-				badIndices := btu.RandomBadIndices(t, n, b)
-				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, badIndices, h, k, k, b, k-1)
+				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
 				brnger.TransitionSlice(invalidSlice)
 
 				Expect(brnger.State()).To(Equal(Error))
@@ -258,8 +256,7 @@ var _ = Describe("BRNG", func() {
 		It("should correctly identify faulty elements", func() {
 			brnger.TransitionStart(k, b)
 
-			badIndices := btu.RandomBadIndices(t, n, b)
-			invalidSlice, expectedFaults := btu.RandomInvalidSlice(to, indices, badIndices, h, k, k, b, k-1)
+			invalidSlice, expectedFaults := btu.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
 
 			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)
 
