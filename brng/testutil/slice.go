@@ -9,7 +9,6 @@ import (
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
-	mtu "github.com/renproject/mpc/testutil"
 )
 
 // RandomValidSharing creates a random and valid sharing for the indices with
@@ -211,44 +210,4 @@ func perturbShare(share *shamir.VerifiableShare) {
 	default:
 		panic("invalid case")
 	}
-}
-
-// ToSlice returns a slice of the table at index `to`
-func TableToSlice(table brng.Table, to mtu.ID) brng.Slice {
-	if len(table) == 0 {
-		return nil
-	}
-
-	imax := table[0].N() 			// from direction
-	jmax := table[0].N() 			// to direction
-	kmax := table.BatchSize() // batch direction
-
-	slice := make(brng.Slice, kmax)
-
-	for k := 0; k < kmax; k++ {
-		col := make(brng.Col, imax)
-
-		for i := 0; i < imax; i++ {
-
-			for j := 0; j < jmax; j++ {
-				if mtu.ID(j) != to {
-					continue
-				}
-
-				var commitment shamir.Commitment
-				sharing    := table[i][k]
-				shares     := sharing.Shares()
-				from       := secp256k1.NewSecp256k1N(uint64(i))
-				commitment.Set(sharing.Commitment())
-
-				element    := brng.NewElement(from, shares[j], commitment)
-
-				col = append(col, element)
-			}
-		}
-
-		slice[k] = col
-	}
-
-	return slice
 }

@@ -2,6 +2,7 @@ package brng_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	. "github.com/onsi/ginkgo"
@@ -14,6 +15,7 @@ import (
 	"github.com/renproject/surge"
 
 	btu "github.com/renproject/mpc/brng/testutil"
+	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
 )
@@ -335,7 +337,7 @@ func (msg *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
 
 type ConsensusMessage struct {
 	from, to ID
-	table    Table
+	slice    Slice
 }
 
 func (cm ConsensusMessage) From() ID {
@@ -347,7 +349,7 @@ func (cm ConsensusMessage) To() ID {
 }
 
 func (msg ConsensusMessage) SizeHint() int {
-	return msg.from.SizeHint() + msg.to.SizeHint() + msg.table.SizeHint()
+	return msg.from.SizeHint() + msg.to.SizeHint() + msg.slice.SizeHint()
 }
 
 func (msg ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
@@ -359,7 +361,7 @@ func (msg ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.table.Marshal(w, m)
+	m, err = msg.slice.Marshal(w, m)
 	return m, err
 }
 
@@ -372,13 +374,13 @@ func (msg *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.table.Unmarshal(r, m)
+	m, err = msg.slice.Unmarshal(r, m)
 	return m, err
 }
 
 const (
-	BRNG_MSG_TYPE_PLAYER    = 1
-	BRNG_MSG_TYPE_CONSENSUS = 2
+	BrngTypePlayer    = 1
+	BrngTypeConsensus = 2
 )
 
 type BrngMessage struct {
@@ -422,7 +424,7 @@ func (msg BrngMessage) Marshal(w io.Writer, m int) (int, error) {
 	} else if msg.cmsg != nil {
 		return msg.cmsg.Marshal(w, m)
 	} else {
-		return m, errors.New("error in marshalling msg")
+		return m, errors.New("uninitialised message")
 	}
 }
 
@@ -432,12 +434,12 @@ func (msg *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
 		return m, err
 	}
 
-	if msg.msgType == BRNG_MSG_TYPE_PLAYER {
+	if msg.msgType == BrngTypePlayer {
 		return msg.pmsg.Unmarshal(r, m)
-	} else if msg.msgType == BRNG_MSG_TYPE_CONSENSUS {
+	} else if msg.msgType == BrngTypeConsensus {
 		return msg.cmsg.Unmarshal(r, m)
 	} else {
-		return m, errors.New("error in unmarshalling msg")
+		return m, fmt.Errorf("invalid message type %v", msg.msgType)
 	}
 }
 
@@ -445,10 +447,21 @@ type PlayerMachine struct {
 	id     ID
 	row    Row
 	brnger BRNGer
+
+	shares      shamir.Shares
+	commitments []shamir.Commitment
 }
 
 func (pm PlayerMachine) ID() ID {
 	return pm.id
+}
+
+func (pm PlayerMachine) Shares() shamir.Shares {
+	return pm.shares
+}
+
+func (pm PlayerMachine) Commitments() []shamir.Commitment {
+	return pm.commitments
 }
 
 type ConsensusMachine struct {
@@ -478,44 +491,63 @@ func (bm BrngMachine) ID() ID {
 }
 
 func (bm BrngMachine) InitialMessages() []Message {
-	messages := make([]Message, bm.n-1)
-	for i := 0; i < bm.n; i++ {
-		if ID(i) == bm.pm.id {
-			continue
-		}
+	if bm.machineType == BrngTypePlayer {
+		messages := make([]Message, 1)
+
+		// ids: [0, 1, ..., n-1] are reserved for the `n` players
+		// id = n is for the consensus machine
+		consensusMachineId := ID(bm.n)
 		messages = append(messages, &BrngMessage{
-			msgType: BRNG_MSG_TYPE_PLAYER,
+			msgType: BrngTypePlayer,
 			pmsg: &PlayerMessage{
 				from: bm.pm.id,
-				to:   ID(i),
+				to:   consensusMachineId,
 				row:  bm.pm.row,
 			},
 			cmsg: nil,
 		})
+
+		return messages
 	}
-	return messages
+
+	return nil
 }
 
 func (bm *BrngMachine) Handle(msg Message) []Message {
-	switch msg := msg.(type) {
-	case *BrngMessage:
-		if msg.msgType == BRNG_MSG_TYPE_CONSENSUS {
-			if msg.cmsg != nil {
-				slice := btu.TableToSlice(msg.cmsg.table, bm.pm.id)
-				_, _, _ = bm.pm.brnger.TransitionSlice(slice)
-				return nil
-			} else if msg.msgType == BRNG_MSG_TYPE_PLAYER {
-				// TODO
-				// Handle player message (consensus machine)
-				return nil
-			} else {
-				panic("unexpected consensus message")
-			}
-		} else {
-			panic("unexpected message type")
-		}
+	bmsg := msg.(*BrngMessage)
 
-	default:
-		panic("unexpected message")
+	if bmsg.msgType == BrngTypeConsensus {
+		if bmsg.cmsg != nil {
+			_, _, _ = bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
+			return nil
+		} else if bmsg.msgType == BrngTypePlayer {
+			// TODO
+			// Handle player message (consensus machine)
+			return nil
+		} else {
+			panic("unexpected consensus message")
+		}
+	} else {
+		panic("unexpected message type")
 	}
+}
+
+func (bm BrngMachine) Shares() shamir.Shares {
+	if bm.machineType == BrngTypePlayer {
+		if bm.pm != nil {
+			return bm.pm.Shares()
+		}
+	}
+
+	return nil
+}
+
+func (bm BrngMachine) Commitments() []shamir.Commitment {
+	if bm.machineType == BrngTypePlayer {
+		if bm.pm != nil {
+			return bm.pm.Commitments()
+		}
+	}
+
+	return nil
 }
