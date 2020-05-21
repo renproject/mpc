@@ -448,15 +448,23 @@ type PlayerMachine struct {
 	row    Row
 	brnger BRNGer
 
-	shares      shamir.Shares
+	shares      shamir.VerifiableShares
 	commitments []shamir.Commitment
+}
+
+func (pm PlayerMachine) SetShares(shares shamir.VerifiableShares) {
+	pm.shares = shares
+}
+
+func (pm PlayerMachine) SetCommitments(commitments []shamir.Commitment) {
+	pm.commitments = commitments
 }
 
 func (pm PlayerMachine) ID() ID {
 	return pm.id
 }
 
-func (pm PlayerMachine) Shares() shamir.Shares {
+func (pm PlayerMachine) Shares() shamir.VerifiableShares {
 	return pm.shares
 }
 
@@ -518,7 +526,10 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 
 	if bmsg.msgType == BrngTypeConsensus {
 		if bmsg.cmsg != nil {
-			_, _, _ = bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
+			shares, commitments, _ := bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
+			bm.pm.SetShares(shares)
+			bm.pm.SetCommitments(commitments)
+
 			return nil
 		} else if bmsg.msgType == BrngTypePlayer {
 			// TODO
@@ -532,7 +543,7 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 	}
 }
 
-func (bm BrngMachine) Shares() shamir.Shares {
+func (bm BrngMachine) Shares() shamir.VerifiableShares {
 	if bm.machineType == BrngTypePlayer {
 		if bm.pm != nil {
 			return bm.pm.Shares()
