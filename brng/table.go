@@ -334,6 +334,19 @@ func (slice Slice) Faults(checker *shamir.VSSChecker) []Element {
 
 type Table []Row
 
+// SizeHint implements the surge.SizeHinter interface.
+func (t Table) SizeHint() int { return surge.SizeHint(t) }
+
+// Marshal implements the surge.Marshaler interface.
+func (t Table) Marshal(w io.Writer, m int) (int, error) {
+	return surge.Marshal(w, t, m)
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
+	return surge.Unmarshal(r, t, m)
+}
+
 func (t Table) Slice(index secp256k1.Secp256k1N, fromIndices []secp256k1.Secp256k1N) Slice {
 	// NOTE: Assumes that the table is well formed.
 	slice := make(Slice, t.BatchSize())
