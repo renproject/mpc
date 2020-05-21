@@ -12,6 +12,8 @@ import (
 	"github.com/renproject/surge"
 )
 
+// PullConsensus represents an ideal trusted party for achieving consensus on a
+// table of shares to be used during the BRNG protocol.
 type PullConsensus struct {
 	done         bool
 	honestSubset []secp256k1.Secp256k1N
@@ -79,6 +81,10 @@ func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, nil
 }
 
+// NewPullConsensus constructs a new mock consensus object. The honest indices
+// represent the indices of the honest players and the adversary count
+// represents the maximum number of adversaries that there will be. `h`
+// represents the Pedersen commitment parameter.
 func NewPullConsensus(honestIndices []secp256k1.Secp256k1N, advCount int, h curve.Point) PullConsensus {
 	var table brng.Table
 
