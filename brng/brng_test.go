@@ -302,6 +302,13 @@ var _ = Describe("BRNG", func() {
 		network := NewNetwork(machines, shuffleMsgs)
 		network.SetCaptureHist(true)
 
+		// TODO: does not yet verify if the table was constructed correctly
+		// TODO: does not yet verify if the shares/commitments of all honest
+		//       parties, the subset that was agreed upon for consensus, were
+		//       constructed correctly
+		//
+		// playermachine.Shares() and playermachine.Commitments() is available
+		// for all machines in the honest subset
 		Specify("correct execution of BRNG", func() {
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
@@ -701,7 +708,7 @@ func (bm BrngMachine) InitialMessages() []Message {
 		// id = n+1 is for the consensus machine
 		consensusMachineId := ID(bm.n + 1)
 		messages = append(messages, &BrngMessage{
-			msgType: BrngTypePlayer,
+			msgType: TypeID(BrngTypePlayer),
 			pmsg: &PlayerMessage{
 				from: bm.pm.id,
 				to:   consensusMachineId,
@@ -720,7 +727,7 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 	bmsg := msg.(*BrngMessage)
 
 	switch bmsg.msgType {
-	case BrngTypeConsensus:
+	case TypeID(BrngTypeConsensus):
 		if bmsg.cmsg != nil {
 			shares, commitments, _ := bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
 			bm.pm.SetShares(shares)
@@ -730,10 +737,26 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 			panic("unexpected consensus message")
 		}
 
-	case BrngTypePlayer:
+	case TypeID(BrngTypePlayer):
 		if bmsg.pmsg != nil {
-			bm.cm.engine.HandleRow(bmsg.pmsg.Row())
-			return nil
+			// if consensus has not yet been reached
+			// handle this row
+			// if consensus is reached after handling this row
+			// construct the consensus messages for all honest parties
+			//
+			// if consensus has already been reached
+			// then those messages were already constructed and sent
+			// so do nothing in this case
+			if bm.cm.engine.Done() != true {
+				done := bm.cm.engine.HandleRow(bmsg.pmsg.Row())
+				if done == true {
+					return formConsensusMessages(bm)
+				} else {
+					return nil
+				}
+			} else {
+				return nil
+			}
 		} else {
 			panic("unexpected player message")
 		}
@@ -741,6 +764,30 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 	default:
 		panic("unexpected message type")
 	}
+}
+
+func formConsensusMessages(bm *BrngMachine) []Message {
+	var messages []Message
+
+	for i := 1; uint32(i) <= bm.n; i++ {
+		index := secp256k1.NewSecp256k1N(uint64(i))
+
+		if bm.cm.engine.IsHonest(index) == true {
+			message := BrngMessage{
+				msgType: TypeID(BrngTypeConsensus),
+				cmsg: &ConsensusMessage{
+					from:  bm.cm.id,
+					to:    ID(i),
+					slice: bm.cm.engine.TakeSlice(index),
+				},
+				pmsg: nil,
+			}
+
+			messages = append(messages, &message)
+		}
+	}
+
+	return messages
 }
 
 func (bm BrngMachine) Shares() shamir.VerifiableShares {

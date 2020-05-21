@@ -120,6 +120,27 @@ func (pc PullConsensus) Table() brng.Table {
 	return pc.table
 }
 
+// Done returns if the consensus engine has already reached consensus or not yet
+func (pc PullConsensus) Done() bool {
+	return pc.done
+}
+
+func (pc PullConsensus) HonestSubset() []secp256k1.Secp256k1N {
+	return pc.honestSubset
+}
+
+// IsHonest returns if the player with `index` was a part of the honest nodes
+// subset that were agreed upon during the consensus round
+func (pc PullConsensus) IsHonest(index secp256k1.Secp256k1N) bool {
+	for _, honestIndex := range pc.honestSubset {
+		if index.Eq(&honestIndex) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // TakeSlice returns the appropriate slice of the assembled table, at
 // index
 func (pc PullConsensus) TakeSlice(index secp256k1.Secp256k1N) brng.Slice {
