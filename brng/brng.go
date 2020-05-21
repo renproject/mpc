@@ -42,17 +42,17 @@ func (s State) SizeHint() int { return 1 }
 
 // Marshal implements the surge.Marshaler interface.
 func (s State) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, s, m)
+	return surge.Marshal(w, uint8(s), m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, s, m)
+	return surge.Unmarshal(r, uint8(*s), m)
 }
 
 type BRNGer struct {
 	state     State
-	batchSize int
+	batchSize uint32
 
 	sharer  shamir.VSSharer
 	checker shamir.VSSChecker
@@ -60,12 +60,18 @@ type BRNGer struct {
 
 // SizeHint implements the surge.SizeHinter interface.
 func (brnger BRNGer) SizeHint() int {
-	return brnger.state.SizeHint() + brnger.sharer.SizeHint() + brnger.checker.SizeHint()
+	return brnger.state.SizeHint() + 4 +
+		brnger.sharer.SizeHint() +
+		brnger.checker.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
 func (brnger BRNGer) Marshal(w io.Writer, m int) (int, error) {
 	m, err := brnger.state.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling state: %v", err)
+	}
+	m, err = surge.Marshal(w, uint32(brnger.batchSize), m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling state: %v", err)
 	}
@@ -85,6 +91,10 @@ func (brnger *BRNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err := brnger.state.Unmarshal(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling state: %v", err)
+	}
+	m, err = surge.Unmarshal(r, uint32(brnger.batchSize), m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling sharer: %v", err)
 	}
 	m, err = brnger.sharer.Unmarshal(r, m)
 	if err != nil {
@@ -109,7 +119,7 @@ func (brnger *BRNGer) N() int {
 }
 
 // BatchSize returns the expected batch size of the state machine.
-func (brnger *BRNGer) BatchSize() int {
+func (brnger *BRNGer) BatchSize() uint32 {
 	return brnger.batchSize
 }
 
@@ -139,7 +149,7 @@ func (brnger *BRNGer) TransitionStart(k, b int) Row {
 	}
 
 	brnger.state = Waiting
-	brnger.batchSize = b
+	brnger.batchSize = uint32(b)
 
 	return row
 }
@@ -151,7 +161,7 @@ func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []s
 		return nil, nil, nil
 	}
 
-	if brnger.batchSize != slice.BatchSize() {
+	if brnger.batchSize != uint32(slice.BatchSize()) {
 		brnger.state = Error
 		return nil, nil, nil
 	}

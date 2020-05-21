@@ -134,16 +134,18 @@ func (sharing Sharing) N() int { return len(sharing.shares) }
 type Row []Sharing
 
 // SizeHint implements the surge.SizeHinter interface.
-func (row Row) SizeHint() int { return surge.SizeHint(row) }
+func (row Row) SizeHint() int {
+	return surge.SizeHint([]Sharing(row))
+}
 
 // Marshal implements the surge.Marshaler interface.
 func (row Row) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, row, m)
+	return surge.Marshal(w, []Sharing(row), m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, row, m)
+	return surge.Unmarshal(r, []Sharing(*row), m)
 }
 
 // MakeRow allocates and returns a new empty row.
@@ -259,16 +261,16 @@ func (e *Element) Set(other Element) {
 type Col []Element
 
 // SizeHint implements the surge.SizeHinter interface.
-func (col Col) SizeHint() int { return surge.SizeHint(col) }
+func (col Col) SizeHint() int { return surge.SizeHint([]Element(col)) }
 
 // Marshal implements the surge.Marshaler interface.
 func (col Col) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, col, m)
+	return surge.Marshal(w, []Element(col), m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, col, m)
+	return surge.Unmarshal(r, []Element(*col), m)
 }
 
 // HasValidForm return true if the given Col has the correct form, i.e. when it
@@ -319,16 +321,16 @@ func (col Col) Sum() (shamir.VerifiableShare, shamir.Commitment) {
 type Slice []Col
 
 // SizeHint implements the surge.SizeHinter interface.
-func (slice Slice) SizeHint() int { return surge.SizeHint(slice) }
+func (slice Slice) SizeHint() int { return surge.SizeHint([]Col(slice)) }
 
 // Marshal implements the surge.Marshaler interface.
 func (slice Slice) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, slice, m)
+	return surge.Marshal(w, []Col(slice), m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (slice *Slice) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, slice, m)
+	return surge.Unmarshal(r, []Col(*slice), m)
 }
 
 // BatchSize returns the number of Cols in the slice, which is equal to the
@@ -393,16 +395,16 @@ func (slice Slice) Faults(checker *shamir.VSSChecker) []Element {
 type Table []Row
 
 // SizeHint implements the surge.SizeHinter interface.
-func (t Table) SizeHint() int { return surge.SizeHint(t) }
+func (t Table) SizeHint() int { return surge.SizeHint([]Row(t)) }
 
 // Marshal implements the surge.Marshaler interface.
 func (t Table) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, t, m)
+	return surge.Marshal(w, []Row(t), m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, t, m)
+	return surge.Unmarshal(r, []Row(*t), m)
 }
 
 // Slice returns the Slice for the given index in the table.

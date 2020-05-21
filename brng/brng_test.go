@@ -14,6 +14,7 @@ import (
 	"github.com/renproject/shamir"
 	"github.com/renproject/surge"
 
+	mock "github.com/renproject/mpc/brng/mock"
 	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
@@ -94,12 +95,12 @@ var _ = Describe("BRNG", func() {
 		// depending on the message supplied to it
 		Context("Init state", func() {
 			Specify("Start -> Waiting", func() {
-				Expect(brnger.BatchSize()).To(Equal(0))
+				Expect(brnger.BatchSize()).To(Equal(uint32(0)))
 
 				brnger.TransitionStart(k, b)
 
 				Expect(brnger.State()).To(Equal(Waiting))
-				Expect(brnger.BatchSize()).To(Equal(b))
+				Expect(brnger.BatchSize()).To(Equal(uint32(b)))
 			})
 
 			Specify("Slice -> Do nothing", func() {
@@ -126,7 +127,7 @@ var _ = Describe("BRNG", func() {
 				brnger.TransitionStart(k, b)
 
 				Expect(brnger.State()).To(Equal(Waiting))
-				Expect(brnger.BatchSize()).To(Equal(b))
+				Expect(brnger.BatchSize()).To(Equal(uint32(b)))
 			})
 
 			Specify("Valid Slice -> Ok", func() {
@@ -221,7 +222,7 @@ var _ = Describe("BRNG", func() {
 			row := brnger.TransitionStart(k, b)
 
 			Expect(row.BatchSize()).To(Equal(b))
-			Expect(brnger.BatchSize()).To(Equal(b))
+			Expect(brnger.BatchSize()).To(Equal(uint32(b)))
 		})
 	})
 
@@ -276,19 +277,48 @@ var _ = Describe("BRNG", func() {
 	})
 
 	Context("Network (5)", func() {
+		n = 20
+		k = 7
+		b = 5
+		t = k - 1
+
+		indices = stu.SequentialIndices(n)
+
+		ids := make([]ID, 0, len(indices)+1)
+		machines := make([]Machine, 0, len(indices)+1)
+		for i := range indices {
+			id := ID(i + 1)
+			machine := newMachine(BrngTypePlayer, id, indices, h, k, b)
+
+			ids = append(ids, id)
+			machines = append(machines, &machine)
+		}
+		cmachine := newMachine(BrngTypeConsensus, ID(len(indices)+1), indices, h, k, b)
+		ids = append(ids, ID(len(indices)))
+		machines = append(machines, &cmachine)
+
+		shuffleMsgs, _ := MessageShufflerDropper(ids, 0)
+
+		network := NewNetwork(machines, shuffleMsgs)
+		network.SetCaptureHist(true)
+
+		Specify("correct execution of BRNG", func() {
+			err := network.Run()
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 })
 
-type TypeID byte
+type TypeID uint8
 
 func (id TypeID) SizeHint() int { return 1 }
 
 func (id TypeID) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, id, m)
+	return surge.Marshal(w, uint8(id), m)
 }
 
 func (id *TypeID) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, id, m)
+	return surge.Unmarshal(r, uint8(*id), m)
 }
 
 type PlayerMessage struct {
@@ -302,6 +332,10 @@ func (pm PlayerMessage) From() ID {
 
 func (pm PlayerMessage) To() ID {
 	return pm.to
+}
+
+func (pm PlayerMessage) Row() Row {
+	return pm.row
 }
 
 func (msg PlayerMessage) SizeHint() int {
@@ -409,7 +443,16 @@ func (bm BrngMessage) To() ID {
 }
 
 func (bm BrngMessage) SizeHint() int {
-	return bm.msgType.SizeHint() + bm.pmsg.SizeHint() + bm.cmsg.SizeHint()
+	switch bm.msgType {
+	case TypeID(BrngTypePlayer):
+		return bm.msgType.SizeHint() + bm.pmsg.SizeHint()
+
+	case TypeID(BrngTypeConsensus):
+		return bm.msgType.SizeHint() + bm.cmsg.SizeHint()
+
+	default:
+		panic("uninitialised message")
+	}
 }
 
 func (msg BrngMessage) Marshal(w io.Writer, m int) (int, error) {
@@ -433,9 +476,9 @@ func (msg *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
 		return m, err
 	}
 
-	if msg.msgType == BrngTypePlayer {
+	if msg.msgType == TypeID(BrngTypePlayer) {
 		return msg.pmsg.Unmarshal(r, m)
-	} else if msg.msgType == BrngTypeConsensus {
+	} else if msg.msgType == TypeID(BrngTypeConsensus) {
 		return msg.cmsg.Unmarshal(r, m)
 	} else {
 		return m, fmt.Errorf("invalid message type %v", msg.msgType)
@@ -449,6 +492,38 @@ type PlayerMachine struct {
 
 	shares      shamir.VerifiableShares
 	commitments []shamir.Commitment
+}
+
+func (pm PlayerMachine) SizeHint() int {
+	return pm.id.SizeHint() +
+		pm.row.SizeHint() +
+		pm.brnger.SizeHint()
+}
+
+func (pm PlayerMachine) Marshal(w io.Writer, m int) (int, error) {
+	m, err := pm.id.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = pm.row.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = pm.brnger.Marshal(w, m)
+	return m, err
+}
+
+func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := pm.id.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = pm.row.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = pm.brnger.Unmarshal(r, m)
+	return m, err
 }
 
 func (pm PlayerMachine) SetShares(shares shamir.VerifiableShares) {
@@ -472,19 +547,140 @@ func (pm PlayerMachine) Commitments() []shamir.Commitment {
 }
 
 type ConsensusMachine struct {
-	id    ID
-	table Table
+	id     ID
+	engine mock.PullConsensus
 }
 
 func (cm ConsensusMachine) ID() ID {
 	return cm.id
 }
 
+func (cm ConsensusMachine) SizeHint() int {
+	return cm.id.SizeHint() + cm.engine.SizeHint()
+}
+
+func (cm ConsensusMachine) Marshal(w io.Writer, m int) (int, error) {
+	m, err := cm.id.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = cm.engine.Marshal(w, m)
+	return m, err
+}
+
+func (cm *ConsensusMachine) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := cm.id.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = cm.engine.Unmarshal(r, m)
+	return m, err
+}
+
 type BrngMachine struct {
 	machineType TypeID
-	n           int
+	n           uint32
 	pm          *PlayerMachine
 	cm          *ConsensusMachine
+}
+
+func newMachine(
+	machineType int,
+	id ID,
+	indices []secp256k1.Secp256k1N,
+	h curve.Point,
+	k, b int,
+) BrngMachine {
+	if machineType == BrngTypePlayer {
+		brnger := New(indices, h)
+		row := brnger.TransitionStart(k, b)
+
+		pmachine := PlayerMachine{
+			id:          id,
+			row:         row,
+			brnger:      brnger,
+			shares:      nil,
+			commitments: nil,
+		}
+
+		return BrngMachine{
+			machineType: TypeID(uint8(machineType)),
+			n:           uint32(len(indices)),
+			pm:          &pmachine,
+			cm:          nil,
+		}
+	}
+
+	if machineType == BrngTypeConsensus {
+		engine := mock.NewPullConsensus(indices, k-1, h)
+
+		cmachine := ConsensusMachine{
+			id:     ID(id),
+			engine: engine,
+		}
+
+		return BrngMachine{
+			machineType: TypeID(uint8(machineType)),
+			n:           uint32(len(indices)),
+			pm:          nil,
+			cm:          &cmachine,
+		}
+	}
+
+	panic("unexpected machine type")
+}
+
+func (bm BrngMachine) SizeHint() int {
+	switch bm.machineType {
+	case TypeID(BrngTypePlayer):
+		return bm.machineType.SizeHint() + 4 + bm.pm.SizeHint()
+
+	case TypeID(BrngTypeConsensus):
+		return bm.machineType.SizeHint() + 4 + bm.cm.SizeHint()
+
+	default:
+		panic("uninitialised machine")
+	}
+}
+
+func (bm BrngMachine) Marshal(w io.Writer, m int) (int, error) {
+	m, err := bm.machineType.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+
+	m, err = surge.Marshal(w, uint32(bm.n), m)
+	if err != nil {
+		return m, err
+	}
+
+	if bm.pm != nil {
+		return bm.pm.Marshal(w, m)
+	} else if bm.cm != nil {
+		return bm.cm.Marshal(w, m)
+	} else {
+		return m, errors.New("uninitialised machine")
+	}
+}
+
+func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := bm.machineType.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+
+	m, err = surge.Unmarshal(r, uint32(bm.n), m)
+	if err != nil {
+		return m, err
+	}
+
+	if bm.machineType == TypeID(BrngTypePlayer) {
+		return bm.pm.Unmarshal(r, m)
+	} else if bm.machineType == TypeID(BrngTypeConsensus) {
+		return bm.cm.Unmarshal(r, m)
+	} else {
+		return m, fmt.Errorf("invalid message type %v", bm.machineType)
+	}
 }
 
 func (bm BrngMachine) ID() ID {
@@ -499,11 +695,11 @@ func (bm BrngMachine) ID() ID {
 
 func (bm BrngMachine) InitialMessages() []Message {
 	if bm.machineType == BrngTypePlayer {
-		messages := make([]Message, 1)
+		messages := make([]Message, 0, 1)
 
-		// ids: [0, 1, ..., n-1] are reserved for the `n` players
-		// id = n is for the consensus machine
-		consensusMachineId := ID(bm.n)
+		// ids: [1, 2, ..., n-1, n] are reserved for the `n` players
+		// id = n+1 is for the consensus machine
+		consensusMachineId := ID(bm.n + 1)
 		messages = append(messages, &BrngMessage{
 			msgType: BrngTypePlayer,
 			pmsg: &PlayerMessage{
@@ -523,21 +719,26 @@ func (bm BrngMachine) InitialMessages() []Message {
 func (bm *BrngMachine) Handle(msg Message) []Message {
 	bmsg := msg.(*BrngMessage)
 
-	if bmsg.msgType == BrngTypeConsensus {
+	switch bmsg.msgType {
+	case BrngTypeConsensus:
 		if bmsg.cmsg != nil {
 			shares, commitments, _ := bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
 			bm.pm.SetShares(shares)
 			bm.pm.SetCommitments(commitments)
-
-			return nil
-		} else if bmsg.msgType == BrngTypePlayer {
-			// TODO
-			// Handle player message (consensus machine)
 			return nil
 		} else {
 			panic("unexpected consensus message")
 		}
-	} else {
+
+	case BrngTypePlayer:
+		if bmsg.pmsg != nil {
+			bm.cm.engine.HandleRow(bmsg.pmsg.Row())
+			return nil
+		} else {
+			panic("unexpected player message")
+		}
+
+	default:
 		panic("unexpected message type")
 	}
 }
