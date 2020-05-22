@@ -87,22 +87,30 @@ func RandomValidTable(indices []secp256k1.Secp256k1N, h curve.Point, k, b, t int
 	return table
 }
 
+type SlicePos struct {
+	batch, player int
+}
+
+func NewSlicePos(batch, player int) SlicePos {
+	return SlicePos{batch, player}
+}
+
 // RandomInvalidTable constructs a random table with faults in the slice
 // corresponding to player indices[badIndex].
 func RandomInvalidTable(
 	indices []secp256k1.Secp256k1N,
 	h curve.Point,
 	n, k, b, t, badIndex int,
-) (brng.Table, map[int][]int) {
+) (brng.Table, []SlicePos) {
 	table := make(brng.Table, n)
-	badIndices := randomIndices(t, 1)
-	faultLocations := make(map[int][]int)
+	badIndices := randomIndices(t, rand.Intn(t)+1)
+	faultLocations := make([][]int, len(badIndices))
 
 	j := 0
 	for i := range table {
 		if j < len(badIndices) && i == badIndices[j] {
-			badBatches := randomIndices(b, 1)
-			faultLocations[badIndices[j]] = badBatches
+			badBatches := randomIndices(b, rand.Intn(b)+1)
+			faultLocations[j] = badBatches
 			table[i] = RandomInvalidRow(indices, k, b, h, badIndex, badBatches)
 			j++
 		} else {
@@ -110,7 +118,20 @@ func RandomInvalidTable(
 		}
 	}
 
-	return table, faultLocations
+	var locTranspose []SlicePos
+	for i := 0; i < b; i++ {
+		for j, batch := range faultLocations {
+			for _, b := range batch {
+				if b > i {
+					break
+				} else if b == i {
+					locTranspose = append(locTranspose, NewSlicePos(b, badIndices[j]))
+				}
+			}
+		}
+	}
+
+	return table, locTranspose
 }
 
 // RandomValidSlice constructs a random valid slice for the player with index
@@ -150,12 +171,10 @@ func RandomInvalidSlice(
 
 	var faults []brng.Element
 
-	for player, batches := range faultLocations {
-		for _, batch := range batches {
-			var fault brng.Element
-			fault.Set(slice[batch][player])
-			faults = append(faults, fault)
-		}
+	for _, loc := range faultLocations {
+		var fault brng.Element
+		fault.Set(slice[loc.batch][loc.player])
+		faults = append(faults, fault)
 	}
 
 	return slice, faults

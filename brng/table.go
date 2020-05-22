@@ -273,28 +273,6 @@ func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
 	return surge.Unmarshal(r, (*[]Element)(col), m)
 }
 
-// HasValidForm return true if the given Col has the correct form, i.e. when it
-// has at least one Element, and all shares for the Elements have the same
-// index.
-func (col Col) HasValidForm() bool {
-	if len(col) == 0 {
-		return false
-	}
-
-	share := col[0].share.Share()
-	for i := 1; i < len(col); i++ {
-		// FIXME: Create and use an IndexEq method on the
-		// shamir.VerifiableShare type.
-		s := col[i].share.Share()
-		index := s.Index()
-		if !share.IndexEq(&index) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // Sum returns the share and Pedersen commitment that corresponds to the sum of
 // the verifiable shares of the Elements in the Col.
 func (col Col) Sum() (shamir.VerifiableShare, shamir.Commitment) {
@@ -345,28 +323,14 @@ func (slice Slice) HasValidForm() bool {
 		return false
 	}
 
-	c0 := slice[0]
-	if !c0.HasValidForm() {
-		return false
-	}
-	// We can safely get the 0th element of c0 now beacuse HasValidForm
-	// guarantees that there is at least one element.
-	vshare := c0[0].Share()
-	share := vshare.Share()
-	index := share.Index()
+	colLen := len(slice[0])
 
 	for i := 1; i < len(slice); i++ {
-		if !slice[i].HasValidForm() {
-			return false
-		}
-
-		// Check that the index is the same as for the first Col.
-		vshare := slice[i][0].Share()
-		share := vshare.Share()
-		if !share.IndexEq(&index) {
+		if len(slice[i]) != colLen {
 			return false
 		}
 	}
+
 	return true
 }
 

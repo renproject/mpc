@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -35,6 +37,7 @@ import (
 //	correctly the output commitments. In the presence of dishonest nodes, any
 //	node that sends an incorrect share/commitment should be identified.
 var _ = Describe("BRNG", func() {
+	rand.Seed(int64(time.Now().Nanosecond()))
 
 	// Pedersem paramter.
 	h := curve.Random()
@@ -284,21 +287,22 @@ var _ = Describe("BRNG", func() {
 
 		indices = stu.SequentialIndices(n)
 
-		ids := make([]ID, 0, len(indices)+1)
-		machines := make([]Machine, 0, len(indices)+1)
-		for i := range indices {
-			id := ID(i + 1)
-			machine := newMachine(BrngTypePlayer, id, indices, nil, h, k, b)
+		playerIDs := make([]ID, len(indices))
+		for i := range playerIDs {
+			playerIDs[i] = ID(i + 1)
+		}
+		consID := ID(len(indices) + 1)
 
-			ids = append(ids, id)
+		machines := make([]Machine, 0, len(indices)+1)
+		for _, id := range playerIDs {
+			machine := newMachine(BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
 			machines = append(machines, &machine)
 		}
 		// FIXME: Correctly construct the honest indices.
-		cmachine := newMachine(BrngTypeConsensus, ID(len(indices)+1), indices, indices, h, k, b)
-		ids = append(ids, ID(len(indices)))
+		cmachine := newMachine(BrngTypeConsensus, consID, consID, playerIDs, indices, indices, h, k, b)
 		machines = append(machines, &cmachine)
 
-		shuffleMsgs, _ := MessageShufflerDropper(ids, 0)
+		shuffleMsgs, _ := MessageShufflerDropper(playerIDs, 0)
 
 		network := NewNetwork(machines, shuffleMsgs)
 		network.SetCaptureHist(true)
@@ -494,9 +498,9 @@ func (bm *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 type PlayerMachine struct {
-	id     ID
-	row    Row
-	brnger BRNGer
+	id, consID ID
+	row        Row
+	brnger     BRNGer
 
 	shares      shamir.VerifiableShares
 	commitments []shamir.Commitment
@@ -504,12 +508,17 @@ type PlayerMachine struct {
 
 func (pm PlayerMachine) SizeHint() int {
 	return pm.id.SizeHint() +
+		pm.consID.SizeHint() +
 		pm.row.SizeHint() +
 		pm.brnger.SizeHint()
 }
 
 func (pm PlayerMachine) Marshal(w io.Writer, m int) (int, error) {
 	m, err := pm.id.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = pm.consID.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
@@ -523,6 +532,10 @@ func (pm PlayerMachine) Marshal(w io.Writer, m int) (int, error) {
 
 func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err := pm.id.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = pm.consID.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
@@ -555,8 +568,10 @@ func (pm PlayerMachine) Commitments() []shamir.Commitment {
 }
 
 type ConsensusMachine struct {
-	id     ID
-	engine mock.PullConsensus
+	id        ID
+	playerIDs []ID
+	indices   []secp256k1.Secp256k1N
+	engine    mock.PullConsensus
 }
 
 func (cm ConsensusMachine) ID() ID {
@@ -564,11 +579,22 @@ func (cm ConsensusMachine) ID() ID {
 }
 
 func (cm ConsensusMachine) SizeHint() int {
-	return cm.id.SizeHint() + cm.engine.SizeHint()
+	return cm.id.SizeHint() +
+		surge.SizeHint(cm.playerIDs) +
+		surge.SizeHint(cm.indices) +
+		cm.engine.SizeHint()
 }
 
 func (cm ConsensusMachine) Marshal(w io.Writer, m int) (int, error) {
 	m, err := cm.id.Marshal(w, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = surge.Marshal(w, cm.playerIDs, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = surge.Marshal(w, cm.indices, m)
 	if err != nil {
 		return m, err
 	}
@@ -578,6 +604,14 @@ func (cm ConsensusMachine) Marshal(w io.Writer, m int) (int, error) {
 
 func (cm *ConsensusMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err := cm.id.Unmarshal(r, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = surge.Unmarshal(r, &cm.playerIDs, m)
+	if err != nil {
+		return m, err
+	}
+	m, err = surge.Unmarshal(r, &cm.indices, m)
 	if err != nil {
 		return m, err
 	}
@@ -593,8 +627,9 @@ type BrngMachine struct {
 }
 
 func newMachine(
-	machineType int,
-	id ID,
+	machineType TypeID,
+	id, consID ID,
+	playerIDs []ID,
 	indices, honestIndices []secp256k1.Secp256k1N,
 	h curve.Point,
 	k, b int,
@@ -605,6 +640,7 @@ func newMachine(
 
 		pmachine := PlayerMachine{
 			id:          id,
+			consID:      consID,
 			row:         row,
 			brnger:      brnger,
 			shares:      nil,
@@ -623,8 +659,10 @@ func newMachine(
 		engine := mock.NewPullConsensus(indices, honestIndices, k-1, h)
 
 		cmachine := ConsensusMachine{
-			id:     ID(id),
-			engine: engine,
+			id:        consID,
+			playerIDs: playerIDs,
+			indices:   indices,
+			engine:    engine,
 		}
 
 		return BrngMachine{
@@ -703,20 +741,17 @@ func (bm BrngMachine) ID() ID {
 
 func (bm BrngMachine) InitialMessages() []Message {
 	if bm.machineType == BrngTypePlayer {
-		messages := make([]Message, 0, 1)
-
-		// ids: [1, 2, ..., n-1, n] are reserved for the `n` players
-		// id = n+1 is for the consensus machine
-		consensusMachineID := ID(bm.n + 1)
-		messages = append(messages, &BrngMessage{
-			msgType: TypeID(BrngTypePlayer),
-			pmsg: &PlayerMessage{
-				from: bm.pm.id,
-				to:   consensusMachineID,
-				row:  bm.pm.row,
+		messages := []Message{
+			&BrngMessage{
+				msgType: TypeID(BrngTypePlayer),
+				pmsg: &PlayerMessage{
+					from: bm.pm.id,
+					to:   bm.pm.consID,
+					row:  bm.pm.row,
+				},
+				cmsg: nil,
 			},
-			cmsg: nil,
-		})
+		}
 
 		return messages
 	}
@@ -766,14 +801,14 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 func formConsensusMessages(bm *BrngMachine) []Message {
 	var messages []Message
 
-	for i := 1; uint32(i) <= bm.n; i++ {
-		index := secp256k1.NewSecp256k1N(uint64(i))
+	for i, id := range bm.cm.playerIDs {
+		index := bm.cm.indices[i]
 
 		message := BrngMessage{
 			msgType: TypeID(BrngTypeConsensus),
 			cmsg: &ConsensusMessage{
 				from:  bm.cm.id,
-				to:    ID(i),
+				to:    id,
 				slice: bm.cm.engine.TakeSlice(index),
 			},
 			pmsg: nil,
