@@ -307,16 +307,36 @@ var _ = Describe("BRNG", func() {
 		network := NewNetwork(machines, shuffleMsgs)
 		network.SetCaptureHist(true)
 
-		// TODO: does not yet verify if the table was constructed correctly
-		// TODO: does not yet verify if the shares/commitments of all honest
-		//       parties, the subset that was agreed upon for consensus, were
-		//       constructed correctly
-		//
-		// playermachine.Shares() and playermachine.Commitments() is available
-		// for all machines in the honest subset
 		Specify("correct execution of BRNG", func() {
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
+
+			for j := 0; j < b; j++ {
+				for i := 1; i < len(machines)-1; i++ {
+					prevMachine := machines[i-1].(*BrngMachine)
+					thisMachine := machines[i].(*BrngMachine)
+
+					prevComm := prevMachine.Commitments()[j]
+					thisMachine.Commitments()[j].Eq(&prevComm)
+				}
+			}
+
+			reconstructor := shamir.NewReconstructor(indices)
+			vsschecker    := shamir.NewVSSChecker(h)
+			for j := 0; j < b; j++ {
+				shares := make(shamir.VerifiableShares, 0, b)
+				for i := 0; i < len(machines)-1; i++ {
+					pmachine := machines[i].(*BrngMachine)
+					machineShares := pmachine.Shares()
+					machineCommitments := pmachine.Commitments()
+
+					Expect(vsschecker.IsValid(&machineCommitments[j], &machineShares[j])).To(BeTrue())
+
+					shares = append(shares, machineShares[j])
+				}
+
+				Expect(stu.VsharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+			}
 		})
 	})
 })
@@ -547,11 +567,11 @@ func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, err
 }
 
-func (pm PlayerMachine) SetShares(shares shamir.VerifiableShares) {
+func (pm *PlayerMachine) SetShares(shares shamir.VerifiableShares) {
 	pm.shares = shares
 }
 
-func (pm PlayerMachine) SetCommitments(commitments []shamir.Commitment) {
+func (pm *PlayerMachine) SetCommitments(commitments []shamir.Commitment) {
 	pm.commitments = commitments
 }
 
