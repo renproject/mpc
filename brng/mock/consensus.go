@@ -1,7 +1,6 @@
 package mock
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
@@ -10,16 +9,14 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
-
-const FnSizeBytes = 32
 
 // PullConsensus represents an ideal trusted party for achieving consensus on a
 // table of shares to be used during the BRNG protocol.
 type PullConsensus struct {
 	done         bool
+	indices      []secp256k1.Secp256k1N
 	honestSubset []secp256k1.Secp256k1N
 	threshold    int32
 	table        brng.Table
@@ -29,6 +26,7 @@ type PullConsensus struct {
 // SizeHint implements the surge.SizeHinter interface.
 func (pc PullConsensus) SizeHint() int {
 	return surge.SizeHint(pc.done) +
+		surge.SizeHint(pc.indices) +
 		surge.SizeHint(pc.honestSubset) +
 		surge.SizeHint(pc.threshold) +
 		pc.table.SizeHint() +
@@ -40,6 +38,10 @@ func (pc PullConsensus) Marshal(w io.Writer, m int) (int, error) {
 	m, err := surge.Marshal(w, pc.done, m)
 	if err != nil {
 		return m, fmt.Errorf("error marshaling done: %v", err)
+	}
+	m, err = surge.Marshal(w, pc.indices, m)
+	if err != nil {
+		return m, fmt.Errorf("error marshaling indices: %v", err)
 	}
 	m, err = surge.Marshal(w, pc.honestSubset, m)
 	if err != nil {
@@ -62,15 +64,19 @@ func (pc PullConsensus) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := surge.Unmarshal(r, pc.done, m)
+	m, err := surge.Unmarshal(r, &pc.done, m)
 	if err != nil {
 		return m, fmt.Errorf("error unmarshaling done: %v", err)
 	}
-	m, err = surge.Unmarshal(r, pc.honestSubset, m)
+	m, err = surge.Unmarshal(r, &pc.indices, m)
+	if err != nil {
+		return m, fmt.Errorf("error unmarshaling indices: %v", err)
+	}
+	m, err = surge.Unmarshal(r, &pc.honestSubset, m)
 	if err != nil {
 		return m, fmt.Errorf("error unmarshaling honestSubset: %v", err)
 	}
-	m, err = surge.Unmarshal(r, pc.threshold, m)
+	m, err = surge.Unmarshal(r, &pc.threshold, m)
 	if err != nil {
 		return m, fmt.Errorf("error unmarshaling threshold: %v", err)
 	}
@@ -89,12 +95,14 @@ func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
 // represent the indices of the honest players and the adversary count
 // represents the maximum number of adversaries that there will be. `h`
 // represents the Pedersen commitment parameter.
-func NewPullConsensus(honestIndices []secp256k1.Secp256k1N, advCount int, h curve.Point) PullConsensus {
+func NewPullConsensus(inds, honestIndices []secp256k1.Secp256k1N, advCount int, h curve.Point) PullConsensus {
 	var table brng.Table
 
 	done := false
 	threshold := int32(advCount) + 1
 	checker := shamir.NewVSSChecker(h)
+	indices := make([]secp256k1.Secp256k1N, len(inds))
+	copy(indices, inds)
 
 	// Pick a random subset of honest parties that we will require to agree in
 	// consensus.
@@ -107,6 +115,7 @@ func NewPullConsensus(honestIndices []secp256k1.Secp256k1N, advCount int, h curv
 
 	return PullConsensus{
 		done,
+		indices,
 		honestSubset,
 		threshold,
 		table,
@@ -120,31 +129,16 @@ func (pc PullConsensus) Table() brng.Table {
 	return pc.table
 }
 
-// Done returns if the consensus engine has already reached consensus or not yet
+// Done returns if the consensus engine has already reached consensus or not
+// yet.
 func (pc PullConsensus) Done() bool {
 	return pc.done
-}
-
-func (pc PullConsensus) HonestSubset() []secp256k1.Secp256k1N {
-	return pc.honestSubset
-}
-
-// IsHonest returns if the player with `index` was a part of the honest nodes
-// subset that were agreed upon during the consensus round
-func (pc PullConsensus) IsHonest(index secp256k1.Secp256k1N) bool {
-	for _, honestIndex := range pc.honestSubset {
-		if index.Eq(&honestIndex) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // TakeSlice returns the appropriate slice of the assembled table, at
 // index
 func (pc PullConsensus) TakeSlice(index secp256k1.Secp256k1N) brng.Slice {
-	return pc.table.Slice(index, pc.honestSubset)
+	return pc.table.Slice(index, pc.indices)
 }
 
 // HandleRow processes a row received from a player. It returns true if
@@ -175,47 +169,4 @@ func (pc *PullConsensus) HandleRow(row brng.Row) bool {
 	}
 
 	return pc.done
-}
-
-func marshalFromIndices(indices []secp256k1.Secp256k1N, w io.Writer, m int) (int, error) {
-	if m < 4 {
-		return m, surge.ErrMaxBytesExceeded
-	}
-
-	var bs [FnSizeBytes]byte
-
-	binary.BigEndian.PutUint32(bs[:4], uint32(len(indices)))
-	n, err := w.Write(bs[:4])
-	m -= n
-	if err != nil {
-		return m, err
-	}
-
-	for i := range indices {
-		m, err = indices[i].Marshal(w, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
-}
-
-func unmarshalToIndices(dst *[]secp256k1.Secp256k1N, r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	*dst = (*dst)[:0]
-	for i := uint32(0); i < l; i++ {
-		*dst = append(*dst, secp256k1.Secp256k1N{})
-		m, err = (*dst)[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
 }

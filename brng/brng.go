@@ -60,7 +60,8 @@ type BRNGer struct {
 
 // SizeHint implements the surge.SizeHinter interface.
 func (brnger BRNGer) SizeHint() int {
-	return brnger.state.SizeHint() + 4 +
+	return brnger.state.SizeHint() +
+		surge.SizeHint(brnger.batchSize) +
 		brnger.sharer.SizeHint() +
 		brnger.checker.SizeHint()
 }
@@ -92,7 +93,7 @@ func (brnger *BRNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling state: %v", err)
 	}
-	m, err = surge.Unmarshal(r, uint32(brnger.batchSize), m)
+	m, err = surge.Unmarshal(r, &brnger.batchSize, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}

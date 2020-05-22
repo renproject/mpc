@@ -288,12 +288,13 @@ var _ = Describe("BRNG", func() {
 		machines := make([]Machine, 0, len(indices)+1)
 		for i := range indices {
 			id := ID(i + 1)
-			machine := newMachine(BrngTypePlayer, id, indices, h, k, b)
+			machine := newMachine(BrngTypePlayer, id, indices, nil, h, k, b)
 
 			ids = append(ids, id)
 			machines = append(machines, &machine)
 		}
-		cmachine := newMachine(BrngTypeConsensus, ID(len(indices)+1), indices, h, k, b)
+		// FIXME: Correctly construct the honest indices.
+		cmachine := newMachine(BrngTypeConsensus, ID(len(indices)+1), indices, indices, h, k, b)
 		ids = append(ids, ID(len(indices)))
 		machines = append(machines, &cmachine)
 
@@ -345,33 +346,33 @@ func (pm PlayerMessage) Row() Row {
 	return pm.row
 }
 
-func (msg PlayerMessage) SizeHint() int {
-	return msg.from.SizeHint() + msg.to.SizeHint() + msg.row.SizeHint()
+func (pm PlayerMessage) SizeHint() int {
+	return pm.from.SizeHint() + pm.to.SizeHint() + pm.row.SizeHint()
 }
 
-func (msg PlayerMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.from.Marshal(w, m)
+func (pm PlayerMessage) Marshal(w io.Writer, m int) (int, error) {
+	m, err := pm.from.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.to.Marshal(w, m)
+	m, err = pm.to.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.row.Marshal(w, m)
+	m, err = pm.row.Marshal(w, m)
 	return m, err
 }
 
-func (msg *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.from.Unmarshal(r, m)
+func (pm *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := pm.from.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.to.Unmarshal(r, m)
+	m, err = pm.to.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.row.Unmarshal(r, m)
+	m, err = pm.row.Unmarshal(r, m)
 	return m, err
 }
 
@@ -388,33 +389,33 @@ func (cm ConsensusMessage) To() ID {
 	return cm.to
 }
 
-func (msg ConsensusMessage) SizeHint() int {
-	return msg.from.SizeHint() + msg.to.SizeHint() + msg.slice.SizeHint()
+func (cm ConsensusMessage) SizeHint() int {
+	return cm.from.SizeHint() + cm.to.SizeHint() + cm.slice.SizeHint()
 }
 
-func (msg ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.from.Marshal(w, m)
+func (cm ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
+	m, err := cm.from.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.to.Marshal(w, m)
+	m, err = cm.to.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.slice.Marshal(w, m)
+	m, err = cm.slice.Marshal(w, m)
 	return m, err
 }
 
-func (msg *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.from.Unmarshal(r, m)
+func (cm *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := cm.from.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.to.Unmarshal(r, m)
+	m, err = cm.to.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = msg.slice.Unmarshal(r, m)
+	m, err = cm.slice.Unmarshal(r, m)
 	return m, err
 }
 
@@ -462,33 +463,33 @@ func (bm BrngMessage) SizeHint() int {
 	}
 }
 
-func (msg BrngMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.msgType.Marshal(w, m)
+func (bm BrngMessage) Marshal(w io.Writer, m int) (int, error) {
+	m, err := bm.msgType.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
 
-	if msg.pmsg != nil {
-		return msg.pmsg.Marshal(w, m)
-	} else if msg.cmsg != nil {
-		return msg.cmsg.Marshal(w, m)
+	if bm.pmsg != nil {
+		return bm.pmsg.Marshal(w, m)
+	} else if bm.cmsg != nil {
+		return bm.cmsg.Marshal(w, m)
 	} else {
 		return m, errors.New("uninitialised message")
 	}
 }
 
-func (msg *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.msgType.Unmarshal(r, m)
+func (bm *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
+	m, err := bm.msgType.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
 
-	if msg.msgType == TypeID(BrngTypePlayer) {
-		return msg.pmsg.Unmarshal(r, m)
-	} else if msg.msgType == TypeID(BrngTypeConsensus) {
-		return msg.cmsg.Unmarshal(r, m)
+	if bm.msgType == TypeID(BrngTypePlayer) {
+		return bm.pmsg.Unmarshal(r, m)
+	} else if bm.msgType == TypeID(BrngTypeConsensus) {
+		return bm.cmsg.Unmarshal(r, m)
 	} else {
-		return m, fmt.Errorf("invalid message type %v", msg.msgType)
+		return m, fmt.Errorf("invalid message type %v", bm.msgType)
 	}
 }
 
@@ -594,7 +595,7 @@ type BrngMachine struct {
 func newMachine(
 	machineType int,
 	id ID,
-	indices []secp256k1.Secp256k1N,
+	indices, honestIndices []secp256k1.Secp256k1N,
 	h curve.Point,
 	k, b int,
 ) BrngMachine {
@@ -619,7 +620,7 @@ func newMachine(
 	}
 
 	if machineType == BrngTypeConsensus {
-		engine := mock.NewPullConsensus(indices, k-1, h)
+		engine := mock.NewPullConsensus(indices, honestIndices, k-1, h)
 
 		cmachine := ConsensusMachine{
 			id:     ID(id),
@@ -676,7 +677,7 @@ func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
 		return m, err
 	}
 
-	m, err = surge.Unmarshal(r, uint32(bm.n), m)
+	m, err = surge.Unmarshal(r, &bm.n, m)
 	if err != nil {
 		return m, err
 	}
@@ -706,12 +707,12 @@ func (bm BrngMachine) InitialMessages() []Message {
 
 		// ids: [1, 2, ..., n-1, n] are reserved for the `n` players
 		// id = n+1 is for the consensus machine
-		consensusMachineId := ID(bm.n + 1)
+		consensusMachineID := ID(bm.n + 1)
 		messages = append(messages, &BrngMessage{
 			msgType: TypeID(BrngTypePlayer),
 			pmsg: &PlayerMessage{
 				from: bm.pm.id,
-				to:   consensusMachineId,
+				to:   consensusMachineID,
 				row:  bm.pm.row,
 			},
 			cmsg: nil,
@@ -733,9 +734,8 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 			bm.pm.SetShares(shares)
 			bm.pm.SetCommitments(commitments)
 			return nil
-		} else {
-			panic("unexpected consensus message")
 		}
+		panic("unexpected consensus message")
 
 	case TypeID(BrngTypePlayer):
 		if bmsg.pmsg != nil {
@@ -751,15 +751,12 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 				done := bm.cm.engine.HandleRow(bmsg.pmsg.Row())
 				if done == true {
 					return formConsensusMessages(bm)
-				} else {
-					return nil
 				}
-			} else {
 				return nil
 			}
-		} else {
-			panic("unexpected player message")
+			return nil
 		}
+		panic("unexpected player message")
 
 	default:
 		panic("unexpected message type")
@@ -772,19 +769,17 @@ func formConsensusMessages(bm *BrngMachine) []Message {
 	for i := 1; uint32(i) <= bm.n; i++ {
 		index := secp256k1.NewSecp256k1N(uint64(i))
 
-		if bm.cm.engine.IsHonest(index) == true {
-			message := BrngMessage{
-				msgType: TypeID(BrngTypeConsensus),
-				cmsg: &ConsensusMessage{
-					from:  bm.cm.id,
-					to:    ID(i),
-					slice: bm.cm.engine.TakeSlice(index),
-				},
-				pmsg: nil,
-			}
-
-			messages = append(messages, &message)
+		message := BrngMessage{
+			msgType: TypeID(BrngTypeConsensus),
+			cmsg: &ConsensusMessage{
+				from:  bm.cm.id,
+				to:    ID(i),
+				slice: bm.cm.engine.TakeSlice(index),
+			},
+			pmsg: nil,
 		}
+
+		messages = append(messages, &message)
 	}
 
 	return messages
