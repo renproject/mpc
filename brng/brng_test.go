@@ -280,34 +280,34 @@ var _ = Describe("BRNG", func() {
 	})
 
 	Context("Network (5)", func() {
-		n = 20
-		k = 7
-		b = 5
-		t = k - 1
-
-		indices = stu.SequentialIndices(n)
-
-		playerIDs := make([]ID, len(indices))
-		for i := range playerIDs {
-			playerIDs[i] = ID(i + 1)
-		}
-		consID := ID(len(indices) + 1)
-
-		machines := make([]Machine, 0, len(indices)+1)
-		for _, id := range playerIDs {
-			machine := newMachine(BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
-			machines = append(machines, &machine)
-		}
-		// FIXME: Correctly construct the honest indices.
-		cmachine := newMachine(BrngTypeConsensus, consID, consID, playerIDs, indices, indices, h, k, b)
-		machines = append(machines, &cmachine)
-
-		shuffleMsgs, _ := MessageShufflerDropper(playerIDs, 0)
-
-		network := NewNetwork(machines, shuffleMsgs)
-		network.SetCaptureHist(true)
-
 		Specify("correct execution of BRNG", func() {
+			n = 20
+			k = 7
+			b = 5
+			t = k - 1
+
+			indices = stu.SequentialIndices(n)
+
+			playerIDs := make([]ID, len(indices))
+			for i := range playerIDs {
+				playerIDs[i] = ID(i + 1)
+			}
+			consID := ID(len(indices) + 1)
+
+			machines := make([]Machine, 0, len(indices)+1)
+			for _, id := range playerIDs {
+				machine := newMachine(BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
+				machines = append(machines, &machine)
+			}
+			// FIXME: Correctly construct the honest indices.
+			cmachine := newMachine(BrngTypeConsensus, consID, consID, playerIDs, indices, indices, h, k, b)
+			machines = append(machines, &cmachine)
+
+			shuffleMsgs, _ := MessageShufflerDropper(playerIDs, 0)
+
+			network := NewNetwork(machines, shuffleMsgs)
+			network.SetCaptureHist(true)
+
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -317,12 +317,12 @@ var _ = Describe("BRNG", func() {
 					thisMachine := machines[i].(*BrngMachine)
 
 					prevComm := prevMachine.Commitments()[j]
-					thisMachine.Commitments()[j].Eq(&prevComm)
+					Expect(thisMachine.Commitments()[j].Eq(&prevComm)).To(BeTrue())
 				}
 			}
 
 			reconstructor := shamir.NewReconstructor(indices)
-			vsschecker    := shamir.NewVSSChecker(h)
+			vsschecker := shamir.NewVSSChecker(h)
 			for j := 0; j < b; j++ {
 				shares := make(shamir.VerifiableShares, 0, b)
 				for i := 0; i < len(machines)-1; i++ {
@@ -802,10 +802,10 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 			// if consensus has already been reached
 			// then those messages were already constructed and sent
 			// so do nothing in this case
-			if bm.cm.engine.Done() != true {
+			if !bm.cm.engine.Done() {
 				done := bm.cm.engine.HandleRow(bmsg.pmsg.Row())
-				if done == true {
-					return formConsensusMessages(bm)
+				if done {
+					return bm.formConsensusMessages()
 				}
 				return nil
 			}
@@ -818,7 +818,7 @@ func (bm *BrngMachine) Handle(msg Message) []Message {
 	}
 }
 
-func formConsensusMessages(bm *BrngMachine) []Message {
+func (bm BrngMachine) formConsensusMessages() []Message {
 	var messages []Message
 
 	for i, id := range bm.cm.playerIDs {
