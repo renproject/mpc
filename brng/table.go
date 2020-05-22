@@ -145,7 +145,7 @@ func (row Row) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, []Sharing(*row), m)
+	return surge.Unmarshal(r, (*[]Sharing)(row), m)
 }
 
 // MakeRow allocates and returns a new empty row.
@@ -270,7 +270,7 @@ func (col Col) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, []Element(*col), m)
+	return surge.Unmarshal(r, (*[]Element)(col), m)
 }
 
 // HasValidForm return true if the given Col has the correct form, i.e. when it
@@ -330,7 +330,7 @@ func (slice Slice) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (slice *Slice) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, []Col(*slice), m)
+	return surge.Unmarshal(r, (*[]Col)(slice), m)
 }
 
 // BatchSize returns the number of Cols in the slice, which is equal to the
@@ -404,7 +404,7 @@ func (t Table) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, []Row(*t), m)
+	return surge.Unmarshal(r, (*[]Row)(t), m)
 }
 
 // Slice returns the Slice for the given index in the table.

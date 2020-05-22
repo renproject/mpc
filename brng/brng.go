@@ -47,7 +47,7 @@ func (s State) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, uint8(*s), m)
+	return surge.Unmarshal(r, (*uint8)(s), m)
 }
 
 type BRNGer struct {
@@ -73,7 +73,7 @@ func (brnger BRNGer) Marshal(w io.Writer, m int) (int, error) {
 	}
 	m, err = surge.Marshal(w, uint32(brnger.batchSize), m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling state: %v", err)
+		return m, fmt.Errorf("marshaling batchSize: %v", err)
 	}
 	m, err = brnger.sharer.Marshal(w, m)
 	if err != nil {
@@ -94,7 +94,7 @@ func (brnger *BRNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	}
 	m, err = surge.Unmarshal(r, uint32(brnger.batchSize), m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling sharer: %v", err)
+		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}
 	m, err = brnger.sharer.Unmarshal(r, m)
 	if err != nil {

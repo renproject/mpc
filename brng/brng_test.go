@@ -325,7 +325,7 @@ func (id TypeID) Marshal(w io.Writer, m int) (int, error) {
 }
 
 func (id *TypeID) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, uint8(*id), m)
+	return surge.Unmarshal(r, (*uint8)(id), m)
 }
 
 type PlayerMessage struct {

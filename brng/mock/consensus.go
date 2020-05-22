@@ -29,7 +29,7 @@ type PullConsensus struct {
 // SizeHint implements the surge.SizeHinter interface.
 func (pc PullConsensus) SizeHint() int {
 	return surge.SizeHint(pc.done) +
-		4 + (len(pc.honestSubset)*FnSizeBytes) +
+		surge.SizeHint(pc.honestSubset) +
 		surge.SizeHint(pc.threshold) +
 		pc.table.SizeHint() +
 		pc.checker.SizeHint()
@@ -41,7 +41,7 @@ func (pc PullConsensus) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("error marshaling done: %v", err)
 	}
-	m, err = marshalFromIndices(pc.honestSubset, w, m)
+	m, err = surge.Marshal(w, pc.honestSubset, m)
 	if err != nil {
 		return m, fmt.Errorf("error marshaling honestSubset: %v", err)
 	}
@@ -66,7 +66,7 @@ func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("error unmarshaling done: %v", err)
 	}
-	m, err = unmarshalToIndices(&pc.honestSubset, r, m)
+	m, err = surge.Unmarshal(r, pc.honestSubset, m)
 	if err != nil {
 		return m, fmt.Errorf("error unmarshaling honestSubset: %v", err)
 	}
