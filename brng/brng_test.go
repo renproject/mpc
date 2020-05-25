@@ -299,7 +299,6 @@ var _ = Describe("BRNG", func() {
 					honestIndices = append(honestIndices, indices[i])
 				}
 			}
-			// FIXME: Correctly construct the honest indices.
 			cmachine := btu.NewMachine(
 				btu.BrngTypeConsensus,
 				consID,
