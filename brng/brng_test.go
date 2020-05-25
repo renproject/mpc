@@ -11,6 +11,7 @@ import (
 	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/surge"
 
+	"github.com/renproject/mpc/brng/table"
 	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
@@ -58,7 +59,7 @@ var _ = Describe("BRNG", func() {
 		return brnger, t, b, to, indices
 	}
 
-	TransitionToWaiting := func(brnger *BRNGer, k, b int) Row {
+	TransitionToWaiting := func(brnger *BRNGer, k, b int) table.Row {
 		return brnger.TransitionStart(k, b)
 	}
 

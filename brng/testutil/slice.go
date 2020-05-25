@@ -4,22 +4,23 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/renproject/mpc/brng"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
+
+	"github.com/renproject/mpc/brng/table"
 )
 
 // RandomValidSharing creates a random and valid sharing for the indices with
 // reconstruction threshold k and Pedersen parameter h.
-func RandomValidSharing(indices []secp256k1.Secp256k1N, k int, h curve.Point) brng.Sharing {
+func RandomValidSharing(indices []secp256k1.Secp256k1N, k int, h curve.Point) table.Sharing {
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
 	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
 
-	return brng.NewSharing(shares, commitment)
+	return table.NewSharing(shares, commitment)
 }
 
 // RandomInvalidSharing creates a random sharing with a fault for the share
@@ -29,7 +30,7 @@ func RandomInvalidSharing(
 	k int,
 	h curve.Point,
 	badIndex int,
-) brng.Sharing {
+) table.Sharing {
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
@@ -38,14 +39,14 @@ func RandomInvalidSharing(
 	// Perturb the bad indice.
 	perturbShare(&shares[badIndex])
 
-	return brng.NewSharing(shares, commitment)
+	return table.NewSharing(shares, commitment)
 }
 
 // RandomValidRow constructs a random row for the players with the given
 // indices with batch size b from sharings with reconstruction threshold k and
 // Pedersen parameter h.
-func RandomValidRow(indices []secp256k1.Secp256k1N, k, b int, h curve.Point) brng.Row {
-	row := make(brng.Row, b)
+func RandomValidRow(indices []secp256k1.Secp256k1N, k, b int, h curve.Point) table.Row {
+	row := make(table.Row, b)
 	for i := range row {
 		row[i] = RandomValidSharing(indices, k, h)
 	}
@@ -60,8 +61,8 @@ func RandomInvalidRow(
 	h curve.Point,
 	badIndex int,
 	badBatches []int,
-) brng.Row {
-	row := make(brng.Row, b)
+) table.Row {
+	row := make(table.Row, b)
 
 	j := 0
 	for i := range row {
@@ -79,8 +80,8 @@ func RandomInvalidRow(
 // RandomValidTable contructs a random valid table for the players with the
 // given indices with t rows that have a batch size b, reconstruction threshold
 // k and Pedersen parameter h.
-func RandomValidTable(indices []secp256k1.Secp256k1N, h curve.Point, k, b, t int) brng.Table {
-	table := make(brng.Table, t)
+func RandomValidTable(indices []secp256k1.Secp256k1N, h curve.Point, k, b, t int) table.Table {
+	table := make(table.Table, t)
 	for i := range table {
 		table[i] = RandomValidRow(indices, k, b, h)
 	}
@@ -105,8 +106,8 @@ func RandomInvalidTable(
 	indices []secp256k1.Secp256k1N,
 	h curve.Point,
 	n, k, b, t, badIndex int,
-) (brng.Table, []SlicePos) {
-	table := make(brng.Table, n)
+) (table.Table, []SlicePos) {
+	table := make(table.Table, n)
 	badIndices := randomIndices(t, rand.Intn(t)+1)
 	faultLocations := make([][]int, len(badIndices))
 
@@ -146,9 +147,9 @@ func RandomValidSlice(
 	indices []secp256k1.Secp256k1N,
 	h curve.Point,
 	k, b, t int,
-) brng.Slice {
+) table.Slice {
 	table := RandomValidTable(indices, h, k, b, t)
-	slice := table.Slice(to, indices)
+	slice := table.TakeSlice(to, indices)
 	return slice
 }
 
@@ -159,7 +160,7 @@ func RandomInvalidSlice(
 	indices []secp256k1.Secp256k1N,
 	h curve.Point,
 	n, k, b, t int,
-) (brng.Slice, []brng.Element) {
+) (table.Slice, []table.Element) {
 	badIndex := -1
 	for i, index := range indices {
 		if index.Eq(&to) {
@@ -170,13 +171,13 @@ func RandomInvalidSlice(
 		panic("to index was not found in indices")
 	}
 
-	table, faultLocations := RandomInvalidTable(indices, h, n, k, b, t, badIndex)
-	slice := table.Slice(to, indices)
+	invalidTable, faultLocations := RandomInvalidTable(indices, h, n, k, b, t, badIndex)
+	slice := invalidTable.TakeSlice(to, indices)
 
-	var faults []brng.Element
+	var faults []table.Element
 
 	for _, loc := range faultLocations {
-		var fault brng.Element
+		var fault table.Element
 		fault.Set(slice[loc.batch][loc.player])
 		faults = append(faults, fault)
 	}
@@ -186,7 +187,7 @@ func RandomInvalidSlice(
 
 // RowIsValid returns true if all of the sharings in the given row are valid
 // with respect to the commitments and the shares form a consistent k-sharing.
-func RowIsValid(row brng.Row, k int, indices []secp256k1.Secp256k1N, h curve.Point) bool {
+func RowIsValid(row table.Row, k int, indices []secp256k1.Secp256k1N, h curve.Point) bool {
 	reconstructor := shamir.NewReconstructor(indices)
 	checker := shamir.NewVSSChecker(h)
 

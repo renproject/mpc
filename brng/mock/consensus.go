@@ -5,11 +5,12 @@ import (
 	"io"
 	"math/rand"
 
-	"github.com/renproject/mpc/brng"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
+
+	"github.com/renproject/mpc/brng/table"
 )
 
 // PullConsensus represents an ideal trusted party for achieving consensus on a
@@ -19,7 +20,7 @@ type PullConsensus struct {
 	indices      []secp256k1.Secp256k1N
 	honestSubset []secp256k1.Secp256k1N
 	threshold    int32
-	table        brng.Table
+	table        table.Table
 	checker      shamir.VSSChecker
 }
 
@@ -96,7 +97,7 @@ func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
 // represents the maximum number of adversaries that there will be. `h`
 // represents the Pedersen commitment parameter.
 func NewPullConsensus(inds, honestIndices []secp256k1.Secp256k1N, advCount int, h curve.Point) PullConsensus {
-	var table brng.Table
+	var table table.Table
 
 	done := false
 	threshold := int32(advCount) + 1
@@ -125,7 +126,7 @@ func NewPullConsensus(inds, honestIndices []secp256k1.Secp256k1N, advCount int, 
 
 // Table returns the output table of the consensus algorithm. This table will
 // only be correct if `HandleRow` has returned `true`.
-func (pc PullConsensus) Table() brng.Table {
+func (pc PullConsensus) Table() table.Table {
 	return pc.table
 }
 
@@ -137,14 +138,14 @@ func (pc PullConsensus) Done() bool {
 
 // TakeSlice returns the appropriate slice of the assembled table, at
 // index
-func (pc PullConsensus) TakeSlice(index secp256k1.Secp256k1N) brng.Slice {
-	return pc.table.Slice(index, pc.indices)
+func (pc PullConsensus) TakeSlice(index secp256k1.Secp256k1N) table.Slice {
+	return pc.table.TakeSlice(index, pc.indices)
 }
 
 // HandleRow processes a row received from a player. It returns true if
 // consensus has completed, at which point the complete output table can be
 // accessed, and false otherwise.
-func (pc *PullConsensus) HandleRow(row brng.Row) bool {
+func (pc *PullConsensus) HandleRow(row table.Row) bool {
 	if pc.done {
 		return true
 	}
