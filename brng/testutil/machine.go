@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -70,16 +69,37 @@ func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, err
 }
 
+// ID implements the Machine interface.
+func (pm PlayerMachine) ID() mtu.ID {
+	return pm.id
+}
+
+// InitialMessages implements the Machine intercace.
+func (pm PlayerMachine) InitialMessages() []mtu.Message {
+	return []mtu.Message{
+		&BrngMessage{
+			msg: &PlayerMessage{
+				from: pm.id,
+				to:   pm.consID,
+				row:  pm.row,
+			},
+		},
+	}
+}
+
+// Handle implements the Machine interface.
+func (pm *PlayerMachine) Handle(msg mtu.Message) []mtu.Message {
+	cmsg := msg.(*ConsensusMessage)
+	shares, commitments, _ := pm.brnger.TransitionSlice(cmsg.slice)
+	pm.SetOutput(shares, commitments)
+	return nil
+}
+
 // SetOutput sets the shares and commitments for the player that represent the
 // output of the BRNG algorithm.
 func (pm *PlayerMachine) SetOutput(shares shamir.VerifiableShares, commitments []shamir.Commitment) {
 	pm.shares = shares
 	pm.commitments = commitments
-}
-
-// ID implements the Machine interface.
-func (pm PlayerMachine) ID() mtu.ID {
-	return pm.id
 }
 
 // Shares returns the output shares of the player.
@@ -99,11 +119,6 @@ type ConsensusMachine struct {
 	playerIDs []mtu.ID
 	indices   []secp256k1.Secp256k1N
 	engine    mock.PullConsensus
-}
-
-// ID implements the Machine interface.
-func (cm ConsensusMachine) ID() mtu.ID {
-	return cm.id
 }
 
 // SizeHint implements the surge.SizeHinter interface.
@@ -150,13 +165,61 @@ func (cm *ConsensusMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, err
 }
 
+// ID implements the Machine interface.
+func (cm ConsensusMachine) ID() mtu.ID {
+	return cm.id
+}
+
+// InitialMessages implements the Machine intercace.
+func (cm ConsensusMachine) InitialMessages() []mtu.Message {
+	return nil
+}
+
+func (cm *ConsensusMachine) Handle(msg mtu.Message) []mtu.Message {
+	pmsg := msg.(*PlayerMessage)
+
+	// if consensus has not yet been reached
+	// handle this row
+	// if consensus is reached after handling this row
+	// construct the consensus messages for all honest parties
+	//
+	// if consensus has already been reached
+	// then those messages were already constructed and sent
+	// so do nothing in this case
+	if !cm.engine.Done() {
+		done := cm.engine.HandleRow(pmsg.Row())
+		if done {
+			return cm.formConsensusMessages()
+		}
+		return nil
+	}
+	return nil
+}
+
+func (cm ConsensusMachine) formConsensusMessages() []mtu.Message {
+	var messages []mtu.Message
+
+	for i, id := range cm.playerIDs {
+		index := cm.indices[i]
+
+		message := BrngMessage{
+			msg: &ConsensusMessage{
+				from:  cm.id,
+				to:    id,
+				slice: cm.engine.TakeSlice(index),
+			},
+		}
+
+		messages = append(messages, &message)
+	}
+
+	return messages
+}
+
 // BrngMachine represents a participant in the BRNG algorithm and can be either
 // a player or the consensus trusted party.
 type BrngMachine struct {
-	machineType TypeID
-	n           uint32
-	pm          *PlayerMachine
-	cm          *ConsensusMachine
+	machine mtu.Machine
 }
 
 func NewMachine(
@@ -181,10 +244,7 @@ func NewMachine(
 		}
 
 		return BrngMachine{
-			machineType: machineType,
-			n:           uint32(len(indices)),
-			pm:          &pmachine,
-			cm:          nil,
+			machine: &pmachine,
 		}
 	}
 
@@ -199,10 +259,7 @@ func NewMachine(
 		}
 
 		return BrngMachine{
-			machineType: machineType,
-			n:           uint32(len(indices)),
-			pm:          nil,
-			cm:          &cmachine,
+			machine: &cmachine,
 		}
 	}
 
@@ -211,173 +268,87 @@ func NewMachine(
 
 // SizeHint implements the surge.SizeHinter interface.
 func (bm BrngMachine) SizeHint() int {
-	switch bm.machineType {
-	case BrngTypePlayer:
-		return bm.machineType.SizeHint() + 4 + bm.pm.SizeHint()
-
-	case BrngTypeConsensus:
-		return bm.machineType.SizeHint() + 4 + bm.cm.SizeHint()
-
-	default:
-		panic("uninitialised machine")
-	}
+	return 1 + bm.machine.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
 func (bm BrngMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := bm.machineType.Marshal(w, m)
-	if err != nil {
-		return m, err
+	var ty TypeID
+	switch bm.machine.(type) {
+	case *PlayerMachine:
+		ty = BrngTypePlayer
+	case *ConsensusMachine:
+		ty = BrngTypeConsensus
+	default:
+		panic(fmt.Sprintf("unexpected machine type %T", bm.machine))
 	}
 
-	m, err = surge.Marshal(w, uint32(bm.n), m)
+	m, err := ty.Marshal(w, m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("error marshaling ty: %v", err)
 	}
 
-	if bm.pm != nil {
-		return bm.pm.Marshal(w, m)
-	} else if bm.cm != nil {
-		return bm.cm.Marshal(w, m)
-	} else {
-		return m, errors.New("uninitialised machine")
-	}
+	return bm.machine.Marshal(w, m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := bm.machineType.Unmarshal(r, m)
+	var ty TypeID
+	m, err := ty.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
 
-	m, err = surge.Unmarshal(r, &bm.n, m)
-	if err != nil {
-		return m, err
+	switch ty {
+	case BrngTypePlayer:
+		bm.machine = new(PlayerMachine)
+	case BrngTypeConsensus:
+		bm.machine = new(ConsensusMachine)
+	default:
+		return m, fmt.Errorf("invalid machine type %v", ty)
 	}
 
-	if bm.machineType == BrngTypePlayer {
-		return bm.pm.Unmarshal(r, m)
-	} else if bm.machineType == BrngTypeConsensus {
-		return bm.cm.Unmarshal(r, m)
-	} else {
-		return m, fmt.Errorf("invalid message type %v", bm.machineType)
-	}
+	return bm.machine.Unmarshal(r, m)
 }
 
 // ID implements the Machine interface.
 func (bm BrngMachine) ID() mtu.ID {
-	if bm.pm != nil {
-		return bm.pm.ID()
-	} else if bm.cm != nil {
-		return bm.cm.ID()
-	} else {
-		panic("BRNG Machine not initialised")
-	}
+	return bm.machine.ID()
 }
 
 // InitialMessages implements the Machine intercace.
 func (bm BrngMachine) InitialMessages() []mtu.Message {
-	if bm.machineType == BrngTypePlayer {
-		messages := []mtu.Message{
-			&BrngMessage{
-				msgType: BrngTypePlayer,
-				pmsg: &PlayerMessage{
-					from: bm.pm.id,
-					to:   bm.pm.consID,
-					row:  bm.pm.row,
-				},
-				cmsg: nil,
-			},
-		}
-
-		return messages
-	}
-
-	return nil
+	return bm.machine.InitialMessages()
 }
 
 // Handle implements the Machine interface.
 func (bm *BrngMachine) Handle(msg mtu.Message) []mtu.Message {
 	bmsg := msg.(*BrngMessage)
 
-	switch bmsg.msgType {
-	case BrngTypeConsensus:
-		if bmsg.cmsg != nil {
-			shares, commitments, _ := bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
-			bm.pm.SetOutput(shares, commitments)
-			return nil
-		}
-		panic("unexpected consensus message")
-
-	case BrngTypePlayer:
-		if bmsg.pmsg != nil {
-			// if consensus has not yet been reached
-			// handle this row
-			// if consensus is reached after handling this row
-			// construct the consensus messages for all honest parties
-			//
-			// if consensus has already been reached
-			// then those messages were already constructed and sent
-			// so do nothing in this case
-			if !bm.cm.engine.Done() {
-				done := bm.cm.engine.HandleRow(bmsg.pmsg.Row())
-				if done {
-					return bm.formConsensusMessages()
-				}
-				return nil
-			}
-			return nil
-		}
-		panic("unexpected player message")
-
+	switch msg := bmsg.msg.(type) {
+	case *PlayerMessage, *ConsensusMessage:
+		return bm.machine.Handle(msg)
 	default:
-		panic("unexpected message type")
+		panic(fmt.Sprintf("unexpected message type %T", msg))
 	}
-}
-
-func (bm BrngMachine) formConsensusMessages() []mtu.Message {
-	var messages []mtu.Message
-
-	for i, id := range bm.cm.playerIDs {
-		index := bm.cm.indices[i]
-
-		message := BrngMessage{
-			msgType: BrngTypeConsensus,
-			cmsg: &ConsensusMessage{
-				from:  bm.cm.id,
-				to:    id,
-				slice: bm.cm.engine.TakeSlice(index),
-			},
-			pmsg: nil,
-		}
-
-		messages = append(messages, &message)
-	}
-
-	return messages
 }
 
 // Shares returns the output shares of the player if the machine represents a
 // player machine, and nil otherwise.
 func (bm BrngMachine) Shares() shamir.VerifiableShares {
-	if bm.machineType == BrngTypePlayer {
-		if bm.pm != nil {
-			return bm.pm.Shares()
-		}
+	pm, ok := bm.machine.(*PlayerMachine)
+	if !ok {
+		return nil
 	}
-
-	return nil
+	return pm.Shares()
 }
 
 // Commitments returns the output commitments of the player if the machine
 // represents a player machine, and nil otherwise.
 func (bm BrngMachine) Commitments() []shamir.Commitment {
-	if bm.machineType == BrngTypePlayer {
-		if bm.pm != nil {
-			return bm.pm.Commitments()
-		}
+	pm, ok := bm.machine.(*PlayerMachine)
+	if !ok {
+		return nil
 	}
-
-	return nil
+	return pm.Commitments()
 }

@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -110,75 +109,60 @@ func (cm *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 type BrngMessage struct {
-	msgType TypeID
-	pmsg    *PlayerMessage
-	cmsg    *ConsensusMessage
+	msg mtu.Message
 }
 
 // From implements the Message interface.
 func (bm BrngMessage) From() mtu.ID {
-	if bm.pmsg != nil {
-		return bm.pmsg.From()
-	} else if bm.cmsg != nil {
-		return bm.cmsg.From()
-	} else {
-		panic("BRNG Message not initialised")
-	}
+	return bm.msg.From()
 }
 
 // To implements the Message interface.
 func (bm BrngMessage) To() mtu.ID {
-	if bm.pmsg != nil {
-		return bm.pmsg.To()
-	} else if bm.cmsg != nil {
-		return bm.cmsg.To()
-	} else {
-		panic("BRNG Message not initialised")
-	}
+	return bm.msg.To()
 }
 
 // SizeHint implements the surge.SizeHinter interface.
 func (bm BrngMessage) SizeHint() int {
-	switch bm.msgType {
-	case BrngTypePlayer:
-		return bm.msgType.SizeHint() + bm.pmsg.SizeHint()
-
-	case BrngTypeConsensus:
-		return bm.msgType.SizeHint() + bm.cmsg.SizeHint()
-
-	default:
-		panic("uninitialised message")
-	}
+	return 1 + bm.msg.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
 func (bm BrngMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := bm.msgType.Marshal(w, m)
-	if err != nil {
-		return m, err
+	var ty TypeID
+	switch bm.msg.(type) {
+	case *PlayerMessage:
+		ty = BrngTypePlayer
+	case *ConsensusMessage:
+		ty = BrngTypeConsensus
+	default:
+		panic(fmt.Sprintf("unexpected message type %T", bm.msg))
 	}
 
-	if bm.pmsg != nil {
-		return bm.pmsg.Marshal(w, m)
-	} else if bm.cmsg != nil {
-		return bm.cmsg.Marshal(w, m)
-	} else {
-		return m, errors.New("uninitialised message")
+	m, err := ty.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("error marshaling ty: %v", err)
 	}
+
+	return bm.msg.Marshal(w, m)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (bm *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := bm.msgType.Unmarshal(r, m)
+	var ty TypeID
+	m, err := ty.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
 
-	if bm.msgType == BrngTypePlayer {
-		return bm.pmsg.Unmarshal(r, m)
-	} else if bm.msgType == BrngTypeConsensus {
-		return bm.cmsg.Unmarshal(r, m)
-	} else {
-		return m, fmt.Errorf("invalid message type %v", bm.msgType)
+	switch ty {
+	case BrngTypePlayer:
+		bm.msg = new(PlayerMessage)
+	case BrngTypeConsensus:
+		bm.msg = new(ConsensusMessage)
+	default:
+		return m, fmt.Errorf("invalid message type %v", ty)
 	}
+
+	return bm.msg.Unmarshal(r, m)
 }
