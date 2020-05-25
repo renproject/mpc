@@ -1,9 +1,6 @@
 package brng_test
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"math/rand"
 	"time"
 
@@ -14,9 +11,7 @@ import (
 	. "github.com/renproject/mpc/testutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
-	"github.com/renproject/surge"
 
-	mock "github.com/renproject/mpc/brng/mock"
 	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
@@ -280,7 +275,7 @@ var _ = Describe("BRNG", func() {
 	})
 
 	Context("Network (5)", func() {
-		Specify("correct execution of BRNG", func() {
+		Specify("BRNG should function correctly in a network with offline machines", func() {
 			n = 20
 			k = 7
 			b = 5
@@ -296,11 +291,21 @@ var _ = Describe("BRNG", func() {
 
 			machines := make([]Machine, 0, len(indices)+1)
 			for _, id := range playerIDs {
-				machine := newMachine(BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
+				machine := btu.NewMachine(btu.BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
 				machines = append(machines, &machine)
 			}
 			// FIXME: Correctly construct the honest indices.
-			cmachine := newMachine(BrngTypeConsensus, consID, consID, playerIDs, indices, indices, h, k, b)
+			cmachine := btu.NewMachine(
+				btu.BrngTypeConsensus,
+				consID,
+				consID,
+				playerIDs,
+				indices,
+				indices,
+				h,
+				k,
+				b,
+			)
 			machines = append(machines, &cmachine)
 
 			shuffleMsgs, _ := MessageShufflerDropper(playerIDs, 0)
@@ -313,8 +318,8 @@ var _ = Describe("BRNG", func() {
 
 			for j := 0; j < b; j++ {
 				for i := 1; i < len(machines)-1; i++ {
-					prevMachine := machines[i-1].(*BrngMachine)
-					thisMachine := machines[i].(*BrngMachine)
+					prevMachine := machines[i-1].(*btu.BrngMachine)
+					thisMachine := machines[i].(*btu.BrngMachine)
 
 					prevComm := prevMachine.Commitments()[j]
 					Expect(thisMachine.Commitments()[j].Eq(&prevComm)).To(BeTrue())
@@ -326,7 +331,7 @@ var _ = Describe("BRNG", func() {
 			for j := 0; j < b; j++ {
 				shares := make(shamir.VerifiableShares, 0, b)
 				for i := 0; i < len(machines)-1; i++ {
-					pmachine := machines[i].(*BrngMachine)
+					pmachine := machines[i].(*btu.BrngMachine)
 					machineShares := pmachine.Shares()
 					machineCommitments := pmachine.Commitments()
 
@@ -340,522 +345,3 @@ var _ = Describe("BRNG", func() {
 		})
 	})
 })
-
-type TypeID uint8
-
-func (id TypeID) SizeHint() int { return 1 }
-
-func (id TypeID) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, uint8(id), m)
-}
-
-func (id *TypeID) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*uint8)(id), m)
-}
-
-type PlayerMessage struct {
-	from, to ID
-	row      Row
-}
-
-func (pm PlayerMessage) From() ID {
-	return pm.from
-}
-
-func (pm PlayerMessage) To() ID {
-	return pm.to
-}
-
-func (pm PlayerMessage) Row() Row {
-	return pm.row
-}
-
-func (pm PlayerMessage) SizeHint() int {
-	return pm.from.SizeHint() + pm.to.SizeHint() + pm.row.SizeHint()
-}
-
-func (pm PlayerMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := pm.from.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.to.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.row.Marshal(w, m)
-	return m, err
-}
-
-func (pm *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := pm.from.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.to.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.row.Unmarshal(r, m)
-	return m, err
-}
-
-type ConsensusMessage struct {
-	from, to ID
-	slice    Slice
-}
-
-func (cm ConsensusMessage) From() ID {
-	return cm.from
-}
-
-func (cm ConsensusMessage) To() ID {
-	return cm.to
-}
-
-func (cm ConsensusMessage) SizeHint() int {
-	return cm.from.SizeHint() + cm.to.SizeHint() + cm.slice.SizeHint()
-}
-
-func (cm ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := cm.from.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = cm.to.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = cm.slice.Marshal(w, m)
-	return m, err
-}
-
-func (cm *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := cm.from.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = cm.to.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = cm.slice.Unmarshal(r, m)
-	return m, err
-}
-
-const (
-	BrngTypePlayer    = 1
-	BrngTypeConsensus = 2
-)
-
-type BrngMessage struct {
-	msgType TypeID
-	pmsg    *PlayerMessage
-	cmsg    *ConsensusMessage
-}
-
-func (bm BrngMessage) From() ID {
-	if bm.pmsg != nil {
-		return bm.pmsg.From()
-	} else if bm.cmsg != nil {
-		return bm.cmsg.From()
-	} else {
-		panic("BRNG Message not initialised")
-	}
-}
-
-func (bm BrngMessage) To() ID {
-	if bm.pmsg != nil {
-		return bm.pmsg.To()
-	} else if bm.cmsg != nil {
-		return bm.cmsg.To()
-	} else {
-		panic("BRNG Message not initialised")
-	}
-}
-
-func (bm BrngMessage) SizeHint() int {
-	switch bm.msgType {
-	case TypeID(BrngTypePlayer):
-		return bm.msgType.SizeHint() + bm.pmsg.SizeHint()
-
-	case TypeID(BrngTypeConsensus):
-		return bm.msgType.SizeHint() + bm.cmsg.SizeHint()
-
-	default:
-		panic("uninitialised message")
-	}
-}
-
-func (bm BrngMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := bm.msgType.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-
-	if bm.pmsg != nil {
-		return bm.pmsg.Marshal(w, m)
-	} else if bm.cmsg != nil {
-		return bm.cmsg.Marshal(w, m)
-	} else {
-		return m, errors.New("uninitialised message")
-	}
-}
-
-func (bm *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := bm.msgType.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-
-	if bm.msgType == TypeID(BrngTypePlayer) {
-		return bm.pmsg.Unmarshal(r, m)
-	} else if bm.msgType == TypeID(BrngTypeConsensus) {
-		return bm.cmsg.Unmarshal(r, m)
-	} else {
-		return m, fmt.Errorf("invalid message type %v", bm.msgType)
-	}
-}
-
-type PlayerMachine struct {
-	id, consID ID
-	row        Row
-	brnger     BRNGer
-
-	shares      shamir.VerifiableShares
-	commitments []shamir.Commitment
-}
-
-func (pm PlayerMachine) SizeHint() int {
-	return pm.id.SizeHint() +
-		pm.consID.SizeHint() +
-		pm.row.SizeHint() +
-		pm.brnger.SizeHint()
-}
-
-func (pm PlayerMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := pm.id.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.consID.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.row.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.brnger.Marshal(w, m)
-	return m, err
-}
-
-func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := pm.id.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.consID.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.row.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = pm.brnger.Unmarshal(r, m)
-	return m, err
-}
-
-func (pm *PlayerMachine) SetShares(shares shamir.VerifiableShares) {
-	pm.shares = shares
-}
-
-func (pm *PlayerMachine) SetCommitments(commitments []shamir.Commitment) {
-	pm.commitments = commitments
-}
-
-func (pm PlayerMachine) ID() ID {
-	return pm.id
-}
-
-func (pm PlayerMachine) Shares() shamir.VerifiableShares {
-	return pm.shares
-}
-
-func (pm PlayerMachine) Commitments() []shamir.Commitment {
-	return pm.commitments
-}
-
-type ConsensusMachine struct {
-	id        ID
-	playerIDs []ID
-	indices   []secp256k1.Secp256k1N
-	engine    mock.PullConsensus
-}
-
-func (cm ConsensusMachine) ID() ID {
-	return cm.id
-}
-
-func (cm ConsensusMachine) SizeHint() int {
-	return cm.id.SizeHint() +
-		surge.SizeHint(cm.playerIDs) +
-		surge.SizeHint(cm.indices) +
-		cm.engine.SizeHint()
-}
-
-func (cm ConsensusMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := cm.id.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = surge.Marshal(w, cm.playerIDs, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = surge.Marshal(w, cm.indices, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = cm.engine.Marshal(w, m)
-	return m, err
-}
-
-func (cm *ConsensusMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := cm.id.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = surge.Unmarshal(r, &cm.playerIDs, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = surge.Unmarshal(r, &cm.indices, m)
-	if err != nil {
-		return m, err
-	}
-	m, err = cm.engine.Unmarshal(r, m)
-	return m, err
-}
-
-type BrngMachine struct {
-	machineType TypeID
-	n           uint32
-	pm          *PlayerMachine
-	cm          *ConsensusMachine
-}
-
-func newMachine(
-	machineType TypeID,
-	id, consID ID,
-	playerIDs []ID,
-	indices, honestIndices []secp256k1.Secp256k1N,
-	h curve.Point,
-	k, b int,
-) BrngMachine {
-	if machineType == BrngTypePlayer {
-		brnger := New(indices, h)
-		row := brnger.TransitionStart(k, b)
-
-		pmachine := PlayerMachine{
-			id:          id,
-			consID:      consID,
-			row:         row,
-			brnger:      brnger,
-			shares:      nil,
-			commitments: nil,
-		}
-
-		return BrngMachine{
-			machineType: TypeID(uint8(machineType)),
-			n:           uint32(len(indices)),
-			pm:          &pmachine,
-			cm:          nil,
-		}
-	}
-
-	if machineType == BrngTypeConsensus {
-		engine := mock.NewPullConsensus(indices, honestIndices, k-1, h)
-
-		cmachine := ConsensusMachine{
-			id:        consID,
-			playerIDs: playerIDs,
-			indices:   indices,
-			engine:    engine,
-		}
-
-		return BrngMachine{
-			machineType: TypeID(uint8(machineType)),
-			n:           uint32(len(indices)),
-			pm:          nil,
-			cm:          &cmachine,
-		}
-	}
-
-	panic("unexpected machine type")
-}
-
-func (bm BrngMachine) SizeHint() int {
-	switch bm.machineType {
-	case TypeID(BrngTypePlayer):
-		return bm.machineType.SizeHint() + 4 + bm.pm.SizeHint()
-
-	case TypeID(BrngTypeConsensus):
-		return bm.machineType.SizeHint() + 4 + bm.cm.SizeHint()
-
-	default:
-		panic("uninitialised machine")
-	}
-}
-
-func (bm BrngMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := bm.machineType.Marshal(w, m)
-	if err != nil {
-		return m, err
-	}
-
-	m, err = surge.Marshal(w, uint32(bm.n), m)
-	if err != nil {
-		return m, err
-	}
-
-	if bm.pm != nil {
-		return bm.pm.Marshal(w, m)
-	} else if bm.cm != nil {
-		return bm.cm.Marshal(w, m)
-	} else {
-		return m, errors.New("uninitialised machine")
-	}
-}
-
-func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := bm.machineType.Unmarshal(r, m)
-	if err != nil {
-		return m, err
-	}
-
-	m, err = surge.Unmarshal(r, &bm.n, m)
-	if err != nil {
-		return m, err
-	}
-
-	if bm.machineType == TypeID(BrngTypePlayer) {
-		return bm.pm.Unmarshal(r, m)
-	} else if bm.machineType == TypeID(BrngTypeConsensus) {
-		return bm.cm.Unmarshal(r, m)
-	} else {
-		return m, fmt.Errorf("invalid message type %v", bm.machineType)
-	}
-}
-
-func (bm BrngMachine) ID() ID {
-	if bm.pm != nil {
-		return bm.pm.ID()
-	} else if bm.cm != nil {
-		return bm.cm.ID()
-	} else {
-		panic("BRNG Machine not initialised")
-	}
-}
-
-func (bm BrngMachine) InitialMessages() []Message {
-	if bm.machineType == BrngTypePlayer {
-		messages := []Message{
-			&BrngMessage{
-				msgType: TypeID(BrngTypePlayer),
-				pmsg: &PlayerMessage{
-					from: bm.pm.id,
-					to:   bm.pm.consID,
-					row:  bm.pm.row,
-				},
-				cmsg: nil,
-			},
-		}
-
-		return messages
-	}
-
-	return nil
-}
-
-func (bm *BrngMachine) Handle(msg Message) []Message {
-	bmsg := msg.(*BrngMessage)
-
-	switch bmsg.msgType {
-	case TypeID(BrngTypeConsensus):
-		if bmsg.cmsg != nil {
-			shares, commitments, _ := bm.pm.brnger.TransitionSlice(bmsg.cmsg.slice)
-			bm.pm.SetShares(shares)
-			bm.pm.SetCommitments(commitments)
-			return nil
-		}
-		panic("unexpected consensus message")
-
-	case TypeID(BrngTypePlayer):
-		if bmsg.pmsg != nil {
-			// if consensus has not yet been reached
-			// handle this row
-			// if consensus is reached after handling this row
-			// construct the consensus messages for all honest parties
-			//
-			// if consensus has already been reached
-			// then those messages were already constructed and sent
-			// so do nothing in this case
-			if !bm.cm.engine.Done() {
-				done := bm.cm.engine.HandleRow(bmsg.pmsg.Row())
-				if done {
-					return bm.formConsensusMessages()
-				}
-				return nil
-			}
-			return nil
-		}
-		panic("unexpected player message")
-
-	default:
-		panic("unexpected message type")
-	}
-}
-
-func (bm BrngMachine) formConsensusMessages() []Message {
-	var messages []Message
-
-	for i, id := range bm.cm.playerIDs {
-		index := bm.cm.indices[i]
-
-		message := BrngMessage{
-			msgType: TypeID(BrngTypeConsensus),
-			cmsg: &ConsensusMessage{
-				from:  bm.cm.id,
-				to:    id,
-				slice: bm.cm.engine.TakeSlice(index),
-			},
-			pmsg: nil,
-		}
-
-		messages = append(messages, &message)
-	}
-
-	return messages
-}
-
-func (bm BrngMachine) Shares() shamir.VerifiableShares {
-	if bm.machineType == BrngTypePlayer {
-		if bm.pm != nil {
-			return bm.pm.Shares()
-		}
-	}
-
-	return nil
-}
-
-func (bm BrngMachine) Commitments() []shamir.Commitment {
-	if bm.machineType == BrngTypePlayer {
-		if bm.pm != nil {
-			return bm.pm.Commitments()
-		}
-	}
-
-	return nil
-}
