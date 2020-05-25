@@ -87,10 +87,14 @@ func RandomValidTable(indices []secp256k1.Secp256k1N, h curve.Point, k, b, t int
 	return table
 }
 
+// SlicePos represents the position of a particular element in a given slice.
+// It is addressed by batch number and player.
 type SlicePos struct {
 	batch, player int
 }
 
+// NewSlicePos constructs a new SlicePos from the given batch and player
+// indices.
 func NewSlicePos(batch, player int) SlicePos {
 	return SlicePos{batch, player}
 }

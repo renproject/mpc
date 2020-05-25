@@ -50,6 +50,44 @@ func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
 	return surge.Unmarshal(r, (*uint8)(s), m)
 }
 
+// BRNGer represents the state machine for the BRNG algorithm. The state
+// machine can be used for an arbitrary number of invocations of BRNG, however
+// each instance is specific to the indices that it was constructed with.
+//
+// The state machine augments the BRNG algorithm by adding a batch size. This
+// allows the algorithm to be run a given number of times in parallel, making
+// more efficient use of the consensus algorithm.
+//
+// There are four different states:
+//	- Init
+//	- Waiting
+//	- Ok
+//	- Error
+//
+// and state transitions are triggered by three different types of messages:
+//	- Start(k, b)
+//	- Slice
+//	- Reset
+//
+// The state transitions are as follows:
+//	- Init
+//		- Start(k, b) 	-> Waiting
+//		- Reset			-> Init
+//		- Otherwise		-> Do nothing
+//
+//	- Waiting
+//		- Valid slice 		-> Ok
+//		- Invalid slice 	-> Error
+//		- Reset				-> Init
+//		- Otherwise 		-> Do nothing
+//
+//	- Ok
+//		- Reset			-> Init
+//		- Otherwise 	-> Do nothing
+//
+//	- Error
+//		- Reset			-> Init
+//		- Otherwise 	-> Do nothing
 type BRNGer struct {
 	state     State
 	batchSize uint32
