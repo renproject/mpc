@@ -8,6 +8,8 @@ import (
 	mtu "github.com/renproject/mpc/testutil"
 )
 
+// PlayerMessage represents a message that a player sends to the consensus
+// trusted party in an invocation of the BRNG algorithm.
 type PlayerMessage struct {
 	from, to mtu.ID
 	row      brng.Row
@@ -23,6 +25,7 @@ func (pm PlayerMessage) To() mtu.ID {
 	return pm.to
 }
 
+// Row returns the row that the message contains.
 func (pm PlayerMessage) Row() brng.Row {
 	return pm.row
 }
@@ -60,6 +63,9 @@ func (pm *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, err
 }
 
+// ConsensusMessage represents the message that the consensus trusted party
+// sends to all of the parties once consensus has been reached in the BRNG
+// algorithm.
 type ConsensusMessage struct {
 	from, to mtu.ID
 	slice    brng.Slice
@@ -108,6 +114,8 @@ func (cm *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, err
 }
 
+// BrngMessage is a wrapper for any of the messages that can be sent during an
+// invocation of the BRNG algorithm.
 type BrngMessage struct {
 	msg mtu.Message
 }

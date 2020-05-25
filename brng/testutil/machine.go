@@ -175,6 +175,7 @@ func (cm ConsensusMachine) InitialMessages() []mtu.Message {
 	return nil
 }
 
+// Handle implements the Machine interface.
 func (cm *ConsensusMachine) Handle(msg mtu.Message) []mtu.Message {
 	pmsg := msg.(*PlayerMessage)
 
@@ -222,6 +223,15 @@ type BrngMachine struct {
 	machine mtu.Machine
 }
 
+// NewMachine constructs a new machine for the BRNG algorithm tests. The
+// machine can represent either a player or the consensus trusted party, and
+// this is determined by the machineType argument. The machine will have an ID
+// given by the id argument, and the ID of the consensus trusted party is
+// consID. The IDs of all of the players in network is playerIDs. The
+// corresponding Shamir indices is given by the indices argument. The
+// honestIndices argument is the list of those indices for which the players
+// are honest; neither offline nor malicious. h is the Pedersen parameter, k is
+// the Shamir threshold and b is the batch size.
 func NewMachine(
 	machineType TypeID,
 	id, consID mtu.ID,
