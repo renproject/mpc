@@ -288,11 +288,16 @@ var _ = Describe("BRNG", func() {
 				playerIDs[i] = ID(i + 1)
 			}
 			consID := ID(len(indices) + 1)
+			shuffleMsgs, isOffline := MessageShufflerDropper(playerIDs, rand.Intn(k))
 
 			machines := make([]Machine, 0, len(indices)+1)
-			for _, id := range playerIDs {
+			honestIndices := make([]secp256k1.Secp256k1N, 0, len(isOffline))
+			for i, id := range playerIDs {
 				machine := btu.NewMachine(btu.BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
 				machines = append(machines, &machine)
+				if !isOffline[id] {
+					honestIndices = append(honestIndices, indices[i])
+				}
 			}
 			// FIXME: Correctly construct the honest indices.
 			cmachine := btu.NewMachine(
@@ -301,14 +306,12 @@ var _ = Describe("BRNG", func() {
 				consID,
 				playerIDs,
 				indices,
-				indices,
+				honestIndices,
 				h,
 				k,
 				b,
 			)
 			machines = append(machines, &cmachine)
-
-			shuffleMsgs, _ := MessageShufflerDropper(playerIDs, 0)
 
 			network := NewNetwork(machines, shuffleMsgs)
 			network.SetCaptureHist(true)
@@ -316,21 +319,37 @@ var _ = Describe("BRNG", func() {
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
 
+			// Check that for each batch, every player has the same output
+			// commitment.
 			for j := 0; j < b; j++ {
-				for i := 1; i < len(machines)-1; i++ {
-					prevMachine := machines[i-1].(*btu.BrngMachine)
-					thisMachine := machines[i].(*btu.BrngMachine)
+				// Get a reference commitment from one of the online machines.
+				var i int
+				for i = 0; isOffline[machines[i].ID()]; i++ {
+				}
+				machine := machines[i].(*btu.BrngMachine)
+				comm := machine.Commitments()[j]
 
-					prevComm := prevMachine.Commitments()[j]
-					Expect(thisMachine.Commitments()[j].Eq(&prevComm)).To(BeTrue())
+				for i := 0; i < len(machines)-1; i++ {
+					if isOffline[playerIDs[i]] {
+						continue
+					}
+
+					machine := machines[i].(*btu.BrngMachine)
+					Expect(machine.Commitments()[j].Eq(&comm)).To(BeTrue())
 				}
 			}
 
+			// Check that for each batch, the output shares of the online
+			// players form a consistent and valid sharing.
 			reconstructor := shamir.NewReconstructor(indices)
 			vsschecker := shamir.NewVSSChecker(h)
 			for j := 0; j < b; j++ {
-				shares := make(shamir.VerifiableShares, 0, b)
+				shares := make(shamir.VerifiableShares, 0, n-len(isOffline))
 				for i := 0; i < len(machines)-1; i++ {
+					if isOffline[playerIDs[i]] {
+						continue
+					}
+
 					pmachine := machines[i].(*btu.BrngMachine)
 					machineShares := pmachine.Shares()
 					machineCommitments := pmachine.Commitments()
