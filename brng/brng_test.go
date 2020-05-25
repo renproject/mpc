@@ -1,18 +1,19 @@
 package brng_test
 
 import (
+	"bytes"
 	"math/rand"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/brng"
-	"github.com/renproject/mpc/brng/testutil"
 	. "github.com/renproject/mpc/testutil"
-	"github.com/renproject/secp256k1-go"
-	"github.com/renproject/shamir"
+	"github.com/renproject/surge"
 
 	btu "github.com/renproject/mpc/brng/testutil"
+	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
 )
@@ -79,7 +80,7 @@ var _ = Describe("BRNG", func() {
 		k, t, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		slice, _ := testutil.RandomInvalidSlice(to, indices, h, n, k, b, k)
+		slice, _ := btu.RandomInvalidSlice(to, indices, h, n, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
@@ -360,6 +361,69 @@ var _ = Describe("BRNG", func() {
 
 				Expect(stu.VsharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 			}
+		})
+	})
+
+	//
+	// Miscellaneous tests
+	//
+
+	Context("Marshalling", func() {
+		trials := 100
+
+		It("should be equal after marshalling and unmarshalling", func() {
+			buf := bytes.NewBuffer([]byte{})
+			indices := stu.RandomIndices(n)
+
+			for i := 0; i < trials; i++ {
+				buf.Reset()
+				brnger1 := New(indices, h)
+				m, err := brnger1.Marshal(buf, brnger1.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var brnger2 BRNGer
+				m, err = brnger2.Unmarshal(buf, brnger1.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				Expect(brnger1).To(Equal(brnger2))
+			}
+		})
+
+		It("should fail when marshalling without enough remaining bytes", func() {
+			buf := bytes.NewBuffer([]byte{})
+			indices := stu.RandomIndices(n)
+			brnger := New(indices, h)
+
+			for i := 0; i < brnger.SizeHint(); i++ {
+				buf.Reset()
+				_, err := brnger.Marshal(buf, i)
+				Expect(err).To(HaveOccurred())
+			}
+		})
+
+		It("should fail when marshalling without enough remaining bytes", func() {
+			indices := stu.RandomIndices(n)
+			brnger1 := New(indices, h)
+			bs, _ := surge.ToBinary(brnger1)
+
+			var brnger2 BRNGer
+			for i := 0; i < brnger1.SizeHint(); i++ {
+				buf := bytes.NewBuffer(bs)
+
+				_, err := brnger2.Unmarshal(buf, i)
+				Expect(err).To(HaveOccurred())
+			}
+		})
+	})
+
+	Context("Getters", func() {
+		It("should return the number of indices for the instance", func() {
+			indices := stu.RandomIndices(n)
+			brnger := New(indices, h)
+
+			Expect(brnger.N()).To(Equal(len(indices)))
 		})
 	})
 })
