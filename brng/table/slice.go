@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
 
@@ -21,7 +22,22 @@ func (slice Slice) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (slice *Slice) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*[]Col)(slice), m)
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	*slice = (*slice)[:0]
+	for i := uint32(0); i < l; i++ {
+		*slice = append(*slice, Col{})
+		m, err = (*slice)[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }
 
 // BatchSize returns the number of Cols in the slice, which is equal to the

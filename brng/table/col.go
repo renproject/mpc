@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
 
@@ -21,7 +22,22 @@ func (col Col) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*[]Element)(col), m)
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	*col = (*col)[:0]
+	for i := uint32(0); i < l; i++ {
+		*col = append(*col, Element{})
+		m, err = (*col)[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }
 
 // Sum returns the share and Pedersen commitment that corresponds to the sum of

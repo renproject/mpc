@@ -4,8 +4,11 @@ import (
 	"io"
 
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
+
+const FnSizeBytes = 32
 
 // A Row represents a batch of Sharings that one player generates during BRNG.
 type Row []Sharing
@@ -22,7 +25,22 @@ func (row Row) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*[]Sharing)(row), m)
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	*row = (*row)[:0]
+	for i := uint32(0); i < l; i++ {
+		*row = append(*row, Sharing{})
+		m, err = (*row)[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }
 
 // MakeRow allocates and returns a new empty row.

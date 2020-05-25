@@ -26,6 +26,10 @@ func NewElement(
 	return Element{from, share, commitment}
 }
 
+func (e Element) From() secp256k1.Secp256k1N {
+	return e.from
+}
+
 // Share returns the share of the element
 func (e Element) Share() shamir.VerifiableShare {
 	return e.share
@@ -60,7 +64,7 @@ func (e Element) Marshal(w io.Writer, m int) (int, error) {
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (e Element) Unmarshal(r io.Reader, m int) (int, error) {
+func (e *Element) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err := e.from.Unmarshal(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling from: %v", err)
