@@ -8,6 +8,8 @@ import (
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
+
+	"github.com/renproject/mpc/brng/table"
 )
 
 // State is an enumeration of the possible states for the BRNG state machine.
@@ -176,15 +178,17 @@ func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
 
 // TransitionStart performs the state transition for the BRNGer state machine
 // upon receiving a start message.
-func (brnger *BRNGer) TransitionStart(k, b int) Row {
+func (brnger *BRNGer) TransitionStart(k, b int) table.Row {
 	if brnger.state != Init {
 		return nil
 	}
 
-	row := MakeRow(brnger.sharer.N(), k, b)
+	row := table.MakeRow(brnger.sharer.N(), k, b)
 	for i := range row {
 		r := secp256k1.RandomSecp256k1N()
-		brnger.sharer.Share(&row[i].shares, &row[i].commitment, r, k)
+		pointerToShares := row[i].BorrowShares()
+		pointerToCommitment := row[i].BorrowCommitment()
+		brnger.sharer.Share(pointerToShares, pointerToCommitment, r, k)
 	}
 
 	brnger.state = Waiting
@@ -195,7 +199,7 @@ func (brnger *BRNGer) TransitionStart(k, b int) Row {
 
 // TransitionSlice performs the state transition for the BRNger state machine
 // upon receiving a slice.
-func (brnger *BRNGer) TransitionSlice(slice Slice) (shamir.VerifiableShares, []shamir.Commitment, []Element) {
+func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShares, []shamir.Commitment, []table.Element) {
 	if brnger.state != Waiting {
 		return nil, nil, nil
 	}

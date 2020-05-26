@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/renproject/mpc/brng"
-	"github.com/renproject/mpc/brng/mock"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 
+	"github.com/renproject/mpc/brng"
+	"github.com/renproject/mpc/brng/table"
+	"github.com/renproject/mpc/brng/mock"
 	mtu "github.com/renproject/mpc/testutil"
 )
 
@@ -18,7 +19,7 @@ import (
 // algorithm.
 type PlayerMachine struct {
 	id, consID mtu.ID
-	row        brng.Row
+	row        table.Row
 	brnger     brng.BRNGer
 
 	shares      shamir.VerifiableShares

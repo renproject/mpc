@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/renproject/mpc/brng"
+	"github.com/renproject/mpc/brng/table"
 	mtu "github.com/renproject/mpc/testutil"
 )
 
@@ -12,7 +12,7 @@ import (
 // trusted party in an invocation of the BRNG algorithm.
 type PlayerMessage struct {
 	from, to mtu.ID
-	row      brng.Row
+	row      table.Row
 }
 
 // From implements the Message interface.
@@ -25,8 +25,7 @@ func (pm PlayerMessage) To() mtu.ID {
 	return pm.to
 }
 
-// Row returns the row that the message contains.
-func (pm PlayerMessage) Row() brng.Row {
+func (pm PlayerMessage) Row() table.Row {
 	return pm.row
 }
 
@@ -68,7 +67,7 @@ func (pm *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
 // algorithm.
 type ConsensusMessage struct {
 	from, to mtu.ID
-	slice    brng.Slice
+	slice    table.Slice
 }
 
 // From implements the Message interface.
