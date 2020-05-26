@@ -136,11 +136,28 @@ var _ = Describe("BRNG", func() {
 				Expect(brnger.State()).To(Equal(Ok))
 			})
 
-			Specify("Invalid Slice -> Error", func() {
-				invalidSlice, _ := btu.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
-				brnger.TransitionSlice(invalidSlice)
+			Context("Invalid Slice -> Error", func() {
+				Specify("Slice with wrong batch size", func() {
+					invalidSlice := btu.RandomValidSlice(to, indices, h, k, rand.Intn(b-1)+1, k-1)
+					brnger.TransitionSlice(invalidSlice)
 
-				Expect(brnger.State()).To(Equal(Error))
+					Expect(brnger.State()).To(Equal(Error))
+				})
+
+				Specify("Slice with invalid form", func() {
+					invalidSlice := make([]Col, b)
+					invalidSlice[0] = make([]Element, k)
+					brnger.TransitionSlice(invalidSlice)
+
+					Expect(brnger.State()).To(Equal(Error))
+				})
+
+				Specify("Slice with faults", func() {
+					invalidSlice, _ := btu.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
+					brnger.TransitionSlice(invalidSlice)
+
+					Expect(brnger.State()).To(Equal(Error))
+				})
 			})
 
 			Specify("Reset -> Init", func() {
