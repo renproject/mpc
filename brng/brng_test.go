@@ -146,11 +146,11 @@ var _ = Describe("BRNG", func() {
 				})
 
 				Specify("Slice with invalid form", func() {
-					invalidSlice := make([]Col, b)
+					invalidSlice := make([]table.Col, b)
 
 					// The slice will have an invalid form if any of the
 					// columns have a different length than the others.
-					invalidSlice[0] = make([]Element, k)
+					invalidSlice[0] = make([]table.Element, k)
 					brnger.TransitionSlice(invalidSlice)
 
 					Expect(brnger.State()).To(Equal(Error))
