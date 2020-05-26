@@ -136,7 +136,7 @@ var _ = Describe("Table", func() {
 
 		Context("Marshalling and Unmarshalling", func() {
 			It("Marshals and Unmarshals correctly", func() {
-				for t := 0; t < 1; t++ {
+				for t := 0; t < LoopTests; t++ {
 					n := 5 + rand.Intn(40)
 					h := curve.Random()
 					to := secp256k1.RandomSecp256k1N()

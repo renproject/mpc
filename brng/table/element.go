@@ -26,6 +26,7 @@ func NewElement(
 	return Element{from, share, commitment}
 }
 
+// From returns the index of the player that created the element
 func (e Element) From() secp256k1.Secp256k1N {
 	return e.from
 }

@@ -8,8 +8,6 @@ import (
 	"github.com/renproject/surge"
 )
 
-const FnSizeBytes = 32
-
 // A Row represents a batch of Sharings that one player generates during BRNG.
 type Row []Sharing
 
@@ -26,7 +24,7 @@ func (row Row) Marshal(w io.Writer, m int) (int, error) {
 // Unmarshal implements the surge.Unmarshaler interface.
 func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}

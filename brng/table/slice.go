@@ -23,7 +23,7 @@ func (slice Slice) Marshal(w io.Writer, m int) (int, error) {
 // Unmarshal implements the surge.Unmarshaler interface.
 func (slice *Slice) Unmarshal(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -46,7 +46,8 @@ func (slice Slice) BatchSize() int {
 	return len(slice)
 }
 
-// HasValidForm returns true
+// HasValidForm returns true if the slice has a positive batch size and all of
+// the columns have the same height, and false otherwise.
 func (slice Slice) HasValidForm() bool {
 	if slice.BatchSize() == 0 {
 		return false

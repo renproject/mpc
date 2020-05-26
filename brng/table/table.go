@@ -72,7 +72,7 @@ func (t Table) Marshal(w io.Writer, m int) (int, error) {
 // Unmarshal implements the surge.Unmarshaler interface.
 func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, FnSizeBytes, r, m)
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
