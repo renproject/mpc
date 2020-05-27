@@ -9,92 +9,14 @@ import (
 	"github.com/renproject/surge"
 )
 
-// Fn represents a convenience type for Secp256k1N
-type Fn secp256k1.Secp256k1N
-
-// State is an enumeration of the possible states for the RNG state machine
-type State uint8
-
-// Constants that represent the different possible states for RNGer
-const (
-	// Init signifies that the RNG state machine is in the initialises state
-	Init = State(iota)
-
-	// WaitingOpen signifies that the RNG state machine is waiting for more
-	// openings from other players in the network, it does not say anything about
-	// whether or not the machine has not received shares to construct its own shares
-	WaitingOpen
-
-	// Done signifies that the RNG state machine has received `k` share openings,
-	// that may or may not include the machine's own share. It also signifies
-	// that the state machine now holds and can respond with `b` unbiased random numbers
-	Done
-)
-
-// String implements the Stringer interface
-func (s State) String() string {
-	switch s {
-	case Init:
-		return "Init"
-	case WaitingOpen:
-		return "WaitingOpen"
-	case Done:
-		return "Done"
-	default:
-		return fmt.Sprintf("Unknown state (%v)", uint8(s))
-	}
-}
-
-// SizeHint implements the surge.SizeHinter interface
-func (s State) SizeHint() int { return 1 }
-
-// Marshal implements the surge.Marshaler interface
-func (s State) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, uint8(s), m)
-}
-
-// Unmarshal implements the surge.Unmarshaler interface
-func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*uint8)(s), m)
-}
-
-// TransitionEvent represents the different outcomes that can occur when
-// the state machine receives and processes shares/openings
-type TransitionEvent uint8
-
-const (
-	// Initialised represents the event returned when the RNG state machine
-	// is initialised and hence is now in the Init state
-	Initialised = TransitionEvent(iota)
-
-	// SharesIgnored represents the event returned when the RNG state machine
-	// received `b` sets of verifiable shares that were invalid in some way
-	SharesIgnored
-
-	// SharesConstructed represents the event returned when the RNG state machine
-	// received `b` valid sets of verifiable shares and it was able to
-	// construct its own shares successfully
-	SharesConstructed
-
-	// OpeningsIgnored represents the event returned when the RNG state machine
-	// received directed openings that were invalid in some way
-	OpeningsIgnored
-
-	// OpeningsAdded represents the event returned when the RNG state machine
-	// received valid directed openings and hence added them to its sets of openings
-	OpeningsAdded
-
-	// RNGsReconstructed represents the event returned when the RNG state machine
-	// received the `k` set of directed openings and hence was able to reconstruct
-	// `b` random numbers. This also signifies that the RNG state machine has now
-	// transitioned to the `Done` state and holds the reconstructed unbiased random numbers
-	RNGsReconstructed
-)
-
 // RNGer describes the structure of the Random Number Generation machine
 type RNGer struct {
-	state     State
-	nPlayers  uint32
+	state State
+	index Fn
+
+	// TODO: add this field while marshaling/unmarshaling
+	indices []Fn
+
 	batchSize uint32
 	threshold uint32
 	isReady   bool
@@ -104,14 +26,14 @@ type RNGer struct {
 	ownSetsOfCommitments [][]shamir.Commitment
 
 	// TODO: add these fields while marshaling/unmarshaling
-	// openingsMap map[Fn]shamir.VerifiableShares
-	// nOpenings uint32
+	openingsMap map[Fn]shamir.VerifiableShares
+	nOpenings   uint32
 }
 
 // SizeHint implements the surge.SizeHinter interface
 func (rnger RNGer) SizeHint() int {
 	return rnger.state.SizeHint() +
-		surge.SizeHint(rnger.nPlayers) +
+		surge.SizeHint(rnger.index) +
 		surge.SizeHint(rnger.batchSize) +
 		surge.SizeHint(rnger.threshold) +
 		surge.SizeHint(rnger.isReady)
@@ -123,9 +45,9 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("marshaling state: %v", err)
 	}
-	m, err = surge.Marshal(w, uint32(rnger.nPlayers), m)
+	m, err = surge.Marshal(w, secp256k1.Secp256k1N(rnger.index), m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling nPlayers: %v", err)
+		return m, fmt.Errorf("marshaling index: %v", err)
 	}
 	m, err = surge.Marshal(w, uint32(rnger.batchSize), m)
 	if err != nil {
@@ -148,9 +70,9 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling state: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &rnger.nPlayers, m)
+	m, err = surge.Unmarshal(r, (*secp256k1.Secp256k1N)(&rnger.index), m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling nPlayers: %v", err)
+		return m, fmt.Errorf("unmarshaling index: %v", err)
 	}
 	m, err = surge.Unmarshal(r, &rnger.batchSize, m)
 	if err != nil {
@@ -173,8 +95,8 @@ func (rnger RNGer) State() State {
 }
 
 // N returns the number of machine replicas participating in the RNG protocol
-func (rnger RNGer) N() uint32 {
-	return rnger.nPlayers
+func (rnger RNGer) N() int {
+	return len(rnger.indices)
 }
 
 // BatchSize returns the batch size of the RNGer state machine.
@@ -192,13 +114,16 @@ func (rnger RNGer) Threshold() uint32 {
 }
 
 // New creates a new RNG state machine for a given batch size
+// ownIndex is the current machine's index
+// indices is the set of player indices
 // n is the number of players participating in the RNG protocol
 // b is the number of random numbers generated in one invocation of RNG protocol
 // k is the reconstruction threshold for every random number
-//
-// TODO: Accept an `indices` argument that represents the `n` indices of the `n` players
-// TODO: Accept an `index` argumment that represents the given machine's index
-func New(n, b, k uint32) (TransitionEvent, RNGer) {
+func New(
+	ownIndex Fn,
+	indices []Fn,
+	b, k uint32,
+) (TransitionEvent, RNGer) {
 	state := Init
 
 	// Declare variable to hold RNG machine's computed shares and commitments
@@ -206,15 +131,28 @@ func New(n, b, k uint32) (TransitionEvent, RNGer) {
 	ownSetsOfShares := make([]shamir.VerifiableShares, b)
 	ownSetsOfCommitments := make([][]shamir.Commitment, b)
 	for i := 0; i < int(b); i++ {
-		ownSetsOfShares[i] = make(shamir.VerifiableShares, n)
-		ownSetsOfCommitments[i] = make([]shamir.Commitment, n)
+		ownSetsOfShares[i] = make(shamir.VerifiableShares, len(indices))
+		ownSetsOfCommitments[i] = make([]shamir.Commitment, len(indices))
+	}
+
+	// Declare variable to hold received openings and allocate necessary memory
+	openingsMap := make(map[Fn]shamir.VerifiableShares)
+	for j := 0; j < len(indices); j++ {
+		// Each verifiable share is for each of the `b` unbiased random numbers
+		openingsMap[indices[j]] = make(shamir.VerifiableShares, b)
 	}
 
 	return Initialised, RNGer{
-		state: state, nPlayers: n,
-		batchSize: b, threshold: k, isReady: false,
+		state:                state,
+		index:                ownIndex,
+		indices:              indices,
+		batchSize:            b,
+		threshold:            k,
+		isReady:              false,
 		ownSetsOfShares:      ownSetsOfShares,
 		ownSetsOfCommitments: ownSetsOfCommitments,
+		openingsMap:          openingsMap,
+		nOpenings:            0,
 	}
 }
 
@@ -280,8 +218,10 @@ func (rnger *RNGer) TransitionShares(
 				rnger.ownSetsOfShares[i] = append(rnger.ownSetsOfShares[i], accShare)
 				rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], accCommitment)
 
-				// TODO: if `j` is the current machine's index, then populate the `openingsMap`
-				// TODO: if `j` is the current machine's index, then increment `nOpenings`
+				// If j is the current machine's index, then populate the `openingsMap`
+				if rnger.index.Uint64() == uint64(j) {
+					rnger.openingsMap[rnger.index][i] = accShare
+				}
 			}
 		} else {
 			// Simply append empty slices
@@ -295,6 +235,9 @@ func (rnger *RNGer) TransitionShares(
 
 	// Mark that the machine has constructed its own shares
 	rnger.isReady = true
+
+	// Increment `nOpenings` now that we have one set of valid openings
+	rnger.nOpenings = rnger.nOpenings + 1
 
 	return SharesConstructed
 }
