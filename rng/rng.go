@@ -6,8 +6,12 @@ import (
 
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 )
+
+// Fn represents a convenience type for Secp256k1N
+type Fn = secp256k1.Secp256k1N
 
 // RNGer describes the structure of the Random Number Generation machine
 type RNGer struct {
@@ -26,8 +30,14 @@ type RNGer struct {
 	ownSetsOfCommitments [][]shamir.Commitment
 
 	// TODO: add these fields while marshaling/unmarshaling
-	openingsMap map[Fn]shamir.VerifiableShares
-	nOpenings   uint32
+	openingsMap  map[Fn]shamir.VerifiableShares
+	openingsFrom []Fn
+	nOpenings    uint32
+
+	checker       shamir.VSSChecker
+	reconstructor shamir.Reconstructor
+
+	randomNumbers []Fn
 }
 
 // SizeHint implements the surge.SizeHinter interface
@@ -45,7 +55,7 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("marshaling state: %v", err)
 	}
-	m, err = surge.Marshal(w, secp256k1.Secp256k1N(rnger.index), m)
+	m, err = rnger.index.Marshal(w, m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling index: %v", err)
 	}
@@ -70,7 +80,7 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling state: %v", err)
 	}
-	m, err = surge.Unmarshal(r, (*secp256k1.Secp256k1N)(&rnger.index), m)
+	m, err = rnger.index.Unmarshal(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling index: %v", err)
 	}
@@ -123,6 +133,7 @@ func New(
 	ownIndex Fn,
 	indices []Fn,
 	b, k uint32,
+	h curve.Point,
 ) (TransitionEvent, RNGer) {
 	state := Init
 
@@ -137,10 +148,14 @@ func New(
 
 	// Declare variable to hold received openings and allocate necessary memory
 	openingsMap := make(map[Fn]shamir.VerifiableShares)
+	openingsFrom := make([]Fn, k)
 	for j := 0; j < len(indices); j++ {
 		// Each verifiable share is for each of the `b` unbiased random numbers
 		openingsMap[indices[j]] = make(shamir.VerifiableShares, b)
 	}
+
+	// Declare variable to hold random numbers and allocate memory
+	randomNumbers := make([]Fn, b)
 
 	return Initialised, RNGer{
 		state:                state,
@@ -152,7 +167,11 @@ func New(
 		ownSetsOfShares:      ownSetsOfShares,
 		ownSetsOfCommitments: ownSetsOfCommitments,
 		openingsMap:          openingsMap,
+		openingsFrom:         openingsFrom,
 		nOpenings:            0,
+		checker:              shamir.NewVSSChecker(h),
+		reconstructor:        shamir.NewReconstructor(indices),
+		randomNumbers:        randomNumbers,
 	}
 }
 
@@ -237,7 +256,26 @@ func (rnger *RNGer) TransitionShares(
 	rnger.isReady = true
 
 	// Increment `nOpenings` now that we have one set of valid openings
+	// Add own index to the list of indices from which we have received openings
 	rnger.nOpenings = rnger.nOpenings + 1
+	rnger.openingsFrom = append(rnger.openingsFrom, rnger.index)
+
+	// If this was the kth valid opening
+	if rnger.nOpenings == rnger.Threshold() {
+		success, err := rnger.reconstruct()
+
+		// Panic if we encountered an error in reconstruction
+		if err != nil {
+			panic(err)
+		}
+
+		// If successful, return appropriate event
+		// and transition the machine's state to `Done`
+		if success {
+			rnger.state = Done
+			return RNGsReconstructed
+		}
+	}
 
 	return SharesConstructed
 }
@@ -261,17 +299,73 @@ func (rnger RNGer) HasConstructedShares() bool {
 // Since the RNG machine is capable of generating `b` random numbers, we expect
 // other players to supply `b` directed openings of their shares too.
 func (rnger *RNGer) TransitionOpen(
-	index Fn,
+	fromIndex Fn,
 	openings shamir.VerifiableShares,
 	commitments []shamir.Commitment,
 ) TransitionEvent {
-	return OpeningsIgnored
+	// Ignore if the number of openings supplied is not equal to the number commitments
+	if len(openings) != len(commitments) {
+		return OpeningsIgnored
+	}
+
+	// Ignore if the number of openings/commitments supplied is not equal
+	// to the RNG machine's batch size
+	if len(openings) != int(rnger.BatchSize()) {
+		return OpeningsIgnored
+	}
+
+	// If the fromIndex cannot be found in the set of valid machine indices
+	// ignore the openings
+	validIndex := false
+	for _, index := range rnger.indices {
+		if index.Eq(&fromIndex) {
+			validIndex = true
+		}
+	}
+	if validIndex == false {
+		return OpeningsIgnored
+	}
+
+	// Verify that each opening is consistent with its respective commitment
+	for i, opening := range openings {
+		if !rnger.checker.IsValid(&commitments[i], &opening) {
+			return OpeningsInconsistent
+		}
+	}
+
+	// At this point we know that the openings are valid, so can be added
+	rnger.openingsMap[fromIndex] = openings
+	rnger.nOpenings = rnger.nOpenings + 1
+	rnger.openingsFrom = append(rnger.openingsFrom, fromIndex)
+
+	// If this was the kth valid opening
+	if rnger.nOpenings == rnger.Threshold() {
+		success, err := rnger.reconstruct()
+
+		// Panic if we encountered an error in reconstruction
+		if err != nil {
+			panic(err)
+		}
+
+		// If successful, return appropriate event
+		// and transition the machine's state to `Done`
+		if success {
+			rnger.state = Done
+			return RNGsReconstructed
+		}
+	}
+
+	return OpeningsAdded
 }
 
 // ReconstructedRandomNumbers returns the `b` random numbers that have been
 // reconstructed by the RNG machine. This also means that the RNG machine is in
 // the `Done` state. If it isn't this returns `nil`
 func (rnger RNGer) ReconstructedRandomNumbers() []Fn {
+	if rnger.State() == Done {
+		return rnger.randomNumbers
+	}
+
 	return nil
 }
 
@@ -279,5 +373,41 @@ func (rnger RNGer) ReconstructedRandomNumbers() []Fn {
 // reconstructed by the RNG machine. This also means that the RNG machine is in
 // the `Done` state. If it isn't this returns empty instance of Fn
 func (rnger RNGer) ReconstructedRandomNumber(bID uint32) Fn {
+	if bID >= rnger.BatchSize() {
+		return Fn{}
+	}
+
+	if rnger.State() == Done {
+		return rnger.randomNumbers[bID]
+	}
+
 	return Fn{}
+}
+
+// reconstruct tries to reconstruct the `b` random numbers for RNG state machine.
+// This returns true if it was successfully able to reconstruct the random numbers, false otherwise.
+// On success, the RNG state machine's `randomNumbers` field should contain the `b`
+// unbiased random numbers
+// On failure, this returns the error encountered that can be handled by the calling function
+func (rnger *RNGer) reconstruct() (bool, error) {
+	// Over all of RNG machine's batch size
+	for b := 0; b < int(rnger.BatchSize()); b++ {
+		verifiableShares := make(shamir.VerifiableShares, rnger.Threshold())
+
+		// Over all players that we have received valid openings from
+		for _, fromIndex := range rnger.openingsFrom {
+			verifiableShares = append(verifiableShares, rnger.openingsMap[fromIndex][b])
+		}
+
+		// Try to reconstruct an unbiased random number
+		var err error
+		rnger.randomNumbers[b], err = rnger.reconstructor.CheckedOpen(verifiableShares.Shares(), int(rnger.Threshold()))
+
+		// If we encounter an error, return it
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
 }

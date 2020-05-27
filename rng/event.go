@@ -26,9 +26,10 @@ const (
 	// received directed openings that were invalid in some way
 	OpeningsIgnored
 
-	// DuplicateOpenings represents the event returned when the RNG state machine
-	// received directed openings from a player with index that has already been received and processed
-	DuplicateOpenings
+	// OpeningsInconsistent represents the event returned when the RNG state machine
+	// received directed openings from a player which are inconsistent with their
+	// respective commitments
+	OpeningsInconsistent
 
 	// OpeningsAdded represents the event returned when the RNG state machine
 	// received valid directed openings and hence added them to its sets of openings
@@ -52,8 +53,8 @@ func (e TransitionEvent) String() string {
 		return "SharesConstructed"
 	case OpeningsIgnored:
 		return "OpeningsIgnored"
-	case DuplicateOpenings:
-		return "DuplicateOpenings"
+	case OpeningsInconsistent:
+		return "OpeningsInconsistent"
 	case OpeningsAdded:
 		return "OpeningsAdded"
 	case RNGsReconstructed:
