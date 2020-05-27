@@ -37,6 +37,8 @@ type RNGer struct {
 
 	// isReady signifies whether the RNG state machine has received and hence
 	// computed its own shares, or not
+	// CONSIDER: We may not need this, if we can check if using
+	// ownSetsOfShares can already let us know if shares have been constructed or not
 	isReady bool
 
 	// TODO: add this field while marshaling/unmarshaling
@@ -181,13 +183,13 @@ func New(
 	ownSetsOfShares := make([]shamir.VerifiableShares, b)
 	ownSetsOfCommitments := make([][]shamir.Commitment, b)
 	for i := 0; i < int(b); i++ {
-		ownSetsOfShares[i] = make(shamir.VerifiableShares, len(indices))
-		ownSetsOfCommitments[i] = make([]shamir.Commitment, len(indices))
+		ownSetsOfShares[i] = make(shamir.VerifiableShares, 0, len(indices))
+		ownSetsOfCommitments[i] = make([]shamir.Commitment, 0, len(indices))
 	}
 
 	// Declare variable to hold received openings and allocate necessary memory
 	openingsMap := make(map[Fn]shamir.VerifiableShares)
-	openingsFrom := make([]Fn, k)
+	openingsFrom := make([]Fn, 0, k)
 	for j := 0; j < len(indices); j++ {
 		// Each verifiable share is for each of the `b` unbiased random numbers
 		openingsMap[indices[j]] = make(shamir.VerifiableShares, b)
@@ -325,6 +327,20 @@ func (rnger RNGer) HasConstructedShares() bool {
 	return rnger.isReady
 }
 
+// ConstructedSetsOfShares returns the RNG state machine's all constructed sets of shares
+func (rnger RNGer) ConstructedSetsOfShares() ([]shamir.VerifiableShares, [][]shamir.Commitment) {
+	return rnger.ownSetsOfShares, rnger.ownSetsOfCommitments
+}
+
+// ConstructedSetOfShares returns the RNG state machine's bID'th constructed set of shares
+func (rnger RNGer) ConstructedSetOfShares(bID uint32) (shamir.VerifiableShares, []shamir.Commitment) {
+	if bID >= rnger.BatchSize() {
+		return nil, nil
+	}
+
+	return rnger.ownSetsOfShares[bID], rnger.ownSetsOfCommitments[bID]
+}
+
 // TransitionOpen performs the state transition for the RNG state machine upon
 // receiving directed openings of shares from other players.
 //
@@ -434,8 +450,8 @@ func (rnger *RNGer) reconstruct() (bool, error) {
 		verifiableShares := make(shamir.VerifiableShares, rnger.Threshold())
 
 		// Over all players that we have received valid openings from
-		for _, fromIndex := range rnger.openingsFrom {
-			verifiableShares = append(verifiableShares, rnger.openingsMap[fromIndex][b])
+		for i, fromIndex := range rnger.openingsFrom {
+			verifiableShares[i] = rnger.openingsMap[fromIndex][b]
 		}
 
 		// Try to reconstruct an unbiased random number
