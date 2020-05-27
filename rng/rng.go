@@ -21,8 +21,8 @@ const (
 	Init = State(iota)
 
 	// WaitingOpen signifies that the RNG state machine is waiting for more
-	// openings from other players in the network. It does not say anything
-	// about whether or not the machine itself has constructed its own shares
+	// openings from other players in the network, it does not say anything about
+	// whether or not the machine has not received shares to construct its own shares
 	WaitingOpen
 
 	// Done signifies that the RNG state machine has received `k` share openings,
@@ -94,15 +94,27 @@ const (
 // RNGer describes the structure of the Random Number Generation machine
 type RNGer struct {
 	state     State
+	nPlayers  uint32
 	batchSize uint32
 	threshold uint32
+	isReady   bool
+
+	// TODO: add these fields while marshaling/unmarshaling
+	ownSetsOfShares      []shamir.VerifiableShares
+	ownSetsOfCommitments [][]shamir.Commitment
+
+	// TODO: add these fields while marshaling/unmarshaling
+	// openingsMap map[Fn]shamir.VerifiableShares
+	// nOpenings uint32
 }
 
 // SizeHint implements the surge.SizeHinter interface
 func (rnger RNGer) SizeHint() int {
 	return rnger.state.SizeHint() +
+		surge.SizeHint(rnger.nPlayers) +
 		surge.SizeHint(rnger.batchSize) +
-		surge.SizeHint(rnger.threshold)
+		surge.SizeHint(rnger.threshold) +
+		surge.SizeHint(rnger.isReady)
 }
 
 // Marshal implements the surge.Marshaler interface
@@ -111,6 +123,10 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("marshaling state: %v", err)
 	}
+	m, err = surge.Marshal(w, uint32(rnger.nPlayers), m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling nPlayers: %v", err)
+	}
 	m, err = surge.Marshal(w, uint32(rnger.batchSize), m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling batchSize: %v", err)
@@ -118,6 +134,10 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	m, err = surge.Marshal(w, uint32(rnger.threshold), m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling threshold: %v", err)
+	}
+	m, err = surge.Marshal(w, rnger.isReady, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling isReady: %v", err)
 	}
 	return m, nil
 }
@@ -128,6 +148,10 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling state: %v", err)
 	}
+	m, err = surge.Unmarshal(r, &rnger.nPlayers, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling nPlayers: %v", err)
+	}
 	m, err = surge.Unmarshal(r, &rnger.batchSize, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
@@ -136,12 +160,21 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling threshold: %v", err)
 	}
+	m, err = surge.Unmarshal(r, &rnger.isReady, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling isReady: %v", err)
+	}
 	return m, nil
 }
 
 // State returns the current state of the RNGer state machine
 func (rnger RNGer) State() State {
 	return rnger.state
+}
+
+// N returns the number of machine replicas participating in the RNG protocol
+func (rnger RNGer) N() uint32 {
+	return rnger.nPlayers
 }
 
 // BatchSize returns the batch size of the RNGer state machine.
@@ -159,10 +192,30 @@ func (rnger RNGer) Threshold() uint32 {
 }
 
 // New creates a new RNG state machine for a given batch size
-func New(b, k uint32) (TransitionEvent, RNGer) {
+// n is the number of players participating in the RNG protocol
+// b is the number of random numbers generated in one invocation of RNG protocol
+// k is the reconstruction threshold for every random number
+//
+// TODO: Accept an `indices` argument that represents the `n` indices of the `n` players
+// TODO: Accept an `index` argumment that represents the given machine's index
+func New(n, b, k uint32) (TransitionEvent, RNGer) {
 	state := Init
 
-	return Initialised, RNGer{state, b, k}
+	// Declare variable to hold RNG machine's computed shares and commitments
+	// and allocate necessary memory
+	ownSetsOfShares := make([]shamir.VerifiableShares, b)
+	ownSetsOfCommitments := make([][]shamir.Commitment, b)
+	for i := 0; i < int(b); i++ {
+		ownSetsOfShares[i] = make(shamir.VerifiableShares, n)
+		ownSetsOfCommitments[i] = make([]shamir.Commitment, n)
+	}
+
+	return Initialised, RNGer{
+		state: state, nPlayers: n,
+		batchSize: b, threshold: k, isReady: false,
+		ownSetsOfShares:      ownSetsOfShares,
+		ownSetsOfCommitments: ownSetsOfCommitments,
+	}
 }
 
 // TransitionShares performs the state transition for the RNG state machine
@@ -181,17 +234,75 @@ func (rnger *RNGer) TransitionShares(
 
 	// Ignore the shares if their number of sets does not match
 	// the batch size of the RNG state machine
-	if len(setsOfShares) != int(rnger.batchSize) {
+	if len(setsOfShares) != int(rnger.BatchSize()) {
 		return SharesIgnored
 	}
 
-	return SharesIgnored
+	// Declare variable to hold field element for N
+	n := secp256k1.NewSecp256k1N(uint64(rnger.N()))
+
+	// For every set of verifiable shares
+	for i, setOfShares := range setsOfShares {
+		// Continue only if there are `k` number of shares in the set
+		// Otherwise assign empty shares/commitments
+		if len(setOfShares) == int(rnger.Threshold()) {
+			// For j = 1 to N
+			// compute r_{i,j}
+			// append to ownSetsOfShares
+			// append to ownSetsOfCommitments
+			for j := 1; j <= int(rnger.N()); j++ {
+				// Initialise the accumulators with the first values
+				var accShare = setOfShares[0]
+				var accCommitment shamir.Commitment
+				accCommitment.Set(setsOfCommitments[i][0])
+				var multiplier = secp256k1.OneSecp256k1N()
+
+				// For all other shares and commitments
+				for l := 1; l < len(setOfShares); l++ {
+					// Initialise share
+					var share = setOfShares[l]
+					var commitment shamir.Commitment
+					commitment.Set(setsOfCommitments[i][l])
+
+					// Scale it by the multiplier
+					share.Scale(&share, &multiplier)
+					commitment.Scale(&commitment, &multiplier)
+
+					// Add it to the accumulators
+					accShare.Add(&accShare, &share)
+					accCommitment.Add(&accCommitment, &commitment)
+
+					// Scale the multiplier
+					multiplier.Mul(&multiplier, &n)
+				}
+
+				// append the accumulated share/commitment
+				rnger.ownSetsOfShares[i] = append(rnger.ownSetsOfShares[i], accShare)
+				rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], accCommitment)
+
+				// TODO: if `j` is the current machine's index, then populate the `openingsMap`
+				// TODO: if `j` is the current machine's index, then increment `nOpenings`
+			}
+		} else {
+			// Simply append empty slices
+			rnger.ownSetsOfShares = append(rnger.ownSetsOfShares, shamir.VerifiableShares{})
+			rnger.ownSetsOfCommitments = append(rnger.ownSetsOfCommitments, []shamir.Commitment{})
+		}
+	}
+
+	// Transition the machine's state
+	rnger.state = WaitingOpen
+
+	// Mark that the machine has constructed its own shares
+	rnger.isReady = true
+
+	return SharesConstructed
 }
 
 // HasConstructedShares returns `true` if the RNG machine has received its `b` sets
 // of verifiable shares, and upon that constructed its shares. It returns false otherwise
-func (rnger RNGer) HasConstructedShares(bID uint32) bool {
-	return false
+func (rnger RNGer) HasConstructedShares() bool {
+	return rnger.isReady
 }
 
 // TransitionOpen performs the state transition for the RNG state machine upon
