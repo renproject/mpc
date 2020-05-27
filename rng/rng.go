@@ -15,28 +15,67 @@ type Fn = secp256k1.Secp256k1N
 
 // RNGer describes the structure of the Random Number Generation machine
 type RNGer struct {
+	// state signifies the current state of the RNG state machine
 	state State
+
+	// index signifies the given RNG state machine's index
 	index Fn
 
 	// TODO: add this field while marshaling/unmarshaling
+	// indices signifies the list of all such RNG state machines
+	// participating in the RNG protocol
 	indices []Fn
 
+	// batchSize signifies the number of unbiased random numbers that
+	// will be generated on successful execution of the RNG protocol
 	batchSize uint32
-	threshold uint32
-	isReady   bool
 
-	// TODO: add these fields while marshaling/unmarshaling
-	ownSetsOfShares      []shamir.VerifiableShares
+	// threshold signifies the reconstruction threshold (k), or the
+	// minimum number of valid openings required before a random number
+	// can be reconstructed by polynomial interpolation
+	threshold uint32
+
+	// isReady signifies whether the RNG state machine has received and hence
+	// computed its own shares, or not
+	isReady bool
+
+	// TODO: add this field while marshaling/unmarshaling
+	// ownSetsOfShares signifies the given RNG state machine's own shares
+	ownSetsOfShares []shamir.VerifiableShares
+
+	// TODO: add this field while marshaling/unmarshaling
+	// ownSetsOfCommitments signifies the given RNG state machine's sets of
+	// commitments for its respective sets of shares
 	ownSetsOfCommitments [][]shamir.Commitment
 
-	// TODO: add these fields while marshaling/unmarshaling
-	openingsMap  map[Fn]shamir.VerifiableShares
-	openingsFrom []Fn
-	nOpenings    uint32
+	// TODO: add this field while marshaling/unmarshaling
+	// openingsMap holds a map of verifiableShares by player index
+	// It is updated whenever the given RNG state machine receives valid
+	// openings from other players in the network
+	// CONSIDER: rename to `openingsByIndex`?
+	openingsMap map[Fn]shamir.VerifiableShares
 
-	checker       shamir.VSSChecker
+	// TODO: add this field while marshaling/unmarshaling
+	// openingsFrom represents a list of RNG machine indices that have
+	// revealed/communicated their openings to this RNG machine
+	openingsFrom []Fn
+
+	// TODO: add this field while marshaling/unmarshaling
+	// nOpenings signifies the number of valid openings this RNG machine has
+	// CONSIDER: We actually don't need this, as simply `len(openingsFrom)`
+	// can be used instead
+	nOpenings uint32
+
+	// checker is the VerifiableShares checker, capable of verifying the
+	// consistency of a verifiable share with respect to its commitment
+	checker shamir.VSSChecker
+
+	// reconstruct is the Shares reconstructor, capable of reconstructing a
+	// secret by polynomial interpolation given enough evaluations/shares
 	reconstructor shamir.Reconstructor
 
+	// randomNumbers holds the unbiased random numbers that the current
+	// RNG state machine has reconstructed
 	randomNumbers []Fn
 }
 
