@@ -224,6 +224,11 @@ func (rnger *RNGer) TransitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
 ) TransitionEvent {
+	// Simply ignore if the RNG state machine is in the `Done` state
+	if rnger.State() == Done {
+		return SharesIgnored
+	}
+
 	// Ignore the shares if their number of sets does not match
 	// the number of sets of commitments
 	if len(setsOfShares) != len(setsOfCommitments) {
@@ -358,6 +363,11 @@ func (rnger *RNGer) TransitionOpen(
 	openings shamir.VerifiableShares,
 	commitments []shamir.Commitment,
 ) TransitionEvent {
+	// Simply ignore if the RNG state machine is already in the `Done` state
+	if rnger.State() == Done {
+		return OpeningsIgnored
+	}
+
 	// Ignore if the number of openings supplied is not equal to the number commitments
 	if len(openings) != len(commitments) {
 		return OpeningsIgnored
