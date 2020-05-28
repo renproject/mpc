@@ -7,6 +7,7 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
+	"github.com/renproject/surge"
 )
 
 // Fn is a convenience type alias.
@@ -38,15 +39,15 @@ const (
 	// This can be output in both the Waiting and Done states.
 	IndexOutOfRange
 
-	// InvalidShare signifies that the received share is not valid with respect
-	// to the commitment for the current sharing instance. This can be output
-	// in both the Waiting and Done states.
-	InvalidShare
+	// InvalidShares signifies that at least one out of the received shares
+	// is not valid with respect to the commitment for the current sharing
+	// instance. This can be output in both the Waiting and Done states.
+	InvalidShares
 
-	// ShareAdded signifies that a share was valid and added to the list of
-	// valid shares. This can happen either in the Waiting state when there are
+	// SharesAdded signifies that a set of shares was valid and added to the list of
+	// set of valid shares. This can happen either in the Waiting state when there are
 	// still not enough shares for reconstruction, or in the Done state.
-	ShareAdded
+	SharesAdded
 )
 
 // String implements the Stringer interface.
@@ -61,10 +62,10 @@ func (e ShareEvent) String() string {
 		s = "IndexDuplicate"
 	case IndexOutOfRange:
 		s = "IndexOutOfRange"
-	case InvalidShare:
-		s = "InvalidShare"
-	case ShareAdded:
-		s = "ShareAdded"
+	case InvalidShares:
+		s = "InvalidShares"
+	case SharesAdded:
+		s = "SharesAdded"
 	default:
 		s = fmt.Sprintf("Unknown(%v)", uint8(e))
 	}
@@ -170,39 +171,45 @@ func (e ResetEvent) String() string {
 //		- Waiting(`c`, `k`, `i`), `i` < `k-1` 	-> Waiting(`c`, `k`, `i+1`)
 type Opener struct {
 	// Event machine state
-	commitment  shamir.Commitment
-	shareBuffer shamir.Shares
+	batchSize    uint32
+	commitments  []shamir.Commitment
+	shareBuffers []shamir.Shares
 	// The state variable `k` in the formal description can be computed using
 	// the commitment alone.
 
 	// Other members
-	secret        Fn
+	secrets       []Fn
 	checker       shamir.VSSChecker
 	reconstructor shamir.Reconstructor
 }
 
 // SizeHint implements the surge.SizeHinter interface.
 func (opener Opener) SizeHint() int {
-	return opener.commitment.SizeHint() +
-		opener.shareBuffer.SizeHint() +
-		opener.secret.SizeHint() +
+	return surge.SizeHint(opener.batchSize) +
+		surge.SizeHint(opener.commitments) +
+		surge.SizeHint(opener.shareBuffers) +
+		surge.SizeHint(opener.secrets) +
 		opener.checker.SizeHint() +
 		opener.reconstructor.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
 func (opener Opener) Marshal(w io.Writer, m int) (int, error) {
-	m, err := opener.commitment.Marshal(w, m)
+	m, err := surge.Marshal(w, opener.batchSize, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling commitment: %v", err)
+		return m, fmt.Errorf("marshaling batchSize: %v", err)
 	}
-	m, err = opener.shareBuffer.Marshal(w, m)
+	m, err = surge.Marshal(w, opener.commitments, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling share buffer: %v", err)
+		return m, fmt.Errorf("marshaling commitments: %v", err)
 	}
-	m, err = opener.secret.Marshal(w, m)
+	m, err = surge.Marshal(w, opener.shareBuffers, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling secret: %v", err)
+		return m, fmt.Errorf("marshaling share buffers: %v", err)
+	}
+	m, err = surge.Marshal(w, opener.secrets, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling secrets: %v", err)
 	}
 	m, err = opener.checker.Marshal(w, m)
 	if err != nil {
@@ -217,17 +224,21 @@ func (opener Opener) Marshal(w io.Writer, m int) (int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := opener.commitment.Unmarshal(r, m)
+	m, err := surge.Unmarshal(r, &opener.batchSize, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
+	}
+	m, err = surge.Unmarshal(r, &opener.commitments, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
-	m, err = opener.shareBuffer.Unmarshal(r, m)
+	m, err = surge.Unmarshal(r, &opener.shareBuffers, m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling share buffer: %v", err)
+		return m, fmt.Errorf("unmarshaling share buffers: %v", err)
 	}
-	m, err = opener.secret.Unmarshal(r, m)
+	m, err = surge.Unmarshal(r, &opener.secrets, m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling secret: %v", err)
+		return m, fmt.Errorf("unmarshaling secrets: %v", err)
 	}
 	m, err = opener.checker.Unmarshal(r, m)
 	if err != nil {
@@ -239,57 +250,75 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 	}
 
 	// Set the share buffer to have the correct capacity.
-	shareBuffer := make(shamir.Shares, opener.reconstructor.N())
-	n := copy(shareBuffer, opener.shareBuffer)
-	if n < len(opener.shareBuffer) {
-		return m, fmt.Errorf(
-			"invalid marshalled data: "+
-				"%v shares in the share buffer but the reconstructor is instantiated for %v players",
-			len(opener.shareBuffer),
-			opener.reconstructor.N(),
-		)
+	for i := 0; i < int(opener.batchSize); i++ {
+		shareBuffer := make(shamir.Shares, opener.reconstructor.N())
+		n := copy(shareBuffer, opener.shareBuffers[i])
+		if n < len(opener.shareBuffers[i]) {
+			return m, fmt.Errorf(
+				"invalid marshalled data: "+
+					"%v shares in the share buffer but the reconstructor is instantiated for %v players",
+				len(opener.shareBuffers[i]),
+				opener.reconstructor.N(),
+			)
+		}
+		opener.shareBuffers[i] = shareBuffer[:n]
 	}
-	opener.shareBuffer = shareBuffer[:n]
 
 	return m, nil
 }
 
+// BatchSize returns the batch size of the opener machine
+// That is, the number of secrets it can reconstruct in one successful execution
+func (opener Opener) BatchSize() uint32 {
+	return opener.batchSize
+}
+
 // K returns the reconstruction threshold for the current sharing instance.
 func (opener Opener) K() int {
-	return opener.commitment.Len()
+	return opener.commitments[0].Len()
 }
 
 // I returns the current number of valid shares that the opener has received.
 func (opener Opener) I() int {
-	return len(opener.shareBuffer)
+	return len(opener.shareBuffers[0])
 }
 
-// Secret returns the reconstructed secret for the current sharing instance,
-// but only if the state is Done. Otherwise, it will return the secret for the
+// Secrets returns the reconstructed secrets for the current sharing instance,
+// but only if the state is Done. Otherwise, it will return the secrets for the
 // last sharing instance that made it to state Done. If the state machine has
-// never been in the state Done, then the zero share is returned.
-func (opener Opener) Secret() Fn {
-	return opener.secret
+// never been in the state Done, then the zero shares are returned.
+func (opener Opener) Secrets() []Fn {
+	return opener.secrets
 }
 
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
-func New(indices []Fn, h curve.Point) Opener {
+func New(b uint32, indices []Fn, h curve.Point) Opener {
+	shareBuffers := make([]shamir.Shares, b)
+	for i := 0; i < int(b); i++ {
+		shareBuffers[i] = make(shamir.Shares, 0, len(indices))
+	}
+
+	commitments := make([]shamir.Commitment, b)
+
+	secrets := make([]Fn, b)
+
 	return Opener{
-		commitment:    shamir.Commitment{},
-		shareBuffer:   make(shamir.Shares, 0, len(indices)),
-		secret:        Fn{},
+		batchSize:     b,
+		commitments:   commitments,
+		shareBuffers:  shareBuffers,
+		secrets:       secrets,
 		checker:       shamir.NewVSSChecker(h),
 		reconstructor: shamir.NewReconstructor(indices),
 	}
 }
 
-// TransitionShare handles the state transition logic upon receiving a share,
+// TransitionShares handles the state transition logic upon receiving a set of shares,
 // and returns a ShareEvent that describes the outcome of the state transition.
 // See the documentation for the different ShareEvent possiblities for their
 // significance.
-func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
+func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEvent {
 	// Do nothing when in the Uninitialised state. This can be checked by
 	// seeing if k is zero, as Resetting the state machine can only be done if
 	// k is greater than 0.
@@ -297,8 +326,27 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 		return Ignored
 	}
 
-	if !opener.checker.IsValid(&opener.commitment, &share) {
-		return InvalidShare
+	// If the number of verifiable shares provided is not equal to the batch size
+	// of the Opener machine, ignore them
+	if len(shares) != int(opener.BatchSize()) {
+		return Ignored
+	}
+
+	// For every share in the set of shares
+	firstShare := shares[0].Share()
+	firstIndex := firstShare.Index()
+	for i, vshare := range shares {
+		// Verify that each provided share has the same index
+		share := vshare.Share()
+		if !share.IndexEq(&firstIndex) {
+			return InvalidShares
+		}
+
+		// Even if a single share is invalid, we mark the entire set of shares
+		// to be invalid
+		if !opener.checker.IsValid(&opener.commitments[i], &vshare) {
+			return InvalidShares
+		}
 	}
 
 	// Check if a share with this index is already in the buffer. Note that
@@ -309,9 +357,13 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	// TODO: These temporary variables are gross, and there will probably be an
 	// easier way if we were using shares that assumed the indices of the
 	// shares were sequential starting from 1. Look into enforcing this.
+	//
+	// We already have checked that every share in the provided set of shares
+	// has the same index.
+	// So checking this constraint for just the first share buffer suffices
 	var ind Fn
-	innerShare := share.Share()
-	for _, s := range opener.shareBuffer {
+	innerShare := shares[0].Share()
+	for _, s := range opener.shareBuffers[0] {
 		ind = s.Index()
 		if innerShare.IndexEq(&ind) {
 			return IndexDuplicate
@@ -323,55 +375,79 @@ func (opener *Opener) TransitionShare(share shamir.VerifiableShare) ShareEvent {
 	// must actually be a valid share. This requires knowledge of the sharing
 	// polynomials which would imply either a malicious dealer or a malicious
 	// player that contructs new valid shares after being able to open.
-	if len(opener.shareBuffer) == cap(opener.shareBuffer) {
+	//
+	// Since we append shares to every buffer at the same time, at every point
+	// in time the lenth of each share buffer will be the same.
+	// Again, checking this constraint for just the first share buffer suffices
+	if len(opener.shareBuffers[0]) == cap(opener.shareBuffers[0]) {
 		return IndexOutOfRange
 	}
 
-	// At this stage we know that the share is allowed to be added to the
-	// buffer.
-	opener.shareBuffer = append(opener.shareBuffer, share.Share())
+	// ---------------------------------------------------------------------------
+
+	// At this stage we know that the shares are allowed to be added to the
+	// respective buffers
+	for i := 0; i < int(opener.BatchSize()); i++ {
+		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i].Share())
+	}
 
 	// If we have just added the kth share, we can reconstruct.
-	if len(opener.shareBuffer) == opener.K() {
+	if len(opener.shareBuffers[0]) == opener.K() {
 		var err error
-		opener.secret, err = opener.reconstructor.CheckedOpen(opener.shareBuffer, opener.K())
+		for i := 0; i < int(opener.BatchSize()); i++ {
+			opener.secrets[i], err = opener.reconstructor.CheckedOpen(opener.shareBuffers[i], opener.K())
 
-		// The previous checks should ensure that the error does not occur.
-		//
-		// TODO: It seems wrong that we did the checks here, but then many of
-		// the same checks get run in CheckedOpen. Think about whether this is
-		// OK.
-		if err != nil {
-			panic(err)
+			// The previous checks should ensure that the error does not occur.
+			//
+			// TODO: It seems wrong that we did the checks here, but then many of
+			// the same checks get run in CheckedOpen. Think about whether this is
+			// OK.
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		return Done
 	}
 
-	// At this stage we have added the share to the buffer but we were not yet
-	// able to reconstruct.
-	return ShareAdded
+	// At this stage we have added the shares to the respective buffers
+	// but we were not yet able to reconstruct the secrets
+	return SharesAdded
 }
 
 // TransitionReset handles the state transition logic on receiving a Reset
 // message, and returns a ResetEvent that describes the outcome of the state
 // transition. See the documentation for the different ResetEvent possiblities
 // for their significance.
-func (opener *Opener) TransitionReset(c shamir.Commitment) ResetEvent {
+func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEvent {
 	// It is not valid for k to be less than 1
-	if c.Len() < 1 {
-		panic(fmt.Sprintf("k must be greater than 0: got %v", c.Len()))
+	if len(commitments) != int(opener.BatchSize()) {
+		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.BatchSize(), len(commitments)))
+	}
+
+	// Make sure each commitment is for the same threshold
+	// and that that threshold is greater than 0
+	c0 := commitments[0]
+	for _, c := range commitments {
+		if c.Len() != c0.Len() {
+			panic(fmt.Sprintf("k must be equal for all commitments"))
+		}
+	}
+	if c0.Len() < 1 {
+		panic(fmt.Sprintf("k must be greater than 0, got: %v", c0.Len()))
 	}
 
 	var ret ResetEvent
-	if len(opener.shareBuffer) < opener.K() {
+	if len(opener.shareBuffers[0]) < opener.K() {
 		ret = Aborted
 	} else {
 		ret = Reset
 	}
 
-	opener.shareBuffer = opener.shareBuffer[:0]
-	opener.commitment = c
+	for i := 0; i < int(opener.BatchSize()); i++ {
+		opener.shareBuffers[i] = opener.shareBuffers[i][:0]
+		opener.commitments[i] = commitments[i]
+	}
 
 	return ret
 }
