@@ -140,6 +140,11 @@ func (e ResetEvent) String() string {
 //	- Receiving a new share
 //	- Resetting for a new sharing instance
 //
+// The Opener state machine functions in batches, and has a batch size
+// associated with it. The number of shares it receives every time MUST be
+// equal to the batch size. When it has received threshold number of sets
+// of shares, it reconstructs all the secrets, a total of batch size in number.
+//
 // All of the state transitions are listed in the following and are grouped by
 // the current state. The condition Valid('c') for a share means that the share
 // is valid with repect to the commitment `c` and also that the index for the
