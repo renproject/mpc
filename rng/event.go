@@ -40,6 +40,10 @@ const (
 	// `b` random numbers. This also signifies that the RNG state machine has now
 	// transitioned to the `Done` state and holds the reconstructed unbiased random numbers
 	RNGsReconstructed
+
+	// Reset represents the event returned when the RNG state machine is
+	// reset and hence is now back to the Init state
+	Reset
 )
 
 // String implements the Stringer interface
@@ -59,6 +63,8 @@ func (e TransitionEvent) String() string {
 		return "OpeningsAdded"
 	case RNGsReconstructed:
 		return "RNGsReconstructed"
+	case Reset:
+		return "Reset"
 	default:
 		return fmt.Sprintf("Unknown transition event (%v)", uint8(e))
 	}

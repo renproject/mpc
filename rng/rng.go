@@ -54,6 +54,11 @@ type RNGer struct {
 	// ownSetsOfCommitments signifies the given RNG state machine's sets of
 	// commitments for its respective sets of shares
 	ownSetsOfCommitments [][]shamir.Commitment
+
+	// openingsBuffer holds openings from other players that the RNG machine
+	// has received before receiving shares/commitments from its own BRNG.
+	// These openings are processed as soon as this machine receives its BRNG outputs
+	openingsBuffer []shamir.VerifiableShares
 }
 
 // SizeHint implements the surge.SizeHinter interface
@@ -179,6 +184,10 @@ func New(
 	// within the RNG state machine
 	opener := open.New(b, indices, h)
 
+	// Create a buffer to store openings that we receive from other players
+	// before receiving own BRNGer's output commitments
+	openingsBuffer := make([]shamir.VerifiableShares, 0, len(indices))
+
 	return Initialised, RNGer{
 		state:                state,
 		index:                ownIndex,
@@ -189,6 +198,7 @@ func New(
 		opener:               opener,
 		ownSetsOfShares:      ownSetsOfShares,
 		ownSetsOfCommitments: ownSetsOfCommitments,
+		openingsBuffer:       openingsBuffer,
 	}
 }
 
@@ -205,6 +215,8 @@ func (rnger *RNGer) TransitionShares(
 		return SharesIgnored
 	}
 
+	// CONSIDER: Should we ignore we rnger.isReady is already true?
+
 	// Ignore the shares if their number of sets does not match
 	// the number of sets of commitments
 	if len(setsOfShares) != len(setsOfCommitments) {
@@ -220,6 +232,7 @@ func (rnger *RNGer) TransitionShares(
 	// Declare variable to hold field element for N
 	n := secp256k1.NewSecp256k1N(uint64(rnger.N()))
 	locallyComputedShares := make(shamir.VerifiableShares, rnger.BatchSize())
+	locallyComputedCommitments := make([]shamir.Commitment, rnger.BatchSize())
 
 	// For every set of verifiable shares
 	for i, setOfShares := range setsOfShares {
@@ -264,13 +277,20 @@ func (rnger *RNGer) TransitionShares(
 				// which will be later supplied to the Opener machine
 				if rnger.index.Uint64() == uint64(j) {
 					locallyComputedShares[i] = accShare
+					locallyComputedCommitments[i] = accCommitment
 				}
 			}
 		} else {
 			// Simply append empty slices
-			rnger.ownSetsOfShares = append(rnger.ownSetsOfShares, shamir.VerifiableShares{})
-			rnger.ownSetsOfCommitments = append(rnger.ownSetsOfCommitments, []shamir.Commitment{})
+			rnger.ownSetsOfShares[i] = shamir.VerifiableShares{}
+			rnger.ownSetsOfCommitments[i] = []shamir.Commitment{}
 		}
+	}
+
+	// Reset the Opener machine with the computed commitments
+	resetEvent := rnger.opener.TransitionReset(locallyComputedCommitments)
+	if resetEvent != open.Reset {
+		panic(fmt.Sprintf("Could not set commitments in Opener: %v", locallyComputedCommitments))
 	}
 
 	// Transition the machine's state
@@ -284,6 +304,17 @@ func (rnger *RNGer) TransitionShares(
 	if event == open.Done {
 		rnger.state = Done
 		return RNGsReconstructed
+	}
+
+	// Process all openings received from other players, that have been
+	// stored in the openings buffer
+	for _, opening := range rnger.openingsBuffer {
+		event := rnger.opener.TransitionShares(opening)
+
+		if event == open.Done {
+			rnger.state = Done
+			return RNGsReconstructed
+		}
 	}
 
 	return SharesConstructed
@@ -354,13 +385,19 @@ func (rnger *RNGer) TransitionOpen(
 		return OpeningsIgnored
 	}
 
-	// Pass these openings to the Opener state machine
-	event := rnger.opener.TransitionShares(openings)
+	// Pass these openings to the Opener state machine if we have already
+	// received valid commitments from BRNG outputs
+	// Otherwise store the openings in a buffer to be processed later
+	if rnger.isReady {
+		event := rnger.opener.TransitionShares(openings)
 
-	// If the opener has received enough shares to be able to reconstruct the secrets
-	if event == open.Done {
-		rnger.state = Done
-		return RNGsReconstructed
+		// If the opener has received enough shares to be able to reconstruct the secrets
+		if event == open.Done {
+			rnger.state = Done
+			return RNGsReconstructed
+		}
+	} else {
+		rnger.openingsBuffer = append(rnger.openingsBuffer, openings)
 	}
 
 	return OpeningsAdded
@@ -375,4 +412,19 @@ func (rnger RNGer) ReconstructedRandomNumbers() []open.Fn {
 	}
 
 	return nil
+}
+
+// Reset transitions the RNG state machine back to the Init state
+// Note that the Opener state machine is not reset at this point in time
+// It is reset when the RNG receives its BRNG outputs again
+func (rnger *RNGer) Reset() TransitionEvent {
+	for i := 0; i < int(rnger.BatchSize()); i++ {
+		rnger.ownSetsOfShares[i] = rnger.ownSetsOfShares[i][:0]
+		rnger.ownSetsOfCommitments[i] = rnger.ownSetsOfCommitments[i][:0]
+	}
+	rnger.openingsBuffer = rnger.openingsBuffer[:0]
+	rnger.isReady = false
+	rnger.state = Init
+
+	return Reset
 }
