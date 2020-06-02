@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/renproject/mpc/open"
+	openutil "github.com/renproject/mpc/open/util"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/surge"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -35,45 +37,53 @@ var _ = Describe("Opener", func() {
 	h := curve.Random()
 
 	Describe("Properties", func() {
+		b := 5
 		n := 20
 		k := 7
 
 		var (
-			indices []open.Fn
-			opener  open.Opener
-			secret  open.Fn
-			shares  shamir.VerifiableShares
-			c       shamir.Commitment
-			sharer  shamir.VSSharer
+			indices      []open.Fn
+			opener       open.Opener
+			secrets      []open.Fn
+			setsOfShares []shamir.VerifiableShares
+			commitments  []shamir.Commitment
+			sharer       shamir.VSSharer
 		)
 
 		Setup := func() (
 			[]open.Fn,
 			open.Opener,
-			open.Fn,
-			shamir.VerifiableShares,
-			shamir.Commitment,
+			[]open.Fn,
+			[]shamir.VerifiableShares,
+			[]shamir.Commitment,
 			shamir.VSSharer,
 		) {
 			indices := stu.SequentialIndices(n)
-			secret := secp256k1.RandomSecp256k1N()
+			secrets := make([]open.Fn, b)
+			for i := 0; i < b; i++ {
+				secrets[i] = secp256k1.RandomSecp256k1N()
+			}
+
 			sharer := shamir.NewVSSharer(indices, h)
-			shares := make(shamir.VerifiableShares, n)
-			c := shamir.NewCommitmentWithCapacity(k)
-			sharer.Share(&shares, &c, secret, k)
 
-			// Randomise the order of the shares.
-			rand.Shuffle(len(shares), func(i, j int) {
-				shares[i], shares[j] = shares[j], shares[i]
-			})
+			setsOfShares := make([]shamir.VerifiableShares, b)
+			for i := 0; i < b; i++ {
+				setsOfShares[i] = make(shamir.VerifiableShares, n)
+			}
 
-			opener = open.New(indices, h)
+			commitments := make([]shamir.Commitment, b)
+			for i := 0; i < b; i++ {
+				commitments[i] = shamir.NewCommitmentWithCapacity(k)
+				sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
+			}
 
-			return indices, opener, secret, shares, c, sharer
+			opener = open.New(uint32(b), indices, h)
+
+			return indices, opener, secrets, setsOfShares, commitments, sharer
 		}
 
 		JustBeforeEach(func() {
-			indices, opener, secret, shares, c, sharer = Setup()
+			indices, opener, secrets, setsOfShares, commitments, sharer = Setup()
 		})
 
 		InStateWaitingCK0 := func(k int) bool {
@@ -81,9 +91,10 @@ var _ = Describe("Opener", func() {
 		}
 
 		ProgressToWaitingI := func(i int) {
-			_ = opener.TransitionReset(c)
+			_ = opener.TransitionReset(commitments)
 			for j := 0; j < i; j++ {
-				_ = opener.TransitionShare(shares[j])
+				shares := openutil.GetSharesAt(setsOfShares, j)
+				_ = opener.TransitionShares(shares)
 			}
 		}
 
@@ -100,12 +111,13 @@ var _ = Describe("Opener", func() {
 				})
 
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
-					_ = opener.TransitionReset(c)
+					_ = opener.TransitionReset(commitments)
 					Expect(InStateWaitingCK0(k)).To(BeTrue())
 				})
 
 				Specify("Share -> Do nothing", func() {
-					_ = opener.TransitionShare(shares[rand.Intn(n)])
+					shares := openutil.GetSharesAt(setsOfShares, rand.Intn(b))
+					_ = opener.TransitionShares(shares)
 					Expect(opener.K() < 1).To(BeTrue())
 				})
 			})
@@ -114,7 +126,7 @@ var _ = Describe("Opener", func() {
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
 					for i := 0; i < k; i++ {
 						ProgressToWaitingI(i)
-						_ = opener.TransitionReset(c)
+						_ = opener.TransitionReset(commitments)
 						Expect(InStateWaitingCK0(k)).To(BeTrue())
 					}
 				})
@@ -122,40 +134,50 @@ var _ = Describe("Opener", func() {
 				Specify("(i < k-1) Share, Valid(c) -> Waiting(c, k, i+1)", func() {
 					i := rand.Intn(k - 1)
 					ProgressToWaitingI(i)
-					_ = opener.TransitionShare(shares[i])
+					shares := openutil.GetSharesAt(setsOfShares, i)
+					_ = opener.TransitionShares(shares)
 					Expect(opener.I()).To(Equal(i + 1))
 				})
 
 				Specify("(i = k-1) Share, Valid(c) -> Done(c)", func() {
 					ProgressToWaitingI(k - 1)
-					_ = opener.TransitionShare(shares[k-1])
+					shares := openutil.GetSharesAt(setsOfShares, k-1)
+					_ = opener.TransitionShares(shares)
 					Expect(opener.I() >= k).To(BeTrue())
 				})
 
 				Context("Share, not Valid(c) -> Do nothing", func() {
 					Specify("wrong index", func() {
+						// progress till i
 						i := rand.Intn(k)
 						ProgressToWaitingI(i)
-						badShare := shares[i]
-						stu.PerturbIndex(&badShare)
-						_ = opener.TransitionShare(badShare)
+
+						// perturb a random share from `sharesAtI`
+						shares := openutil.GetSharesAt(setsOfShares, i)
+						j := rand.Intn(b)
+						stu.PerturbIndex(&shares[j])
+						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(i))
 					})
 					Specify("wrong value", func() {
 						i := rand.Intn(k)
 						ProgressToWaitingI(i)
-						badShare := shares[i]
-						stu.PerturbValue(&badShare)
-						_ = opener.TransitionShare(badShare)
+
+						shares := openutil.GetSharesAt(setsOfShares, i)
+						j := rand.Intn(b)
+						stu.PerturbValue(&shares[j])
+						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(i))
 					})
 
 					Specify("wrong decommitment", func() {
 						i := rand.Intn(k)
 						ProgressToWaitingI(i)
-						badShare := shares[i]
-						stu.PerturbDecommitment(&badShare)
-						_ = opener.TransitionShare(badShare)
+
+						shares := openutil.GetSharesAt(setsOfShares, i)
+						j := rand.Intn(b)
+						stu.PerturbDecommitment(&shares[j])
+						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(i))
 					})
 				})
@@ -165,39 +187,43 @@ var _ = Describe("Opener", func() {
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
 					for i := 0; i < k; i++ {
 						ProgressToWaitingI(i)
-						_ = opener.TransitionReset(c)
+						_ = opener.TransitionReset(commitments)
 						Expect(InStateWaitingCK0(k)).To(BeTrue())
 					}
 				})
 
 				Specify("Share, Valid(c) -> Do Nothing", func() {
 					ProgressToDone()
-					_ = opener.TransitionShare(shares[k])
+					shares := openutil.GetSharesAt(setsOfShares, k)
+					_ = opener.TransitionShares(shares)
 					Expect(opener.I()).To(Equal(k + 1))
 				})
 
 				Context("Share, not Valid(c) -> Do nothing", func() {
 					Specify("wrong index", func() {
 						ProgressToDone()
-						badShare := shares[k]
-						stu.PerturbIndex(&badShare)
-						_ = opener.TransitionShare(badShare)
+						shares := openutil.GetSharesAt(setsOfShares, k)
+						j := rand.Intn(b)
+						stu.PerturbIndex(&shares[j])
+						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(k))
 					})
 
 					Specify("wrong value", func() {
 						ProgressToDone()
-						badShare := shares[k]
-						stu.PerturbValue(&badShare)
-						_ = opener.TransitionShare(badShare)
+						shares := openutil.GetSharesAt(setsOfShares, k)
+						j := rand.Intn(b)
+						stu.PerturbValue(&shares[j])
+						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(k))
 					})
 
 					Specify("wrong decommitment", func() {
 						ProgressToDone()
-						badShare := shares[k]
-						stu.PerturbDecommitment(&badShare)
-						_ = opener.TransitionShare(badShare)
+						shares := openutil.GetSharesAt(setsOfShares, k)
+						j := rand.Intn(b)
+						stu.PerturbDecommitment(&shares[j])
+						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(k))
 					})
 				})
@@ -211,13 +237,20 @@ var _ = Describe("Opener", func() {
 		Context("Reconstruction (2)", func() {
 			It("should have the correct secret once Done", func() {
 				ProgressToDone()
-				reconstructed := opener.Secret()
-				Expect(reconstructed.Eq(&secret)).To(BeTrue())
+				reconstructed := opener.Secrets()
+				Expect(len(reconstructed)).To(Equal(len(secrets)))
+				Expect(len(reconstructed)).To(Equal(b))
+				for i, reconstructedSecret := range reconstructed {
+					Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
+				}
 
-				for i := k; i < n; i++ {
-					_ = opener.TransitionShare(shares[i])
-					reconstructed = opener.Secret()
-					Expect(reconstructed.Eq(&secret)).To(BeTrue())
+				for j := k; j < n; j++ {
+					shares := openutil.GetSharesAt(setsOfShares, j)
+					_ = opener.TransitionShares(shares)
+					reconstructed = opener.Secrets()
+					for i, reconstructedSecret := range reconstructed {
+						Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
+					}
 				}
 			})
 		})
@@ -230,49 +263,97 @@ var _ = Describe("Opener", func() {
 			Context("Reset events", func() {
 				Specify("Not yet done in a sharing instance -> Aborted", func() {
 					ProgressToWaitingI(rand.Intn(k - 1))
-					event := opener.TransitionReset(c)
+					event := opener.TransitionReset(commitments)
 					Expect(event).To(Equal(open.Aborted))
+				})
+
+				Specify("Length of commitments not equal to the batch size", func() {
+					ProgressToWaitingI(rand.Intn(k - 1))
+
+					for j := 0; j < len(commitments); j++ {
+						commitments = append(commitments[:j], commitments[j+1:]...)
+						Expect(func() { opener.TransitionReset(commitments) }).To(Panic())
+					}
+				})
+
+				Specify("If not all commitments are for the same threshold", func() {
+					ProgressToWaitingI(rand.Intn(k - 1))
+
+					for j := 0; j < len(commitments); j++ {
+						// commitment threshold is changed to < k
+						commitments[j] = shamir.NewCommitmentWithCapacity(1 + rand.Intn(k-1))
+						Expect(func() { opener.TransitionReset(commitments) }).To(Panic())
+					}
+				})
+
+				Specify("If the commitment is for a threshold of 0", func() {
+					ProgressToWaitingI(rand.Intn(k - 1))
+
+					for j := 0; j < len(commitments); j++ {
+						commitments[j] = shamir.NewCommitmentWithCapacity(0)
+					}
+
+					Expect(func() { opener.TransitionReset(commitments) }).To(Panic())
 				})
 
 				Specify("Otherwise -> Reset", func() {
 					// Uninitialised
-					event := opener.TransitionReset(c)
+					event := opener.TransitionReset(commitments)
 					Expect(event).To(Equal(open.Reset))
 
 					// Done
 					ProgressToDone()
 					for i := 0; i < rand.Intn(n-k); i++ {
-						_ = opener.TransitionShare(shares[i+k])
+						shares := openutil.GetSharesAt(setsOfShares, i+k)
+						_ = opener.TransitionShares(shares)
 					}
-					event = opener.TransitionReset(c)
+					event = opener.TransitionReset(commitments)
 					Expect(event).To(Equal(open.Reset))
 				})
 			})
 
 			Context("Share events", func() {
 				Specify("Uninitialised -> Ignored", func() {
-					event := opener.TransitionShare(shares[0])
+					sharesAt0 := openutil.GetSharesAt(setsOfShares, 0)
+					event := opener.TransitionShares(sharesAt0)
 					Expect(event).To(Equal(open.Ignored))
+				})
+
+				Specify("Waiting -> Ignored", func() {
+					i := rand.Intn(k - 1)
+					ProgressToWaitingI(i)
+
+					// delete a single share, so that len(shares) != b
+					shares := openutil.GetSharesAt(setsOfShares, i)
+					for j := 0; j < len(shares); j++ {
+						shares = append(shares[:j], shares[j+1:]...)
+						event := opener.TransitionShares(shares)
+						Expect(event).To(Equal(open.Ignored))
+					}
 				})
 
 				Specify("Waiting, i < k-1 -> ShareAdded", func() {
 					i := rand.Intn(k - 1)
 					ProgressToWaitingI(i)
-					event := opener.TransitionShare(shares[i])
-					Expect(event).To(Equal(open.ShareAdded))
+
+					shares := openutil.GetSharesAt(setsOfShares, i)
+					event := opener.TransitionShares(shares)
+					Expect(event).To(Equal(open.SharesAdded))
 				})
 
 				Specify("Done -> ShareAdded", func() {
 					ProgressToDone()
 					for i := k; i < n; i++ {
-						event := opener.TransitionShare(shares[i])
-						Expect(event).To(Equal(open.ShareAdded))
+						shares := openutil.GetSharesAt(setsOfShares, i)
+						event := opener.TransitionShares(shares)
+						Expect(event).To(Equal(open.SharesAdded))
 					}
 				})
 
 				Specify("Waiting, i = k-1 -> Done", func() {
 					ProgressToWaitingI(k - 1)
-					event := opener.TransitionShare(shares[k-1])
+					shares := openutil.GetSharesAt(setsOfShares, k-1)
+					event := opener.TransitionShares(shares)
 					Expect(event).To(Equal(open.Done))
 				})
 
@@ -281,53 +362,52 @@ var _ = Describe("Opener", func() {
 						ProgressToWaitingI(0)
 
 						// Index
-						badShare := shares[0]
-						stu.PerturbIndex(&badShare)
-						event := opener.TransitionShare(badShare)
-						Expect(event).To(Equal(open.InvalidShare))
+						sharesAt0 := openutil.GetSharesAt(setsOfShares, 0)
+						stu.PerturbIndex(&sharesAt0[0])
+						event := opener.TransitionShares(sharesAt0)
+						Expect(event).To(Equal(open.InvalidShares))
 
 						// Value
-						badShare = shares[0]
-						stu.PerturbValue(&badShare)
-						event = opener.TransitionShare(badShare)
-						Expect(event).To(Equal(open.InvalidShare))
+						stu.PerturbValue(&sharesAt0[0])
+						event = opener.TransitionShares(sharesAt0)
+						Expect(event).To(Equal(open.InvalidShares))
 
 						// Decommitment
-						badShare = shares[0]
-						stu.PerturbDecommitment(&badShare)
-						event = opener.TransitionShare(badShare)
-						Expect(event).To(Equal(open.InvalidShare))
+						stu.PerturbDecommitment(&sharesAt0[0])
+						event = opener.TransitionShares(sharesAt0)
+						Expect(event).To(Equal(open.InvalidShares))
 
 						for i := 0; i < n; i++ {
-							_ = opener.TransitionShare(shares[i])
+							shares := openutil.GetSharesAt(setsOfShares, i)
+							_ = opener.TransitionShares(shares)
 
 							// Index
-							badShare = shares[i]
-							stu.PerturbIndex(&badShare)
-							event := opener.TransitionShare(badShare)
-							Expect(event).To(Equal(open.InvalidShare))
+							j := rand.Intn(b)
+							stu.PerturbIndex(&shares[j])
+							event := opener.TransitionShares(shares)
+							Expect(event).To(Equal(open.InvalidShares))
 
 							// Value
-							badShare = shares[i]
-							stu.PerturbValue(&badShare)
-							event = opener.TransitionShare(badShare)
-							Expect(event).To(Equal(open.InvalidShare))
+							stu.PerturbValue(&shares[j])
+							event = opener.TransitionShares(shares)
+							Expect(event).To(Equal(open.InvalidShares))
 
 							// Decommitment
-							badShare = shares[i]
-							stu.PerturbDecommitment(&badShare)
-							event = opener.TransitionShare(badShare)
-							Expect(event).To(Equal(open.InvalidShare))
+							stu.PerturbDecommitment(&shares[j])
+							event = opener.TransitionShares(shares)
+							Expect(event).To(Equal(open.InvalidShares))
 						}
 					})
 
 					Specify("Duplicate share", func() {
 						ProgressToWaitingI(0)
 						for i := 0; i < n; i++ {
-							_ = opener.TransitionShare(shares[i])
+							shares := openutil.GetSharesAt(setsOfShares, i)
+							_ = opener.TransitionShares(shares)
 
 							for j := 0; j <= i; j++ {
-								event := opener.TransitionShare(shares[j])
+								duplicateShares := openutil.GetSharesAt(setsOfShares, j)
+								event := opener.TransitionShares(duplicateShares)
 								Expect(event).To(Equal(open.IndexDuplicate))
 							}
 						}
@@ -339,13 +419,15 @@ var _ = Describe("Opener", func() {
 						// utilise the sharer to do this.
 						indices = stu.SequentialIndices(n + 1)
 						sharer = shamir.NewVSSharer(indices, h)
-						shares = make(shamir.VerifiableShares, n+1)
-						c = shamir.NewCommitmentWithCapacity(k)
-						sharer.Share(&shares, &c, secret, k)
+						for i := 0; i < b; i++ {
+							setsOfShares[i] = make(shamir.VerifiableShares, n+1)
+							sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
+						}
 
 						// Perform the test
 						ProgressToWaitingI(n)
-						event := opener.TransitionShare(shares[n])
+						sharesAtN := openutil.GetSharesAt(setsOfShares, n)
+						event := opener.TransitionShares(sharesAtN)
 						Expect(event).To(Equal(open.IndexOutOfRange))
 					})
 				})
@@ -358,21 +440,28 @@ var _ = Describe("Opener", func() {
 	//
 
 	Context("Network (4)", func() {
+		b := 5
 		n := 20
 		k := 7
 
 		indices := stu.SequentialIndices(n)
-		shares := make(shamir.VerifiableShares, n)
-		c := shamir.NewCommitmentWithCapacity(k)
+		setsOfShares := make([]shamir.VerifiableShares, b)
+		commitments := make([]shamir.Commitment, b)
 		machines := make([]Machine, n)
 		sharer := shamir.NewVSSharer(indices, h)
-		secret := secp256k1.RandomSecp256k1N()
-		sharer.Share(&shares, &c, secret, k)
-		ids := make([]ID, n)
+		secrets := make([]open.Fn, b)
+		for i := 0; i < b; i++ {
+			setsOfShares[i] = make(shamir.VerifiableShares, n)
+			commitments[i] = shamir.NewCommitmentWithCapacity(k)
+			secrets[i] = secp256k1.RandomSecp256k1N()
+			sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
+		}
 
+		ids := make([]ID, n)
 		for i := range indices {
 			id := ID(i)
-			machine := newMachine(id, n, shares[i], c, open.New(indices, h))
+			sharesAtI := openutil.GetSharesAt(setsOfShares, i)
+			machine := newMachine(id, n, sharesAtI, commitments, open.New(uint32(b), indices, h))
 			machines[i] = &machine
 			ids[i] = id
 		}
@@ -392,12 +481,13 @@ var _ = Describe("Opener", func() {
 				if isOffline[machine.ID()] {
 					continue
 				}
-				reconstructed := machine.(*openMachine).Secret()
-				// Expect(reconstructed.Eq(&secret)).To(BeTrue())
+				reconstructed := machine.(*openMachine).Secrets()
 
-				if !reconstructed.Eq(&secret) {
-					network.Dump("test.dump")
-					Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
+				for i := 0; i < b; i++ {
+					if !reconstructed[i].Eq(&secrets[i]) {
+						network.Dump("test.dump")
+						Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
+					}
 				}
 			}
 		})
@@ -405,7 +495,7 @@ var _ = Describe("Opener", func() {
 })
 
 type shareMsg struct {
-	share    shamir.VerifiableShare
+	shares   shamir.VerifiableShares
 	from, to ID
 }
 
@@ -413,11 +503,11 @@ func (msg shareMsg) From() ID { return msg.from }
 func (msg shareMsg) To() ID   { return msg.to }
 
 func (msg shareMsg) SizeHint() int {
-	return msg.share.SizeHint() + msg.from.SizeHint() + msg.to.SizeHint()
+	return msg.shares.SizeHint() + msg.from.SizeHint() + msg.to.SizeHint()
 }
 
 func (msg shareMsg) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.share.Marshal(w, m)
+	m, err := msg.shares.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
@@ -430,7 +520,7 @@ func (msg shareMsg) Marshal(w io.Writer, m int) (int, error) {
 }
 
 func (msg *shareMsg) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.share.Unmarshal(r, m)
+	m, err := msg.shares.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
@@ -443,11 +533,11 @@ func (msg *shareMsg) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 type openMachine struct {
-	id         ID
-	n          int
-	share      shamir.VerifiableShare
-	commitment shamir.Commitment
-	opener     open.Opener
+	id          ID
+	n           int
+	shares      shamir.VerifiableShares
+	commitments []shamir.Commitment
+	opener      open.Opener
 
 	lastE open.ShareEvent
 }
@@ -455,8 +545,8 @@ type openMachine struct {
 func (om openMachine) SizeHint() int {
 	return om.id.SizeHint() +
 		4 +
-		om.share.SizeHint() +
-		om.commitment.SizeHint() +
+		om.shares.SizeHint() +
+		surge.SizeHint(om.commitments) +
 		om.opener.SizeHint()
 }
 
@@ -474,11 +564,11 @@ func (om openMachine) Marshal(w io.Writer, m int) (int, error) {
 		return m, err
 	}
 
-	m, err = om.share.Marshal(w, m)
+	m, err = om.shares.Marshal(w, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = om.commitment.Marshal(w, m)
+	m, err = surge.Marshal(w, om.commitments, m)
 	if err != nil {
 		return m, err
 	}
@@ -501,11 +591,11 @@ func (om *openMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	v := binary.BigEndian.Uint32(bs[:])
 	om.n = int(v)
 
-	m, err = om.share.Unmarshal(r, m)
+	m, err = om.shares.Unmarshal(r, m)
 	if err != nil {
 		return m, err
 	}
-	m, err = om.commitment.Unmarshal(r, m)
+	m, err = surge.Unmarshal(r, &om.commitments, m)
 	if err != nil {
 		return m, err
 	}
@@ -516,18 +606,18 @@ func (om *openMachine) Unmarshal(r io.Reader, m int) (int, error) {
 func newMachine(
 	id ID,
 	n int,
-	share shamir.VerifiableShare,
-	commitment shamir.Commitment,
+	shares shamir.VerifiableShares,
+	commitments []shamir.Commitment,
 	opener open.Opener,
 ) openMachine {
-	opener.TransitionReset(commitment)
-	_ = opener.TransitionShare(share)
+	opener.TransitionReset(commitments)
+	_ = opener.TransitionShares(shares)
 	lastE := open.ShareEvent(0)
-	return openMachine{id, n, share, commitment, opener, lastE}
+	return openMachine{id, n, shares, commitments, opener, lastE}
 }
 
-func (om openMachine) Secret() open.Fn {
-	return om.opener.Secret()
+func (om openMachine) Secrets() []open.Fn {
+	return om.opener.Secrets()
 }
 
 func (om openMachine) ID() ID {
@@ -541,9 +631,9 @@ func (om openMachine) InitialMessages() []Message {
 			continue
 		}
 		messages = append(messages, &shareMsg{
-			share: om.share,
-			from:  om.id,
-			to:    ID(i),
+			shares: om.shares,
+			from:   om.id,
+			to:     ID(i),
 		})
 	}
 	return messages
@@ -552,7 +642,7 @@ func (om openMachine) InitialMessages() []Message {
 func (om *openMachine) Handle(msg Message) []Message {
 	switch msg := msg.(type) {
 	case *shareMsg:
-		om.lastE = om.opener.TransitionShare(msg.share)
+		om.lastE = om.opener.TransitionShares(msg.shares)
 		return nil
 
 	default:
