@@ -12,6 +12,7 @@ import (
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
+	rtu "github.com/renproject/mpc/rng/testutil"
 )
 
 var _ = Describe("Rng", func() {
@@ -66,28 +67,64 @@ var _ = Describe("Rng", func() {
 	})
 
 	Context("State Transitions and properties", func() {
-		Specify("Initialise RNG machine to Init state", func() {
-			event, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+		Context("Init state", func() {
+			Specify("Initialise RNG machine to Init state", func() {
+				event, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-			Expect(event).To(Equal(rng.Initialised))
-			Expect(rnger.State()).To(Equal(rng.Init))
-			Expect(rnger.N()).To(Equal(n))
-			Expect(rnger.BatchSize()).To(Equal(uint32(b)))
-			Expect(rnger.Threshold()).To(Equal(uint32(k)))
-			Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
-		})
+				Expect(event).To(Equal(rng.Initialised))
+				Expect(rnger.State()).To(Equal(rng.Init))
+				Expect(rnger.N()).To(Equal(n))
+				Expect(rnger.BatchSize()).To(Equal(uint32(b)))
+				Expect(rnger.Threshold()).To(Equal(uint32(k)))
+				Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+			})
 
-		Specify("Reset when already in Init state", func() {
-			_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+			Specify("Reset when already in Init state", func() {
+				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-			event := rnger.Reset()
+				event := rnger.Reset()
 
-			Expect(event).To(Equal(rng.Reset))
-			Expect(rnger.State()).To(Equal(rng.Init))
-			Expect(rnger.N()).To(Equal(n))
-			Expect(rnger.BatchSize()).To(Equal(uint32(b)))
-			Expect(rnger.Threshold()).To(Equal(uint32(k)))
-			Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+				Expect(event).To(Equal(rng.Reset))
+				Expect(rnger.State()).To(Equal(rng.Init))
+				Expect(rnger.N()).To(Equal(n))
+				Expect(rnger.BatchSize()).To(Equal(uint32(b)))
+				Expect(rnger.Threshold()).To(Equal(uint32(k)))
+				Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+			})
+
+			Specify("Supply BRNG shares when in Init state", func() {
+				setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+
+				// Once we have `b` sets of shares and commitments
+				// we are ready to transition the RNG machine
+				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+				event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+
+				Expect(event).To(Equal(rng.SharesConstructed))
+				Expect(rnger.HasConstructedShares()).To(BeTrue())
+				Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+			})
+
+			Specify("Supply directed opening when in Init state", func() {
+				// get a `from` index that is different than own index
+				from := indices[rand.Intn(len(indices))]
+				for from.Eq(&index) {
+					from = indices[rand.Intn(len(indices))]
+				}
+
+				// get this `from` index's sets of shares and commitments
+				// also compute its openings for the player
+				setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+				openings, commitments := rtu.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
+
+				// initialise player's RNG machine
+				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+				event := rnger.TransitionOpen(from, openings, commitments)
+
+				Expect(event).To(Equal(rng.OpeningsAdded))
+				Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+				Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+			})
 		})
 	})
 })
