@@ -385,6 +385,9 @@ func (rnger *RNGer) TransitionOpen(
 		return OpeningsIgnored
 	}
 
+	// Transition the machine's state to WaitingOpen
+	rnger.state = WaitingOpen
+
 	// Pass these openings to the Opener state machine if we have already
 	// received valid commitments from BRNG outputs
 	// Otherwise store the openings in a buffer to be processed later
