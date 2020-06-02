@@ -28,7 +28,6 @@ func NewDebugger(filename string, messageType, machineType interface{}) Debugger
 		panic(err)
 	}
 
-
 	// Unmarshal machines.
 	sl := reflect.New(reflect.SliceOf(reflect.TypeOf(machineType)))
 	_, err = surge.Unmarshal(file, sl.Interface(), surge.MaxBytes)

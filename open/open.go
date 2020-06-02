@@ -388,8 +388,6 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 		return IndexOutOfRange
 	}
 
-	// ---------------------------------------------------------------------------
-
 	// At this stage we know that the shares are allowed to be added to the
 	// respective buffers
 	for i := 0; i < int(opener.BatchSize()); i++ {
@@ -451,7 +449,7 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 
 	for i := 0; i < int(opener.BatchSize()); i++ {
 		opener.shareBuffers[i] = opener.shareBuffers[i][:0]
-		opener.commitments[i] = commitments[i]
+		opener.commitments[i].Set(commitments[i])
 	}
 
 	return ret
