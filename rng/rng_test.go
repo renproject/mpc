@@ -81,6 +81,8 @@ var _ = Describe("Rng", func() {
 
 			Context("When in Init state", func() {
 				Specify("Reset", func() {
+					// If an RNG machine in the Init state is reset, it continues to be
+					// in the init state
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					event := rnger.Reset()
@@ -94,6 +96,9 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply BRNG shares", func() {
+					// If an RNG machine in the Init state is supplied with
+					// valid sets of shares and commitments from its own BRNG outputs
+					// it transitions to the WaitingOpen state
 					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
 
 					// Once we have `b` sets of shares and commitments
@@ -102,8 +107,8 @@ var _ = Describe("Rng", func() {
 					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
 
 					Expect(event).To(Equal(rng.SharesConstructed))
-					Expect(rnger.HasConstructedShares()).To(BeTrue())
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+					Expect(rnger.HasConstructedShares()).To(BeTrue())
 				})
 
 				Specify("Supply BRNG shares of length not equal to batch size", func() {
@@ -115,6 +120,11 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply directed opening", func() {
+					// If an RNG machine in the Init state is supplied with a valid directed opening
+					// it does not react to that and simply ignores it
+					// Only after having constructed its own shares, and being in the WaitingOpen
+					// state, it will handle the directed openings
+
 					// get a `from` index that is different than own index
 					from := indices[rand.Intn(len(indices))]
 					for from.Eq(&index) {
@@ -126,12 +136,12 @@ var _ = Describe("Rng", func() {
 					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
 					openings, commitments := rtu.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
 
-					// initialise player's RNG machine
+					// initialise player's RNG machine and supply openings
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					event := rnger.TransitionOpen(from, openings, commitments)
 
-					Expect(event).To(Equal(rng.OpeningsAdded))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
@@ -188,16 +198,16 @@ var _ = Describe("Rng", func() {
 				})
 			})
 
-			Context("Done state", func() {
-				Specify("Supply BRNG shares when in Done state", func() {
+			Context("When in Done state", func() {
+				Specify("Supply BRNG shares", func() {
 					// TODO
 				})
 
-				Specify("Supply directed opening when in Done state", func() {
+				Specify("Supply directed opening", func() {
 					// TODO
 				})
 
-				Specify("Reset when in Done state", func() {
+				Specify("Reset", func() {
 					// TODO
 				})
 			})

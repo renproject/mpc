@@ -34,12 +34,6 @@ type RNGer struct {
 	// can be reconstructed by polynomial interpolation
 	threshold uint32
 
-	// isReady signifies whether the RNG state machine has received and hence
-	// computed its own shares, or not
-	// CONSIDER: We may not need this, if we can check if using
-	// ownSetsOfShares can already let us know if shares have been constructed or not
-	isReady bool
-
 	// opener is the Opener state machine operating within the RNG state machine
 	// As the RNG machine receives openings from other players, the opener
 	// state machine also transitions, to eventually reconstruct the batchSize
@@ -54,11 +48,6 @@ type RNGer struct {
 	// ownSetsOfCommitments signifies the given RNG state machine's sets of
 	// commitments for its respective sets of shares
 	ownSetsOfCommitments [][]shamir.Commitment
-
-	// openingsBuffer holds openings from other players that the RNG machine
-	// has received before receiving shares/commitments from its own BRNG.
-	// These openings are processed as soon as this machine receives its BRNG outputs
-	openingsBuffer []shamir.VerifiableShares
 }
 
 // SizeHint implements the surge.SizeHinter interface
@@ -67,7 +56,6 @@ func (rnger RNGer) SizeHint() int {
 		surge.SizeHint(rnger.index) +
 		surge.SizeHint(rnger.batchSize) +
 		surge.SizeHint(rnger.threshold) +
-		surge.SizeHint(rnger.isReady) +
 		rnger.opener.SizeHint()
 }
 
@@ -88,10 +76,6 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	m, err = surge.Marshal(w, uint32(rnger.threshold), m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling threshold: %v", err)
-	}
-	m, err = surge.Marshal(w, rnger.isReady, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling isReady: %v", err)
 	}
 	m, err = rnger.opener.Marshal(w, m)
 	if err != nil {
@@ -117,10 +101,6 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err = surge.Unmarshal(r, &rnger.threshold, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling threshold: %v", err)
-	}
-	m, err = surge.Unmarshal(r, &rnger.isReady, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling isReady: %v", err)
 	}
 	m, err = rnger.opener.Unmarshal(r, m)
 	if err != nil {
@@ -184,21 +164,15 @@ func New(
 	// within the RNG state machine
 	opener := open.New(b, indices, h)
 
-	// Create a buffer to store openings that we receive from other players
-	// before receiving own BRNGer's output commitments
-	openingsBuffer := make([]shamir.VerifiableShares, 0, len(indices))
-
 	return Initialised, RNGer{
 		state:                state,
 		index:                ownIndex,
 		indices:              indices,
 		batchSize:            b,
 		threshold:            k,
-		isReady:              false,
 		opener:               opener,
 		ownSetsOfShares:      ownSetsOfShares,
 		ownSetsOfCommitments: ownSetsOfCommitments,
-		openingsBuffer:       openingsBuffer,
 	}
 }
 
@@ -210,12 +184,10 @@ func (rnger *RNGer) TransitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
 ) TransitionEvent {
-	// Simply ignore if the RNG state machine is in the `Done` state
-	if rnger.State() == Done {
+	// Simply ignore if the RNG state machine is not in the `Init` state
+	if rnger.State() != Init {
 		return SharesIgnored
 	}
-
-	// CONSIDER: Should we ignore we rnger.isReady is already true?
 
 	// Ignore the shares if their number of sets does not match
 	// the number of sets of commitments
@@ -296,25 +268,11 @@ func (rnger *RNGer) TransitionShares(
 	// Transition the machine's state
 	rnger.state = WaitingOpen
 
-	// Mark that the machine has constructed its own shares
-	rnger.isReady = true
-
 	// Supply the locally computed shares to the opener
 	event := rnger.opener.TransitionShares(locallyComputedShares)
 	if event == open.Done {
 		rnger.state = Done
 		return RNGsReconstructed
-	}
-
-	// Process all openings received from other players, that have been
-	// stored in the openings buffer
-	for _, opening := range rnger.openingsBuffer {
-		event := rnger.opener.TransitionShares(opening)
-
-		if event == open.Done {
-			rnger.state = Done
-			return RNGsReconstructed
-		}
 	}
 
 	return SharesConstructed
@@ -323,7 +281,11 @@ func (rnger *RNGer) TransitionShares(
 // HasConstructedShares returns `true` if the RNG machine has received its `b` sets
 // of verifiable shares, and upon that constructed its shares. It returns false otherwise
 func (rnger RNGer) HasConstructedShares() bool {
-	return rnger.isReady
+	if rnger.state == Init {
+		return false
+	}
+
+	return true
 }
 
 // ConstructedSetsOfShares returns the RNG state machine's all constructed sets of shares
@@ -357,8 +319,8 @@ func (rnger *RNGer) TransitionOpen(
 	openings shamir.VerifiableShares,
 	commitments []shamir.Commitment,
 ) TransitionEvent {
-	// Simply ignore if the RNG state machine is already in the `Done` state
-	if rnger.State() == Done {
+	// Simply ignore if the RNG state machine is not in the `WaitingOpen` state
+	if rnger.State() != WaitingOpen {
 		return OpeningsIgnored
 	}
 
@@ -385,22 +347,14 @@ func (rnger *RNGer) TransitionOpen(
 		return OpeningsIgnored
 	}
 
-	// Transition the machine's state to WaitingOpen
-	rnger.state = WaitingOpen
-
-	// Pass these openings to the Opener state machine if we have already
+	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs
-	// Otherwise store the openings in a buffer to be processed later
-	if rnger.isReady {
-		event := rnger.opener.TransitionShares(openings)
+	event := rnger.opener.TransitionShares(openings)
 
-		// If the opener has received enough shares to be able to reconstruct the secrets
-		if event == open.Done {
-			rnger.state = Done
-			return RNGsReconstructed
-		}
-	} else {
-		rnger.openingsBuffer = append(rnger.openingsBuffer, openings)
+	// If the opener has received enough shares to be able to reconstruct the secrets
+	if event == open.Done {
+		rnger.state = Done
+		return RNGsReconstructed
 	}
 
 	return OpeningsAdded
@@ -425,8 +379,6 @@ func (rnger *RNGer) Reset() TransitionEvent {
 		rnger.ownSetsOfShares[i] = rnger.ownSetsOfShares[i][:0]
 		rnger.ownSetsOfCommitments[i] = rnger.ownSetsOfCommitments[i][:0]
 	}
-	rnger.openingsBuffer = rnger.openingsBuffer[:0]
-	rnger.isReady = false
 	rnger.state = Init
 
 	return Reset
