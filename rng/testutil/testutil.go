@@ -10,6 +10,70 @@ import (
 	"github.com/renproject/mpc/open"
 )
 
+// GetAllDirectedOpenings computes directed openings from all players
+// to the single player in consideration
+func GetAllDirectedOpenings(
+	indices []open.Fn,
+	to open.Fn,
+	b, k int,
+	h curve.Point,
+) (
+	map[open.Fn]shamir.VerifiableShares,
+	map[open.Fn][]shamir.Commitment,
+	[]shamir.VerifiableShares,
+	[][]shamir.Commitment,
+) {
+	openingsByPlayer := make(map[open.Fn]shamir.VerifiableShares)
+	commitmentsByPlayer := make(map[open.Fn][]shamir.Commitment)
+
+	// Allocate memory for local variable
+	setsOfSharesByPlayer := make(map[open.Fn][]shamir.VerifiableShares)
+	setsOfCommitmentsByPlayer := make(map[open.Fn][][]shamir.Commitment)
+	for _, from := range indices {
+		openingsByPlayer[from] = make(shamir.VerifiableShares, b)
+		commitmentsByPlayer[from] = make([]shamir.Commitment, b)
+		setsOfSharesByPlayer[from] = make([]shamir.VerifiableShares, b)
+		setsOfCommitmentsByPlayer[from] = make([][]shamir.Commitment, b)
+	}
+
+	// Generate random table and distribute appropriately
+	brnger := brng.New(indices, h)
+	for i := 0; i < b; i++ {
+		table := btu.RandomValidTable(indices, h, k, k, len(indices))
+
+		for _, from := range indices {
+			// Take the appropriate slice from table
+			slice := table.TakeSlice(from, indices)
+
+			// Reset the dummy BRNG machine and extract shares/commitments
+			brnger.Reset()
+			brnger.TransitionStart(k, k)
+			shares, commitments, _ := brnger.TransitionSlice(slice)
+
+			// Assign them to the `from` player
+			setsOfSharesByPlayer[from][i] = shares
+			setsOfCommitmentsByPlayer[from][i] = commitments
+		}
+	}
+
+	// Compute directed openings for each player
+	for _, from := range indices {
+		openings, commitments := GetDirectedOpenings(
+			setsOfSharesByPlayer[from],
+			setsOfCommitmentsByPlayer[from],
+			to,
+		)
+
+		openingsByPlayer[from] = openings
+		commitmentsByPlayer[from] = commitments
+	}
+
+	return openingsByPlayer,
+		commitmentsByPlayer,
+		setsOfSharesByPlayer[to],
+		setsOfCommitmentsByPlayer[to]
+}
+
 // GetBrngOutputs uses a temporary BRNG engine to generate random
 // sets of shares and commitments
 func GetBrngOutputs(
@@ -60,44 +124,36 @@ func GetDirectedOpenings(
 	setsOfCommitments [][]shamir.Commitment,
 	to open.Fn,
 ) (shamir.VerifiableShares, []shamir.Commitment) {
-	N := len(setsOfShares[0])
-	n := secp256k1.NewSecp256k1N(uint64(N))
 	computedShares := make(shamir.VerifiableShares, len(setsOfShares))
 	computedCommitments := make([]shamir.Commitment, len(setsOfShares))
 
 	for i, setOfShares := range setsOfShares {
-		for j := 1; j <= N; j++ {
-			// Initialise the accumulators with the first values
-			var accShare = setOfShares[0]
-			var accCommitment shamir.Commitment
-			accCommitment.Set(setsOfCommitments[i][0])
-			var multiplier = secp256k1.OneSecp256k1N()
+		// Initialise the accumulators with the first values
+		var accShare = setOfShares[0]
+		var accCommitment shamir.Commitment
+		accCommitment.Set(setsOfCommitments[i][0])
+		var multiplier = secp256k1.OneSecp256k1N()
 
-			// For all other shares and commitments
-			for l := 1; l < len(setOfShares); l++ {
-				var share = setOfShares[l]
-				var commitment shamir.Commitment
-				commitment.Set(setsOfCommitments[i][l])
+		// For all other shares and commitments
+		for l := 1; l < len(setOfShares); l++ {
+			var share = setOfShares[l]
+			var commitment shamir.Commitment
+			commitment.Set(setsOfCommitments[i][l])
 
-				// Scale it by the multiplier
-				share.Scale(&share, &multiplier)
-				commitment.Scale(&commitment, &multiplier)
+			// Scale it by the multiplier
+			share.Scale(&share, &multiplier)
+			commitment.Scale(&commitment, &multiplier)
 
-				// Add it to the accumulators
-				accShare.Add(&accShare, &share)
-				accCommitment.Add(&accCommitment, &commitment)
+			// Add it to the accumulators
+			accShare.Add(&accShare, &share)
+			accCommitment.Add(&accCommitment, &commitment)
 
-				// Scale the multiplier
-				multiplier.Mul(&multiplier, &n)
-			}
-
-			// If j is the `to` machine's index, then populate the shares
-			// which will be later returned
-			if to.Uint64() == uint64(j) {
-				computedShares[i] = accShare
-				computedCommitments[i] = accCommitment
-			}
+			// Scale the multiplier
+			multiplier.Mul(&multiplier, &to)
 		}
+
+		computedShares[i] = accShare
+		computedCommitments[i].Set(accCommitment)
 	}
 
 	return computedShares, computedCommitments

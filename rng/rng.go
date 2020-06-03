@@ -202,7 +202,6 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	// Declare variable to hold field element for N
-	n := secp256k1.NewSecp256k1N(uint64(rnger.N()))
 	locallyComputedShares := make(shamir.VerifiableShares, rnger.BatchSize())
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.BatchSize())
 
@@ -216,6 +215,8 @@ func (rnger *RNGer) TransitionShares(
 			// append to ownSetsOfShares
 			// append to ownSetsOfCommitments
 			for j := 1; j <= int(rnger.N()); j++ {
+				J := secp256k1.NewSecp256k1N(uint64(j))
+
 				// Initialise the accumulators with the first values
 				var accShare = setOfShares[0]
 				var accCommitment shamir.Commitment
@@ -238,7 +239,7 @@ func (rnger *RNGer) TransitionShares(
 					accCommitment.Add(&accCommitment, &commitment)
 
 					// Scale the multiplier
-					multiplier.Mul(&multiplier, &n)
+					multiplier.Mul(&multiplier, &J)
 				}
 
 				// append the accumulated share/commitment
@@ -249,7 +250,7 @@ func (rnger *RNGer) TransitionShares(
 				// which will be later supplied to the Opener machine
 				if rnger.index.Uint64() == uint64(j) {
 					locallyComputedShares[i] = accShare
-					locallyComputedCommitments[i] = accCommitment
+					locallyComputedCommitments[i].Set(accCommitment)
 				}
 			}
 		} else {
@@ -357,7 +358,13 @@ func (rnger *RNGer) TransitionOpen(
 		return RNGsReconstructed
 	}
 
-	return OpeningsAdded
+	// If the opener has added the shares correctly (they are valid)
+	if event == open.SharesAdded {
+		return OpeningsAdded
+	}
+
+	// CONSIDER: This may be several different scenarios, should we handle separately?
+	return OpeningsIgnored
 }
 
 // ReconstructedRandomNumbers returns the `b` random numbers that have been

@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
 
@@ -34,8 +35,8 @@ var _ = Describe("Rng", func() {
 			curve.Point,
 		) {
 			// n is the number of players participating in the RNG protocol
-			// n ∈ [5, 20]
-			n := 5 + rand.Intn(16)
+			// n ∈ [5, 10]
+			n := 5 + rand.Intn(6)
 
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
@@ -47,7 +48,7 @@ var _ = Describe("Rng", func() {
 
 			// b is the total number of random numbers to be generated
 			// in one execution of RNG protocol, i.e. the batch number
-			b := 5 + rand.Intn(6)
+			b := 3 + rand.Intn(3)
 
 			// k is the threshold for random number generation, or the
 			// minimum number of shares required to reconstruct the secret
@@ -112,11 +113,37 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply BRNG shares of length not equal to batch size", func() {
-					// TODO
+					// If an RNG machine is supplied with BRNG outputs that don't match the
+					// RNG machine's batch size, those shares are simply ignored and the
+					// machine continues to be in the same state as before
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b-1, k, h)
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+					Expect(event).To(Equal(rng.SharesIgnored))
+					Expect(rnger.State()).To(Equal(rng.Init))
+					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+
+					setsOfShares, setsOfCommitments = rtu.GetBrngOutputs(indices, index, b+1, k, h)
+					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
+					event = rnger.TransitionShares(setsOfShares, setsOfCommitments)
+					Expect(event).To(Equal(rng.SharesIgnored))
+					Expect(rnger.State()).To(Equal(rng.Init))
+					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
 				Specify("Supply BRNG shares of length not equal to commitments length", func() {
-					// TODO
+					// If an RNG machine is supplied with BRNG outputs that have different
+					// lengths (batch size) for shares and commitment, those shares are simply
+					// ignored and the machine continues to be in the same state as before
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+					j := rand.Intn(b)
+					setsOfShares = append(setsOfShares[:j], setsOfShares[j+1:]...)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+
+					Expect(event).To(Equal(rng.SharesIgnored))
+					Expect(rnger.State()).To(Equal(rng.Init))
+					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
 				Specify("Supply directed opening", func() {
@@ -144,57 +171,101 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
-
-				Specify("Supply directed opening with openings length not equal to batch size", func() {
-					// TODO
-				})
-
-				Specify("Supply directed opening with openings length not equal to commitments length", func() {
-					// TODO
-				})
 			})
 
-			Context("When in WaitingOpen state (IS ready with own shares)", func() {
+			Context("When in WaitingOpen state", func() {
+				var rnger rng.RNGer
+				var openingsByPlayer map[open.Fn]shamir.VerifiableShares
+				var commitmentsByPlayer map[open.Fn][]shamir.Commitment
+				var ownSetsOfShares []shamir.VerifiableShares
+				var ownSetsOfCommitments [][]shamir.Commitment
+
+				// TransitionToWaitingOpen generates a new instance of RNG machine
+				// and transitions it to the `WaitingOpen` state
+				TransitionToWaitingOpen := func(
+					index open.Fn,
+					indices []open.Fn,
+					b, k int,
+					h curve.Point,
+				) {
+					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
+
+					openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+
+					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+					Expect(event).To(Equal(rng.SharesConstructed))
+				}
+
+				JustBeforeEach(func() {
+					TransitionToWaitingOpen(index, indices, b, k, h)
+				})
+
 				Specify("Reset", func() {
-					// TODO
+					// When an RNG machine in the WaitingOpen state is reset, it transitions
+					// to the Init state having forgotten its constructed shares
+					event := rnger.Reset()
+
+					Expect(event).To(Equal(rng.Reset))
+					Expect(rnger.State()).To(Equal(rng.Init))
+					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
 				Specify("Supply BRNG shares", func() {
-					// TODO
-				})
+					// When an RNG machine in the WaitingOpen state is supplied BRNG shares
+					// it simply ignores them and continues to be in the same state
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
 
-				Specify("Supply BRNG shares when k-1 openings have already been supplied", func() {
-					// TODO
-				})
-
-				Specify("Supply directed opening", func() {
-					// TODO
-				})
-
-				Specify("Supply directed opening when k-1 openings are already ready", func() {
-					// TODO
-				})
-			})
-
-			Context("WaitingOpen state (IS NOT ready with own shares)", func() {
-				Specify("Reset", func() {
-					// TODO
-				})
-
-				Specify("Supply BRNG shares", func() {
-					// TODO
-				})
-
-				Specify("Supply BRNG shares when k-1 openings have already been supplied", func() {
-					// TODO
+					Expect(event).To(Equal(rng.SharesIgnored))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
 
 				Specify("Supply directed opening", func() {
-					// TODO
+					// When the RNG machine receives a valid set of directed openings from another player
+					// it adds those to its opener and continues to be in the WaitingOpen state.
+					//
+					// get a random player who is not the current RNG machine's player
+					from := indices[rand.Intn(len(indices))]
+					for from.Eq(&index) {
+						from = indices[rand.Intn(len(indices))]
+					}
+
+					event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+
+					Expect(event).To(Equal(rng.OpeningsAdded))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
 
 				Specify("Supply directed opening when k-1 openings are already ready", func() {
-					// TODO
+					// When the RNG machine receives a valid set of directed openings from another player
+					// and if this is the kth set (including its own), then the RNG machine is ready
+					// to reconstruct the b unbiased random numbers
+					//
+					// The own player's openings have already been processed
+					count := 1
+
+					for _, from := range indices {
+						// Ignore if its the current RNG player
+						if from.Eq(&index) {
+							continue
+						}
+
+						if count == k-1 {
+							event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+
+							Expect(event).To(Equal(rng.RNGsReconstructed))
+							Expect(rnger.State()).To(Equal(rng.Done))
+							break
+						}
+
+						if count < k-1 {
+							event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+
+							Expect(event).To(Equal(rng.OpeningsAdded))
+							Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+							count = count + 1
+						}
+					}
 				})
 			})
 
