@@ -40,11 +40,9 @@ type RNGer struct {
 	// number of secrets
 	opener open.Opener
 
-	// TODO: add this field while marshaling/unmarshaling
 	// ownSetsOfShares signifies the given RNG state machine's own shares
 	ownSetsOfShares []shamir.VerifiableShares
 
-	// TODO: add this field while marshaling/unmarshaling
 	// ownSetsOfCommitments signifies the given RNG state machine's sets of
 	// commitments for its respective sets of shares
 	ownSetsOfCommitments [][]shamir.Commitment
@@ -53,10 +51,13 @@ type RNGer struct {
 // SizeHint implements the surge.SizeHinter interface
 func (rnger RNGer) SizeHint() int {
 	return rnger.state.SizeHint() +
-		surge.SizeHint(rnger.index) +
+		rnger.index.SizeHint() +
+		surge.SizeHint(rnger.indices) +
 		surge.SizeHint(rnger.batchSize) +
 		surge.SizeHint(rnger.threshold) +
-		rnger.opener.SizeHint()
+		rnger.opener.SizeHint() +
+		surge.SizeHint(rnger.ownSetsOfShares) +
+		surge.SizeHint(rnger.ownSetsOfCommitments)
 }
 
 // Marshal implements the surge.Marshaler interface
@@ -69,6 +70,10 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("marshaling index: %v", err)
 	}
+	m, err = surge.Marshal(w, rnger.indices, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling indices: %v", err)
+	}
 	m, err = surge.Marshal(w, uint32(rnger.batchSize), m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling batchSize: %v", err)
@@ -80,6 +85,14 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	m, err = rnger.opener.Marshal(w, m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling opener: %v", err)
+	}
+	m, err = surge.Marshal(w, rnger.ownSetsOfShares, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling ownSetsOfShares: %v", err)
+	}
+	m, err = surge.Marshal(w, rnger.ownSetsOfCommitments, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling ownSetsOfCommitments: %v", err)
 	}
 	return m, nil
 }
@@ -94,6 +107,10 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling index: %v", err)
 	}
+	m, err = surge.Unmarshal(r, &rnger.indices, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling indices: %v", err)
+	}
 	m, err = surge.Unmarshal(r, &rnger.batchSize, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
@@ -105,6 +122,14 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err = rnger.opener.Unmarshal(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling opener: %v", err)
+	}
+	m, err = surge.Unmarshal(r, &rnger.ownSetsOfShares, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling ownSetsOfShares: %v", err)
+	}
+	m, err = surge.Unmarshal(r, &rnger.ownSetsOfCommitments, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling ownSetsOfCommitments: %v", err)
 	}
 	return m, nil
 }
@@ -301,6 +326,30 @@ func (rnger RNGer) ConstructedSetOfShares(bID uint32) (shamir.VerifiableShares, 
 	}
 
 	return rnger.ownSetsOfShares[bID], rnger.ownSetsOfCommitments[bID]
+}
+
+// DirectedOpenings returns the openings from the RNG state machine to other
+// RNG state machines
+func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []shamir.Commitment) {
+	// If the RNG state machine is still in the Init state
+	// ignore this call and return nil
+	if rnger.state == Init {
+		return nil, nil
+	}
+
+	openings := make(shamir.VerifiableShares, 0, rnger.BatchSize())
+	commitments := make([]shamir.Commitment, 0, rnger.BatchSize())
+
+	toIndex := int(to.Uint64())
+	for i := 0; i < int(rnger.BatchSize()); i++ {
+		// NOTE: This assumes sequential indices for players
+		// Hence openings for player `toIndex` would have been appended at array index `toIndex - 1`
+		// CONSIDER: Is this really the best way of achieving this?
+		openings = append(openings, rnger.ownSetsOfShares[i][toIndex-1])
+		commitments = append(commitments, rnger.ownSetsOfCommitments[i][toIndex-1])
+	}
+
+	return openings, commitments
 }
 
 // TransitionOpen performs the state transition for the RNG state machine upon
