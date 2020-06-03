@@ -255,6 +255,8 @@ var _ = Describe("Rng", func() {
 
 							Expect(event).To(Equal(rng.RNGsReconstructed))
 							Expect(rnger.State()).To(Equal(rng.Done))
+							Expect(len(rnger.ReconstructedRandomNumbers())).To(Equal(b))
+
 							break
 						}
 
@@ -270,16 +272,79 @@ var _ = Describe("Rng", func() {
 			})
 
 			Context("When in Done state", func() {
+				var rnger rng.RNGer
+				var openingsByPlayer map[open.Fn]shamir.VerifiableShares
+				var commitmentsByPlayer map[open.Fn][]shamir.Commitment
+				var ownSetsOfShares []shamir.VerifiableShares
+				var ownSetsOfCommitments [][]shamir.Commitment
+
+				// TransitionToDone generates a new instance of RNG machine and
+				// transitions it to the `Done` state by providing own BRNG outputs
+				// as well as other players' directed openings to reconstruct
+				// all the unbiased random numbers
+				TransitionToDone := func(
+					index open.Fn,
+					indices []open.Fn,
+					b, k int,
+					h curve.Point,
+				) {
+					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
+
+					openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+
+					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+
+					count := 1
+					for _, from := range indices {
+						if count == k {
+							break
+						}
+
+						_ = rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+					}
+
+					Expect(rnger.State()).To(Equal(rng.Done))
+					Expect(len(rnger.ReconstructedRandomNumbers())).To(Equal(b))
+				}
+
+				JustBeforeEach(func() {
+					TransitionToDone(index, indices, b, k, h)
+				})
+
 				Specify("Supply BRNG shares", func() {
-					// TODO
+					// When an RNG machine in the Done state is supplied own shares
+					// it simply ignores them, and continues to be in the same state
+					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+
+					Expect(event).To(Equal(rng.SharesIgnored))
+					Expect(rnger.State()).To(Equal(rng.Done))
 				})
 
 				Specify("Supply directed opening", func() {
-					// TODO
+					// When an RNG machine in the Done state is supplied with valid
+					// directed openings, it simply ignores them and continues
+					// to be in the same state
+					from := indices[rand.Intn(len(indices))]
+					for from.Eq(&index) {
+						from = indices[rand.Intn(len(indices))]
+					}
+
+					event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+
+					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(rnger.State()).To(Equal(rng.Done))
 				})
 
 				Specify("Reset", func() {
-					// TODO
+					// When an RNG machine in the Done state is supplied with a Reset
+					// instruction, it transitions to the Init state, and forgets
+					// its secrets and shares.
+					event := rnger.Reset()
+
+					Expect(event).To(Equal(rng.Reset))
+					Expect(rnger.State()).To(Equal(rng.Init))
+					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+					Expect(rnger.ReconstructedRandomNumbers()).To(BeNil())
 				})
 			})
 		})
