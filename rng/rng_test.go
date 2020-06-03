@@ -1,6 +1,7 @@
 package rng_test
 
 import (
+	"bytes"
 	"math/rand"
 	"time"
 
@@ -351,30 +352,73 @@ var _ = Describe("Rng", func() {
 
 		Context("Computations", func() {
 			It("Correctly computes own shares and commitments", func() {
-				// TODO
-			})
+				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-			It("Correctly reconstructs the unbiased random numbers", func() {
-				// TODO
+				openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+
+				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+
+				// fetch the directed openings computed for the state machine itself
+				selfOpenings, selfCommitments := rnger.DirectedOpenings(index)
+
+				// The directed openings from the RNG machine should be equal
+				// to what we have computed in the utils
+				for i, share := range selfOpenings {
+					Expect(share.Eq(&openingsByPlayer[index][i])).To(BeTrue())
+					Expect(selfCommitments[i].Eq(&commitmentsByPlayer[index][i])).To(BeTrue())
+				}
 			})
 		})
 
 		Context("Marshaling and Unmarshaling", func() {
+			var rnger rng.RNGer
+
+			JustBeforeEach(func() {
+				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
+				setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+				rnger.TransitionShares(setsOfShares, setsOfCommitments)
+			})
+
 			It("Should be equal after marshaling and unmarshaling", func() {
-				// TODO
+				buf := bytes.NewBuffer([]byte{})
+
+				buf.Reset()
+				m, err := rnger.Marshal(buf, rnger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rnger2 rng.RNGer
+				m, err = rnger2.Unmarshal(buf, rnger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+				Expect(rnger2).To(Equal(rnger))
 			})
 
 			It("Should fail when marshaling with not enough bytes", func() {
-				// TODO
+				buf := bytes.NewBuffer([]byte{})
+
+				for i := 0; i < rnger.SizeHint(); i++ {
+					buf.Reset()
+					_, err := rnger.Marshal(buf, i)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 
 			It("Should fail when unmarshaling with not enough bytes", func() {
-				// TODO
+				buf := bytes.NewBuffer([]byte{})
+
+				_, _ = rnger.Marshal(buf, rnger.SizeHint())
+
+				var rnger2 rng.RNGer
+				for i := 0; i < rnger.SizeHint(); i++ {
+					_, err := rnger2.Unmarshal(buf, i)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 		})
 	})
 
 	Describe("Network Simulation", func() {
-
+		// TODO
 	})
 })
