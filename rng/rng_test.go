@@ -98,7 +98,7 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
-				Specify("Supply BRNG shares", func() {
+				Specify("Supply valid BRNG shares/commitments", func() {
 					// If an RNG machine in the Init state is supplied with
 					// valid sets of shares and commitments from its own BRNG outputs
 					// it transitions to the WaitingOpen state
@@ -114,36 +114,79 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 				})
 
-				Specify("Supply BRNG shares of length not equal to batch size", func() {
-					// If an RNG machine is supplied with BRNG outputs that don't match the
-					// RNG machine's batch size, those shares are simply ignored and the
-					// machine continues to be in the same state as before
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b-1, k, h)
-					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
-					Expect(event).To(Equal(rng.SharesIgnored))
-					Expect(rnger.State()).To(Equal(rng.Init))
-					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+				Specify("Supply invalid sets of shares", func() {
+					// If an RNG machine is supplied with BRNG output shares that don't match the
+					// RNG machine's batch size, those shares are simply ignored. But the machine
+					// still proceeds computing the commitments and moves to the WaitingOpen state
+					// while returning the CommitmentsConstructed event
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
 
-					setsOfShares, setsOfCommitments = rtu.GetBrngOutputs(indices, index, b+1, k, h)
-					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-					event = rnger.TransitionShares(setsOfShares, setsOfCommitments)
-					Expect(event).To(Equal(rng.SharesIgnored))
+					// Initialise two RNG replicas
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+					_, rnger2 := rng.New(index, indices, uint32(b), uint32(k), h)
+
+					event := rnger.TransitionShares([]shamir.VerifiableShares{}, setsOfCommitments)
+					event2 := rnger2.TransitionShares(setsOfShares, setsOfCommitments)
+
+					Expect(event).To(Equal(rng.CommitmentsConstructed))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+					Expect(rnger.HasConstructedShares()).To(BeTrue())
+
+					Expect(event2).To(Equal(rng.SharesConstructed))
+					Expect(rnger2.State()).To(Equal(rng.WaitingOpen))
+					Expect(rnger2.HasConstructedShares()).To(BeTrue())
+
+					// verify that the constructed shares are simply empty for rnger
+					// while they are non-empty for rnger2
+					shares, commitments := rnger.ConstructedSetsOfShares()
+					shares2, commitments2 := rnger2.ConstructedSetsOfShares()
+					for i, share := range shares {
+						Expect(share).To(Equal(shamir.VerifiableShares{}))
+						Expect(shares2[i]).ToNot(Equal(shamir.VerifiableShares{}))
+					}
+
+					// verify that the constructed commitments are equal for both
+					Expect(len(commitments)).To(Equal(b))
+					Expect(len(commitments)).To(Equal(len(commitments2)))
+					for i, cs := range commitments {
+						Expect(len(cs)).To(Equal(len(indices)))
+						for j, c := range cs {
+							Expect(commitments2[i][j].Eq(&c)).To(BeTrue())
+						}
+					}
+				})
+
+				Specify("Supply single invalid set of shares (not of threshold size)", func() {
+					// If an RNG machine is supplied with BRNG output shares that match the
+					// RNG machine's batch size, but with one or more of the set of shares
+					// not of length equal to the reconstruction threshold, then it refutes
+					// our assumption about the correctness of sets of shares in case they
+					// are of appropriate batch size. The RNG machine hence panics, and continues
+					// to be in its initial state
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+
+					// fool around with one of the set of shares
+					// so as to not let its length match the threshold
+					setsOfShares[0] = setsOfShares[0][1:]
+
+					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments) }).To(Panic())
+
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
-				Specify("Supply BRNG shares of length not equal to commitments length", func() {
+				Specify("Supply invalid sets of commitments", func() {
 					// If an RNG machine is supplied with BRNG outputs that have different
-					// lengths (batch size) for shares and commitment, those shares are simply
-					// ignored and the machine continues to be in the same state as before
+					// lengths (batch size) for shares and commitment, whereby the commitments
+					// are of incorrect size, we panic because it refutes our assumption
+					// about the correctness of the sets of commitments
 					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
-					setsOfShares = append(setsOfShares[:j], setsOfShares[j+1:]...)
-					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+					setsOfCommitments = append(setsOfCommitments[:j], setsOfCommitments[j+1:]...)
+					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments) }).To(Panic())
 
-					Expect(event).To(Equal(rng.SharesIgnored))
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
