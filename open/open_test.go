@@ -1,6 +1,7 @@
 package open_test
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -253,6 +254,57 @@ var _ = Describe("Opener", func() {
 					for i, reconstructedSecret := range reconstructed {
 						Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
 					}
+				}
+			})
+		})
+
+		//
+		// Miscellaneous
+		//
+
+		Context("Marshaling/Unmarshaling", func() {
+			JustBeforeEach(func() {
+				ProgressToDone()
+			})
+
+			It("Should correctly marshal and unmarshal", func() {
+				buf := bytes.NewBuffer([]byte{})
+
+				m, err := opener.Marshal(buf, opener.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var opener2 open.Opener
+				m, err = opener2.Unmarshal(buf, opener.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				// Reconstructor and Checker will not be exactly equal
+				// since they have some fields that are not marshalled
+				Expect(opener.K()).To(Equal(opener2.K()))
+				Expect(opener.I()).To(Equal(opener2.I()))
+				Expect(opener.BatchSize()).To(Equal(opener2.BatchSize()))
+				Expect(opener.Secrets()).To(Equal(opener2.Secrets()))
+			})
+
+			It("Should fail marshaling with not enough bytes", func() {
+				buf := bytes.NewBuffer([]byte{})
+
+				for i := 0; i < opener.SizeHint(); i++ {
+					_, err := opener.Marshal(buf, i)
+					Expect(err).To(HaveOccurred())
+				}
+			})
+
+			It("Should fail unmarshaling with not enough bytes", func() {
+				bs, _ := surge.ToBinary(opener)
+
+				var opener2 open.Opener
+				for i := 0; i < opener.SizeHint(); i++ {
+					buf := bytes.NewBuffer(bs)
+
+					_, err := opener2.Unmarshal(buf, i)
+					Expect(err).To(HaveOccurred())
 				}
 			})
 		})
