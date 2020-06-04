@@ -17,6 +17,11 @@ const (
 	// received `b` sets of verifiable shares that were invalid in some way
 	SharesIgnored
 
+	// CommitmentsConstructed represents the event returned when the RNG state machine
+	// received invalid sets of verifiable shares, so it proceeded to only compute
+	// local commitments to initialise the opener
+	CommitmentsConstructed
+
 	// SharesConstructed represents the event returned when the RNG state machine
 	// received `b` valid sets of verifiable shares and it was able to
 	// construct its own shares successfully
@@ -53,6 +58,8 @@ func (e TransitionEvent) String() string {
 		return "Initialised"
 	case SharesIgnored:
 		return "SharesIgnored"
+	case CommitmentsConstructed:
+		return "CommitmentsConstructed"
 	case SharesConstructed:
 		return "SharesConstructed"
 	case OpeningsIgnored:

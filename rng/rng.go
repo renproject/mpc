@@ -165,10 +165,7 @@ func (rnger RNGer) Threshold() uint32 {
 // n is the number of players participating in the RNG protocol
 // b is the number of random numbers generated in one invocation of RNG protocol
 // k is the reconstruction threshold for every random number
-//
-// TODO: The opener state machine has to be provided the commitments
-// based on valid shares by opener.TransitionReset(commitments)
-// CONSIDER: ^
+// h is the Pedersen Commitment Parameter, a point on elliptic curve
 func New(
 	ownIndex open.Fn,
 	indices []open.Fn,
@@ -206,6 +203,18 @@ func New(
 // from `Init` to `WaitingOpen`, upon receiving `b` sets of verifiable shares
 // and their respective commitments.
 // The machine should locally compute its own shares from the received sets of shares
+//
+// setsOfShares are the b sets of verifiable shares from the player's BRNG outputs
+// 	- We make no assumptions of correctness for the sets of shares
+//	- MUST be of length equal to the batch size to be valid
+//	- For invalid sets of shares, a nil slice []shamir.VerifiableShares{} MUST be supplied
+//	- If the above checks are met, we assume that every set of verifiable shares is valid
+//		- We assume it has a length equal to the RNG's reconstruction threshold
+// setsOfCommitments are the b sets of commitments from the player's BRNG outputs
+//	- We assume that the commitments are correct and valid (even if the shares may not be)
+//	- MUST be of length equal to the batch size
+//	- In case the sets of shares are invalid, we simply proceed with locally computing
+//		the Open commitments, since we assume the supplied sets of commitments are correct
 func (rnger *RNGer) TransitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
@@ -215,74 +224,95 @@ func (rnger *RNGer) TransitionShares(
 		return SharesIgnored
 	}
 
+	// Since this refutes our assumption that the sets of commitments
+	// are valid and correct
+	if len(setsOfCommitments) != int(rnger.BatchSize()) {
+		panic("Unexpected invalid sets of commitments to RNG")
+	}
+
+	// Boolean to keep a track of whether shares computation should be ignored or not
+	// This is set to true if the sets of shares are invalid in any way
+	ignoreShares := false
+
 	// Ignore the shares if their number of sets does not match
 	// the number of sets of commitments
 	if len(setsOfShares) != len(setsOfCommitments) {
-		return SharesIgnored
+		ignoreShares = true
 	}
 
 	// Ignore the shares if their number of sets does not match
 	// the batch size of the RNG state machine
 	if len(setsOfShares) != int(rnger.BatchSize()) {
-		return SharesIgnored
+		ignoreShares = true
 	}
 
 	// Declare variable to hold field element for N
-	locallyComputedShares := make(shamir.VerifiableShares, rnger.BatchSize())
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.BatchSize())
+	locallyComputedShares := make(shamir.VerifiableShares, rnger.BatchSize())
 
 	// For every set of verifiable shares
-	for i, setOfShares := range setsOfShares {
-		// Continue only if there are `k` number of shares in the set
-		// Otherwise assign empty shares/commitments
-		if len(setOfShares) == int(rnger.Threshold()) {
-			// For j = 1 to N
-			// compute r_{i,j}
-			// append to ownSetsOfShares
-			// append to ownSetsOfCommitments
-			for j := 1; j <= int(rnger.N()); j++ {
-				J := secp256k1.NewSecp256k1N(uint64(j))
+	for i, setOfCommitments := range setsOfCommitments {
+		// Since this refutes our assumption that if the sets of shares are of appropriate
+		// length, then every set of shares is valid and correct
+		if !ignoreShares && len(setsOfShares[i]) != int(rnger.Threshold()) {
+			panic("Unexpected invalid set of shares")
+		}
 
-				// Initialise the accumulators with the first values
-				var accShare = setOfShares[0]
-				var accCommitment shamir.Commitment
-				accCommitment.Set(setsOfCommitments[i][0])
-				var multiplier = secp256k1.OneSecp256k1N()
+		// For j = 1 to N
+		// compute r_{i,j}
+		// append to ownSetsOfShares
+		// append to ownSetsOfCommitments
+		for j := 1; j <= int(rnger.N()); j++ {
+			J := secp256k1.NewSecp256k1N(uint64(j))
 
-				// For all other shares and commitments
-				for l := 1; l < len(setOfShares); l++ {
-					// Initialise share
-					var share = setOfShares[l]
-					var commitment shamir.Commitment
-					commitment.Set(setsOfCommitments[i][l])
+			// Initialise the accumulators with the first values
+			var accCommitment shamir.Commitment
+			accCommitment.Set(setsOfCommitments[i][0])
+			var multiplier = secp256k1.OneSecp256k1N()
 
-					// Scale it by the multiplier
+			var accShare shamir.VerifiableShare
+			if !ignoreShares {
+				accShare = setsOfShares[i][0]
+			}
+
+			// For all other shares and commitments
+			for l := 1; l < len(setOfCommitments); l++ {
+				// Initialise
+				// Scale by the multiplier
+				// Add to the accumulator
+				var commitment shamir.Commitment
+				commitment.Set(setsOfCommitments[i][l])
+				commitment.Scale(&commitment, &multiplier)
+				accCommitment.Add(&accCommitment, &commitment)
+
+				// If we have received valid sets of shares
+				// also do local computations for the shares
+				if !ignoreShares {
+					var share = setsOfShares[i][l]
 					share.Scale(&share, &multiplier)
-					commitment.Scale(&commitment, &multiplier)
-
-					// Add it to the accumulators
 					accShare.Add(&accShare, &share)
-					accCommitment.Add(&accCommitment, &commitment)
-
-					// Scale the multiplier
-					multiplier.Mul(&multiplier, &J)
 				}
 
-				// append the accumulated share/commitment
-				rnger.ownSetsOfShares[i] = append(rnger.ownSetsOfShares[i], accShare)
-				rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], accCommitment)
+				// Scale the multiplier
+				multiplier.Mul(&multiplier, &J)
+			}
 
-				// If j is the current machine's index, then populate the local shares
-				// which will be later supplied to the Opener machine
-				if rnger.index.Uint64() == uint64(j) {
+			// append the accumulated values
+			rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], accCommitment)
+			if !ignoreShares {
+				rnger.ownSetsOfShares[i] = append(rnger.ownSetsOfShares[i], accShare)
+			} else {
+				rnger.ownSetsOfShares[i] = shamir.VerifiableShares{}
+			}
+
+			// If j is the current machine's index, then populate the local shares
+			// which will be later supplied to the Opener machine
+			if rnger.index.Uint64() == uint64(j) {
+				locallyComputedCommitments[i].Set(accCommitment)
+				if !ignoreShares {
 					locallyComputedShares[i] = accShare
-					locallyComputedCommitments[i].Set(accCommitment)
 				}
 			}
-		} else {
-			// Simply append empty slices
-			rnger.ownSetsOfShares[i] = shamir.VerifiableShares{}
-			rnger.ownSetsOfCommitments[i] = []shamir.Commitment{}
 		}
 	}
 
@@ -296,10 +326,18 @@ func (rnger *RNGer) TransitionShares(
 	rnger.state = WaitingOpen
 
 	// Supply the locally computed shares to the opener
-	event := rnger.opener.TransitionShares(locallyComputedShares)
-	if event == open.Done {
-		rnger.state = Done
-		return RNGsReconstructed
+	// This will only be a special case when the reconstruction threshold k
+	// is equal to one
+	if !ignoreShares {
+		event := rnger.opener.TransitionShares(locallyComputedShares)
+		if event == open.Done {
+			rnger.state = Done
+			return RNGsReconstructed
+		}
+	}
+
+	if ignoreShares {
+		return CommitmentsConstructed
 	}
 
 	return SharesConstructed
@@ -361,6 +399,16 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []sham
 //
 // Since the RNG machine is capable of generating `b` random numbers, we expect
 // other players to supply `b` directed openings of their shares too.
+//
+// fromIndex is the index of the RNG machine from which we are receiving directed openings
+//	- MUST be a part of the set of indices in RNG machine
+//	- Will be ignored if valid openings are already supplied by this index
+// openings are the directed openings
+//	- MUST be of length b (batch size)
+//	- Will be ignored if they're not consistent with their respective commitments
+// commitments are their respective commitments
+//	- MUST be of length b (batch size)
+//	- MUST be the same as the RNG's opener's commitments (verified within RNG's opener)
 func (rnger *RNGer) TransitionOpen(
 	fromIndex open.Fn,
 	openings shamir.VerifiableShares,
