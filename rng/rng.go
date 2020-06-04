@@ -7,6 +7,7 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
+	util "github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
@@ -107,7 +108,7 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling index: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &rnger.indices, m)
+	m, err = rnger.unmarshalIndices(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling indices: %v", err)
 	}
@@ -123,11 +124,11 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling opener: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &rnger.ownSetsOfShares, m)
+	m, err = rnger.unmarshalSetsOfShares(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling ownSetsOfShares: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &rnger.ownSetsOfCommitments, m)
+	m, err = rnger.unmarshalSetsOfCommitments(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling ownSetsOfCommitments: %v", err)
 	}
@@ -307,11 +308,7 @@ func (rnger *RNGer) TransitionShares(
 // HasConstructedShares returns `true` if the RNG machine has received its `b` sets
 // of verifiable shares, and upon that constructed its shares. It returns false otherwise
 func (rnger RNGer) HasConstructedShares() bool {
-	if rnger.state == Init {
-		return false
-	}
-
-	return true
+	return rnger.state != Init
 }
 
 // ConstructedSetsOfShares returns the RNG state machine's all constructed sets of shares
@@ -438,4 +435,81 @@ func (rnger *RNGer) Reset() TransitionEvent {
 	rnger.state = Init
 
 	return Reset
+}
+
+// Private functions
+func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	rnger.indices = (rnger.indices)[:0]
+	for i := uint32(0); i < l; i++ {
+		rnger.indices = append(rnger.indices, open.Fn{})
+		m, err = rnger.indices[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
+}
+
+func (rnger *RNGer) unmarshalSetsOfShares(r io.Reader, m int) (int, error) {
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	rnger.ownSetsOfShares = (rnger.ownSetsOfShares)[:0]
+	for i := uint32(0); i < l; i++ {
+		rnger.ownSetsOfShares = append(rnger.ownSetsOfShares, shamir.VerifiableShares{})
+		m, err = rnger.ownSetsOfShares[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
+}
+
+func (rnger *RNGer) unmarshalSetsOfCommitments(r io.Reader, m int) (int, error) {
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	rnger.ownSetsOfCommitments = (rnger.ownSetsOfCommitments)[:0]
+	for i := uint32(0); i < l; i++ {
+		rnger.ownSetsOfCommitments = append(rnger.ownSetsOfCommitments, []shamir.Commitment{})
+		m, err = rnger.unmarshalCommitments(r, m, i)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
+}
+
+func (rnger *RNGer) unmarshalCommitments(r io.Reader, m int, i uint32) (int, error) {
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	rnger.ownSetsOfCommitments[i] = rnger.ownSetsOfCommitments[i][:0]
+	for j := uint32(0); j < l; j++ {
+		rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], shamir.Commitment{})
+		m, err = rnger.ownSetsOfCommitments[i][j].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }
