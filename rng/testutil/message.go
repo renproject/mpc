@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
@@ -17,6 +16,7 @@ import (
 // RngMessage type represents the message structure in the RNG protocol
 type RngMessage struct {
 	from, to    mtu.ID
+	fromIndex   open.Fn
 	openings    shamir.VerifiableShares
 	commitments []shamir.Commitment
 }
@@ -35,6 +35,7 @@ func (msg RngMessage) To() mtu.ID {
 func (msg RngMessage) SizeHint() int {
 	return msg.from.SizeHint() +
 		msg.to.SizeHint() +
+		msg.fromIndex.SizeHint() +
 		msg.openings.SizeHint() +
 		surge.SizeHint(msg.commitments)
 }
@@ -48,6 +49,10 @@ func (msg RngMessage) Marshal(w io.Writer, m int) (int, error) {
 	m, err = msg.to.Marshal(w, m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling to: %v", err)
+	}
+	m, err = msg.fromIndex.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling fromIndex: %v", err)
 	}
 	m, err = msg.openings.Marshal(w, m)
 	if err != nil {
@@ -70,6 +75,10 @@ func (msg *RngMessage) Unmarshal(r io.Reader, m int) (int, error) {
 	m, err = msg.to.Unmarshal(r, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling to: %v", err)
+	}
+	m, err = msg.fromIndex.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling fromIndex: %v", err)
 	}
 	m, err = msg.openings.Unmarshal(r, m)
 	if err != nil {
@@ -101,14 +110,4 @@ func (msg *RngMessage) unmarshalCommitments(r io.Reader, m int) (int, error) {
 	}
 
 	return m, nil
-}
-
-func fnToID(in open.Fn) mtu.ID {
-	v := in.Uint64()
-	return mtu.ID(uint32(v))
-}
-
-func idToFn(in mtu.ID) open.Fn {
-	v := uint32(in)
-	return secp256k1.NewSecp256k1N(uint64(v))
 }

@@ -10,6 +10,43 @@ import (
 	"github.com/renproject/mpc/open"
 )
 
+// GetAllSharesAndCommitments computes BRNG shares and commitments for
+// all players participating in the RNG protocol
+func GetAllSharesAndCommitments(
+	indices []open.Fn,
+	b, k int,
+	h curve.Point,
+) (
+	map[open.Fn][]shamir.VerifiableShares,
+	map[open.Fn][][]shamir.Commitment,
+) {
+	setsOfSharesByPlayer := make(map[open.Fn][]shamir.VerifiableShares)
+	setsOfCommitmentsByPlayer := make(map[open.Fn][][]shamir.Commitment)
+	for _, index := range indices {
+		setsOfSharesByPlayer[index] = make([]shamir.VerifiableShares, b)
+		setsOfCommitmentsByPlayer[index] = make([][]shamir.Commitment, b)
+	}
+
+	brnger := brng.New(indices, h)
+	for i := 0; i < b; i++ {
+		table := btu.RandomValidTable(indices, h, k, k, len(indices))
+
+		for _, index := range indices {
+			slice := table.TakeSlice(index, indices)
+
+			brnger.Reset()
+			brnger.TransitionStart(k, k)
+			shares, commitments, _ := brnger.TransitionSlice(slice)
+
+			// Assign them to the `from` player
+			setsOfSharesByPlayer[index][i] = shares
+			setsOfCommitmentsByPlayer[index][i] = commitments
+		}
+	}
+
+	return setsOfSharesByPlayer, setsOfCommitmentsByPlayer
+}
+
 // GetAllDirectedOpenings computes directed openings from all players
 // to the single player in consideration
 func GetAllDirectedOpenings(
@@ -136,6 +173,8 @@ func GetDirectedOpenings(
 
 		// For all other shares and commitments
 		for l := 1; l < len(setOfShares); l++ {
+			multiplier.Mul(&multiplier, &to)
+
 			var share = setOfShares[l]
 			var commitment shamir.Commitment
 			commitment.Set(setsOfCommitments[i][l])
@@ -147,9 +186,6 @@ func GetDirectedOpenings(
 			// Add it to the accumulators
 			accShare.Add(&accShare, &share)
 			accCommitment.Add(&accCommitment, &commitment)
-
-			// Scale the multiplier
-			multiplier.Mul(&multiplier, &to)
 		}
 
 		computedShares[i] = accShare

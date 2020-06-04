@@ -16,6 +16,7 @@ import (
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
 	rtu "github.com/renproject/mpc/rng/testutil"
+	mtu "github.com/renproject/mpc/testutil"
 )
 
 var _ = Describe("Rng", func() {
@@ -514,6 +515,71 @@ var _ = Describe("Rng", func() {
 	})
 
 	Describe("Network Simulation", func() {
-		// TODO
+		var ids []mtu.ID
+		var machines []mtu.Machine
+		var network mtu.Network
+		var shuffleMsgs func([]mtu.Message)
+		var isOffline map[mtu.ID]bool
+
+		JustBeforeEach(func() {
+			// Randomise RNG network scenario
+			n := 5 + rand.Intn(6)
+			indices := stu.SequentialIndices(n)
+			b := 3 + rand.Intn(3)
+			k := 3 + rand.Intn(n-3)
+			h := curve.Random()
+
+			// Machines (players) participating in the RNG protocol
+			ids = make([]mtu.ID, n)
+			machines = make([]mtu.Machine, n)
+
+			// Get BRNG outputs for all players
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rtu.GetAllSharesAndCommitments(indices, b, k, h)
+
+			// Append machines to the network
+			for i, index := range indices {
+				id := mtu.ID(i)
+				rngMachine := rtu.NewRngMachine(
+					id, index, indices, b, k, h,
+					setsOfSharesByPlayer[index],
+					setsOfCommitmentsByPlayer[index],
+				)
+				machines[i] = &rngMachine
+				ids[i] = id
+			}
+
+			nOffline := rand.Intn(n - k + 1)
+			shuffleMsgs, isOffline = mtu.MessageShufflerDropper(ids, nOffline)
+			network = mtu.NewNetwork(machines, shuffleMsgs)
+			network.SetCaptureHist(true)
+		})
+
+		Specify("RNG machines should reconstruct the same random numbers", func() {
+			err := network.Run()
+			Expect(err).ToNot(HaveOccurred())
+
+			// ID of the first online machine
+			i := 0
+			for isOffline[machines[i].ID()] {
+				i = i + 1
+			}
+
+			// Get the unbiased random numbers calculated by that RNG machine
+			referenceRandomNumbers := machines[i].(*rtu.RngMachine).UnbiasedRandomNumbers()
+
+			for j := i + 1; j < len(machines); j++ {
+				// Ignore if that machine is offline
+				if isOffline[machines[j].ID()] {
+					continue
+				}
+
+				randomNumbers := machines[j].(*rtu.RngMachine).UnbiasedRandomNumbers()
+
+				Expect(len(referenceRandomNumbers)).To(Equal(len(randomNumbers)))
+				for ii, randomNumber := range randomNumbers {
+					Expect(randomNumber.Eq(&referenceRandomNumbers[ii])).To(BeTrue())
+				}
+			}
+		})
 	})
 })

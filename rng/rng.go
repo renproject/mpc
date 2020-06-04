@@ -267,7 +267,7 @@ func (rnger *RNGer) TransitionShares(
 
 			// Initialise the accumulators with the first values
 			var accCommitment shamir.Commitment
-			accCommitment.Set(setsOfCommitments[i][0])
+			accCommitment.Set(setOfCommitments[0])
 			var multiplier = secp256k1.OneSecp256k1N()
 
 			var accShare shamir.VerifiableShare
@@ -277,11 +277,14 @@ func (rnger *RNGer) TransitionShares(
 
 			// For all other shares and commitments
 			for l := 1; l < len(setOfCommitments); l++ {
+				// Scale the multiplier
+				multiplier.Mul(&multiplier, &J)
+
 				// Initialise
 				// Scale by the multiplier
 				// Add to the accumulator
 				var commitment shamir.Commitment
-				commitment.Set(setsOfCommitments[i][l])
+				commitment.Set(setOfCommitments[l])
 				commitment.Scale(&commitment, &multiplier)
 				accCommitment.Add(&accCommitment, &commitment)
 
@@ -292,9 +295,6 @@ func (rnger *RNGer) TransitionShares(
 					share.Scale(&share, &multiplier)
 					accShare.Add(&accShare, &share)
 				}
-
-				// Scale the multiplier
-				multiplier.Mul(&multiplier, &J)
 			}
 
 			// append the accumulated values
