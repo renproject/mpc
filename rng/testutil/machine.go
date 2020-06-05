@@ -47,9 +47,14 @@ func NewRngMachine(
 	}
 }
 
-// ID returns the index of the RNG machine
+// ID returns the index of the RNG machine in the list of machines
 func (machine RngMachine) ID() mtu.ID {
 	return machine.id
+}
+
+// Index returns the index assigned to the machine in the network of RNG machines
+func (machine RngMachine) Index() open.Fn {
+	return machine.index
 }
 
 // SizeHint implements surge SizeHinter
@@ -104,9 +109,10 @@ func (machine *RngMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	return m, nil
 }
 
-// UnbiasedRandomNumbers returns the unbiased random numbers reconstructed
-func (machine RngMachine) UnbiasedRandomNumbers() []open.Fn {
-	return machine.rnger.ReconstructedRandomNumbers()
+// RandomNumbersShares returns the reconstructed shares for the
+// unbiased random numbers.
+func (machine RngMachine) RandomNumbersShares() []open.Fn {
+	return machine.rnger.ReconstructedShares()
 }
 
 // InitialMessages implements the interface as required by a Network machine
