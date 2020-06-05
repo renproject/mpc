@@ -354,15 +354,6 @@ func (rnger RNGer) ConstructedSetsOfShares() ([]shamir.VerifiableShares, [][]sha
 	return rnger.ownSetsOfShares, rnger.ownSetsOfCommitments
 }
 
-// ConstructedSetOfShares returns the RNG state machine's bID'th constructed set of shares
-func (rnger RNGer) ConstructedSetOfShares(bID uint32) (shamir.VerifiableShares, []shamir.Commitment) {
-	if bID >= rnger.BatchSize() {
-		return nil, nil
-	}
-
-	return rnger.ownSetsOfShares[bID], rnger.ownSetsOfCommitments[bID]
-}
-
 // DirectedOpenings returns the openings from the RNG state machine to other
 // RNG state machines
 func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []shamir.Commitment) {
@@ -399,6 +390,9 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []sham
 //
 // Since the RNG machine is capable of generating `b` random numbers, we expect
 // other players to supply `b` directed openings of their shares too.
+//
+// When the RNG machine transitions to the Done state, it has a share each `r_j` for the
+// `b` random numbers
 //
 // fromIndex is the index of the RNG machine from which we are receiving directed openings
 //	- MUST be a part of the set of indices in RNG machine
@@ -461,10 +455,11 @@ func (rnger *RNGer) TransitionOpen(
 	return OpeningsIgnored
 }
 
-// ReconstructedRandomNumbers returns the `b` random numbers that have been
-// reconstructed by the RNG machine. This also means that the RNG machine is in
-// the `Done` state. If it isn't this returns `nil`
-func (rnger RNGer) ReconstructedRandomNumbers() []open.Fn {
+// ReconstructedShares returns the `b` shares of the `b` random numbers
+// that have been reconstructed by the RNG machine (one share for each random number).
+// This also means that the RNG machine is in the `Done` state.
+// If it isn't in the Done state this function returns `nil`
+func (rnger RNGer) ReconstructedShares() []open.Fn {
 	if rnger.State() == Done {
 		return rnger.opener.Secrets()
 	}

@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	stu "github.com/renproject/shamir/testutil"
@@ -81,6 +82,12 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.BatchSize()).To(Equal(uint32(b)))
 				Expect(rnger.Threshold()).To(Equal(uint32(k)))
 				Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+
+				for _, index := range indices {
+					directedOpeningShares, directedOpeningCommitments := rnger.DirectedOpenings(index)
+					Expect(directedOpeningShares).To(BeNil())
+					Expect(directedOpeningCommitments).To(BeNil())
+				}
 			})
 
 			Context("When in Init state", func() {
@@ -97,6 +104,12 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.BatchSize()).To(Equal(uint32(b)))
 					Expect(rnger.Threshold()).To(Equal(uint32(k)))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
+
+					for _, index := range indices {
+						directedOpeningShares, directedOpeningCommitments := rnger.DirectedOpenings(index)
+						Expect(directedOpeningShares).To(BeNil())
+						Expect(directedOpeningCommitments).To(BeNil())
+					}
 				})
 
 				Specify("Supply valid BRNG shares/commitments", func() {
@@ -266,6 +279,33 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
 
+				Specify("Supply invalid directed opening", func() {
+					// When the RNG machine receives an invalid set of directed openings from another player
+					// in any form (mismatching length, invalid index of player, etc), it
+					// simply ignores those openings and continues to be in the same state
+					//
+					// get a random player who is not the current RNG machine's player
+					from := indices[rand.Intn(len(indices))]
+					for from.Eq(&index) {
+						from = indices[rand.Intn(len(indices))]
+					}
+
+					// Openings length not equal to batch size
+					event := rnger.TransitionOpen(from, openingsByPlayer[from][1:], commitmentsByPlayer[from])
+					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+
+					// Commitments length not equal to batch size
+					event = rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from][1:])
+					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+
+					// Sender index is randomly chosen, so does not exist in the initial player indices
+					event = rnger.TransitionOpen(secp256k1.RandomSecp256k1N(), openingsByPlayer[from], commitmentsByPlayer[from])
+					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+				})
+
 				Specify("Supply directed opening", func() {
 					// When the RNG machine receives a valid set of directed openings from another player
 					// it adds those to its opener and continues to be in the WaitingOpen state.
@@ -301,7 +341,7 @@ var _ = Describe("Rng", func() {
 
 							Expect(event).To(Equal(rng.RNGsReconstructed))
 							Expect(rnger.State()).To(Equal(rng.Done))
-							Expect(len(rnger.ReconstructedRandomNumbers())).To(Equal(b))
+							Expect(len(rnger.ReconstructedShares())).To(Equal(b))
 
 							break
 						}
@@ -350,7 +390,7 @@ var _ = Describe("Rng", func() {
 					}
 
 					Expect(rnger.State()).To(Equal(rng.Done))
-					Expect(len(rnger.ReconstructedRandomNumbers())).To(Equal(b))
+					Expect(len(rnger.ReconstructedShares())).To(Equal(b))
 				}
 
 				JustBeforeEach(func() {
@@ -390,7 +430,7 @@ var _ = Describe("Rng", func() {
 					Expect(event).To(Equal(rng.Reset))
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
-					Expect(rnger.ReconstructedRandomNumbers()).To(BeNil())
+					Expect(rnger.ReconstructedShares()).To(BeNil())
 				})
 			})
 		})
@@ -445,7 +485,7 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.State()).To(Equal(rnger2.State()))
 				Expect(rnger.N()).To(Equal(rnger2.N()))
 				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
-				Expect(rnger.ReconstructedRandomNumbers()).To(Equal(rnger2.ReconstructedRandomNumbers()))
+				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
 
 				expectedShares, expectedCommitments := rnger.ConstructedSetsOfShares()
 				shares, commitments := rnger2.ConstructedSetsOfShares()
@@ -464,7 +504,7 @@ var _ = Describe("Rng", func() {
 					_ = rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
 				}
 				Expect(rnger.State()).To(Equal(rng.Done))
-				Expect(len(rnger.ReconstructedRandomNumbers())).To(Equal(b))
+				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
 
 				buf := bytes.NewBuffer([]byte{})
 
@@ -481,7 +521,7 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.State()).To(Equal(rnger2.State()))
 				Expect(rnger.N()).To(Equal(rnger2.N()))
 				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
-				Expect(rnger.ReconstructedRandomNumbers()).To(Equal(rnger2.ReconstructedRandomNumbers()))
+				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
 
 				expectedShares, expectedCommitments := rnger.ConstructedSetsOfShares()
 				shares, commitments := rnger2.ConstructedSetsOfShares()
@@ -520,13 +560,14 @@ var _ = Describe("Rng", func() {
 		var network mtu.Network
 		var shuffleMsgs func([]mtu.Message)
 		var isOffline map[mtu.ID]bool
+		var b, k int
 
 		JustBeforeEach(func() {
 			// Randomise RNG network scenario
 			n := 5 + rand.Intn(6)
 			indices := stu.SequentialIndices(n)
-			b := 3 + rand.Intn(3)
-			k := 3 + rand.Intn(n-3)
+			b = 3 + rand.Intn(3)
+			k = 3 + rand.Intn(n-3)
 			h := curve.Random()
 
 			// Machines (players) participating in the RNG protocol
@@ -554,7 +595,7 @@ var _ = Describe("Rng", func() {
 			network.SetCaptureHist(true)
 		})
 
-		Specify("RNG machines should reconstruct the same random numbers", func() {
+		Specify("RNG machines should reconstruct the consistent shares for random numbers", func() {
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -565,7 +606,7 @@ var _ = Describe("Rng", func() {
 			}
 
 			// Get the unbiased random numbers calculated by that RNG machine
-			referenceRandomNumbers := machines[i].(*rtu.RngMachine).UnbiasedRandomNumbers()
+			referenceRNShares := machines[i].(*rtu.RngMachine).RandomNumbersShares()
 
 			for j := i + 1; j < len(machines); j++ {
 				// Ignore if that machine is offline
@@ -573,12 +614,32 @@ var _ = Describe("Rng", func() {
 					continue
 				}
 
-				randomNumbers := machines[j].(*rtu.RngMachine).UnbiasedRandomNumbers()
+				rnShares := machines[j].(*rtu.RngMachine).RandomNumbersShares()
+				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
+			}
 
-				Expect(len(referenceRandomNumbers)).To(Equal(len(randomNumbers)))
-				for ii, randomNumber := range randomNumbers {
-					Expect(randomNumber.Eq(&referenceRandomNumbers[ii])).To(BeTrue())
+			// For every batch in batch size, the shares that every player has
+			// should be consistent
+			for i := 0; i < b; i++ {
+				indices := make([]open.Fn, 0, len(machines))
+				shares := make(shamir.Shares, 0, len(machines))
+
+				for j := 0; j < len(machines); j++ {
+					if isOffline[machines[j].ID()] {
+						continue
+					}
+
+					evaluationPoint := machines[j].(*rtu.RngMachine).Index()
+					evaluation := machines[j].(*rtu.RngMachine).RandomNumbersShares()[i]
+					share := shamir.NewShare(evaluationPoint, evaluation)
+
+					indices = append(indices, evaluationPoint)
+					shares = append(shares, share)
 				}
+
+				reconstructor := shamir.NewReconstructor(indices)
+				Expect(stu.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
+				Expect(stu.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 			}
 		})
 	})
