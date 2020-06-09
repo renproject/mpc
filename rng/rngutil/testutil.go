@@ -83,6 +83,7 @@ func GetAllDirectedOpenings(
 	to open.Fn,
 	b, k int,
 	h curve.Point,
+	isZero bool,
 ) (
 	map[open.Fn]shamir.VerifiableShares,
 	map[open.Fn][]shamir.Commitment,
@@ -105,7 +106,12 @@ func GetAllDirectedOpenings(
 	// Generate random table and distribute appropriately
 	brnger := brng.New(indices, h)
 	for i := 0; i < b; i++ {
-		table := brngutil.RandomValidTable(indices, h, k, k, len(indices))
+		var table table.Table
+		if isZero {
+			table = brngutil.RandomValidTable(indices, h, k, k-1, len(indices))
+		} else {
+			table = brngutil.RandomValidTable(indices, h, k, k, len(indices))
+		}
 
 		for _, from := range indices {
 			// Take the appropriate slice from table
@@ -113,7 +119,11 @@ func GetAllDirectedOpenings(
 
 			// Reset the dummy BRNG machine and extract shares/commitments
 			brnger.Reset()
-			brnger.TransitionStart(k, k)
+			if isZero {
+				brnger.TransitionStart(k, k-1)
+			} else {
+				brnger.TransitionStart(k, k)
+			}
 			shares, commitments, _ := brnger.TransitionSlice(slice)
 
 			// Assign them to the `from` player
@@ -127,7 +137,7 @@ func GetAllDirectedOpenings(
 		openings, commitments := GetDirectedOpenings(
 			setsOfSharesByPlayer[from],
 			setsOfCommitmentsByPlayer[from],
-			to,
+			to, isZero,
 		)
 
 		openingsByPlayer[from] = openings
@@ -147,6 +157,7 @@ func GetBrngOutputs(
 	index open.Fn,
 	b, k int,
 	h curve.Point,
+	isZero bool,
 ) ([]shamir.VerifiableShares, [][]shamir.Commitment) {
 	// We will need a BRNG engine
 	brnger := brng.New(indices, h)
@@ -158,17 +169,33 @@ func GetBrngOutputs(
 	for i := 0; i < b; i++ {
 		// reset the BRNG engine
 		brnger.Reset()
-		_ = brnger.TransitionStart(k, k)
+
+		if isZero {
+			_ = brnger.TransitionStart(k, k-1)
+		} else {
+			_ = brnger.TransitionStart(k, k)
+		}
 
 		// generate a valid table. Each table represents `k` BRNG runs
 		// which also means, a batch size of `k` for the BRNG call
-		table := brngutil.RandomValidTable(
-			indices,      // indices of players
-			h,            // pedersen commitment parameter
-			k,            // reconstruction threshold
-			k,            // batch size of each BRNG call
-			len(indices), // height of the table
-		)
+		var table table.Table
+		if isZero {
+			table = brngutil.RandomValidTable(
+				indices,      // indices of players
+				h,            // pedersen commitment parameter
+				k,            // reconstruction threshold
+				k-1,          // batch size of each BRNG call
+				len(indices), // height of the table
+			)
+		} else {
+			table = brngutil.RandomValidTable(
+				indices,      // indices of players
+				h,            // pedersen commitment parameter
+				k,            // reconstruction threshold
+				k,            // batch size of each BRNG call
+				len(indices), // height of the table
+			)
+		}
 
 		// get slice of this table for the player of our interest
 		slice := table.TakeSlice(index, indices)
@@ -188,17 +215,27 @@ func GetBrngOutputs(
 func GetDirectedOpenings(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
-	to open.Fn,
+	to open.Fn, isZero bool,
 ) (shamir.VerifiableShares, []shamir.Commitment) {
 	computedShares := make(shamir.VerifiableShares, len(setsOfShares))
 	computedCommitments := make([]shamir.Commitment, len(setsOfShares))
 
 	for i, setOfShares := range setsOfShares {
 		// Initialise the accumulators with the first values
-		var accShare = setOfShares[0]
+		var multiplier open.Fn
+		var accShare shamir.VerifiableShare
 		var accCommitment shamir.Commitment
-		accCommitment.Set(setsOfCommitments[i][0])
-		var multiplier = secp256k1.OneSecp256k1N()
+
+		if isZero {
+			multiplier.Set(&to)
+			accCommitment = shamir.NewCommitmentWithCapacity(setsOfCommitments[i][0].Len())
+			accCommitment.Scale(&setsOfCommitments[i][0], &multiplier)
+			accShare.Scale(&setsOfShares[i][0], &multiplier)
+		} else {
+			multiplier = secp256k1.OneSecp256k1N()
+			accCommitment.Set(setsOfCommitments[i][0])
+			accShare = setsOfShares[i][0]
+		}
 
 		// For all other shares and commitments
 		for l := 1; l < len(setOfShares); l++ {

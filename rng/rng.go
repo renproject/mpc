@@ -343,7 +343,7 @@ func (rnger *RNGer) TransitionShares(
 		}
 	}
 
-	// Declare variable to hold field element for N.
+	// Declare variable to hold commitments to initialize the opener
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
 
 	// Construct the commitments for the batch of unbiased random numbers.

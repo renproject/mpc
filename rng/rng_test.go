@@ -116,7 +116,7 @@ var _ = Describe("Rng", func() {
 					// If an RNG machine in the Init state is supplied with
 					// valid sets of shares and commitments from its own BRNG outputs
 					// it transitions to the WaitingOpen state
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 
 					// Once we have `b` sets of shares and commitments
 					// we are ready to transition the RNG machine
@@ -146,7 +146,7 @@ var _ = Describe("Rng", func() {
 					// CommitmentsConstructed event. Sets of shares of length not equal to the
 					// batch size of the RNG machine are also ignored, simply proceeding to
 					// processing the commitments
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 
 					// Initialise three RNG replicas
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -191,7 +191,7 @@ var _ = Describe("Rng", func() {
 					// our assumption about the correctness of sets of shares in case they
 					// are of appropriate batch size. The RNG machine hence panics, and continues
 					// to be in its initial state
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					// fool around with one of the set of shares
@@ -209,7 +209,7 @@ var _ = Describe("Rng", func() {
 					// lengths (batch size) for shares and commitment, whereby the commitments
 					// are of incorrect size, we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					// Inccorect batch length.
@@ -234,6 +234,18 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
+				Specify("Supply invalid set of commitments", func() {
+					// If an RNG machine is supplied with BRNG outputs that have at least one commitment,
+					// not of appropriate capacity (k-1) we panic because it refutes our assumption
+					// about the correctness of the sets of commitments
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+					j := rand.Intn(b)
+					ii := rand.Intn(k)
+					setsOfCommitments[j] = append(setsOfCommitments[j][:ii], setsOfCommitments[j][ii+1:]...)
+					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero) }).To(Panic())
+				})
+
 				Specify("Supply directed opening", func() {
 					// If an RNG machine in the Init state is supplied with a valid directed opening
 					// it does not react to that and simply ignores it
@@ -248,8 +260,8 @@ var _ = Describe("Rng", func() {
 
 					// get this `from` index's sets of shares and commitments
 					// also compute its openings for the player
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, from, b, k, h)
-					openings, _ := rngutil.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, from, b, k, h, isZero)
+					openings, _ := rngutil.GetDirectedOpenings(setsOfShares, setsOfCommitments, index, isZero)
 
 					// initialise player's RNG machine and supply openings
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -277,7 +289,7 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 					Expect(event).To(Equal(rng.SharesConstructed))
@@ -300,7 +312,7 @@ var _ = Describe("Rng", func() {
 				Specify("Supply BRNG shares", func() {
 					// When an RNG machine in the WaitingOpen state is supplied BRNG shares
 					// it simply ignores them and continues to be in the same state
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					event := rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
@@ -404,7 +416,7 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -467,7 +479,7 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes own shares and commitments", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -519,7 +531,7 @@ var _ = Describe("Rng", func() {
 
 			JustBeforeEach(func() {
 				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 			})
