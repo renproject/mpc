@@ -40,3 +40,42 @@ func ShareOfShare(index secp256k1.Fn, vshares shamir.VerifiableShares) shamir.Ve
 
 	return acc
 }
+
+// Private functions
+func initShareComputation(
+	setOfShares shamir.VerifiableShares,
+	toIndex open.Fn,
+	isZero bool,
+) (open.Fn, shamir.VerifiableShare) {
+	var multiplier open.Fn
+	var accShare shamir.VerifiableShare
+
+	if isZero {
+		multiplier.Set(&toIndex)
+		accShare.Scale(&setOfShares[0], &multiplier)
+	} else {
+		multiplier = secp256k1.OneSecp256k1N()
+		accShare = setOfShares[0]
+	}
+
+	return multiplier, accShare
+}
+
+func initCommitmentComputation(
+	setOfCommitments []shamir.Commitment,
+	toIndex open.Fn, isZero bool,
+) (open.Fn, shamir.Commitment) {
+	// Initialise the accumulators with the first values
+	var multiplier open.Fn
+	var accCommitment shamir.Commitment
+
+	if isZero {
+		multiplier.Set(&toIndex)
+		accCommitment.Scale(&setOfCommitments[0], &multiplier)
+	} else {
+		multiplier = secp256k1.OneSecp256k1N()
+		accCommitment.Set(setOfCommitments[0])
+	}
+
+	return multiplier, accCommitment
+}
