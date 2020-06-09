@@ -220,13 +220,13 @@ func (rnger *RNGer) TransitionShares(
 	setsOfCommitments [][]shamir.Commitment,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `Init` state
-	if rnger.State() != Init {
+	if rnger.state != Init {
 		return SharesIgnored
 	}
 
 	// Since this refutes our assumption that the sets of commitments
 	// are valid and correct
-	if len(setsOfCommitments) != int(rnger.BatchSize()) {
+	if len(setsOfCommitments) != int(rnger.batchSize) {
 		panic("Unexpected invalid sets of commitments to RNG")
 	}
 
@@ -242,33 +242,39 @@ func (rnger *RNGer) TransitionShares(
 
 	// Ignore the shares if their number of sets does not match
 	// the batch size of the RNG state machine
-	if len(setsOfShares) != int(rnger.BatchSize()) {
+	if len(setsOfShares) != int(rnger.batchSize) {
 		ignoreShares = true
 	}
 
 	// Declare variable to hold field element for N
-	locallyComputedCommitments := make([]shamir.Commitment, rnger.BatchSize())
-	locallyComputedShares := make(shamir.VerifiableShares, rnger.BatchSize())
+	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
+	locallyComputedShares := make(shamir.VerifiableShares, rnger.batchSize)
 
 	// For every set of verifiable shares
 	for i, setOfCommitments := range setsOfCommitments {
 		// Since this refutes our assumption that if the sets of shares are of appropriate
 		// length, then every set of shares is valid and correct
-		if !ignoreShares && len(setsOfShares[i]) != int(rnger.Threshold()) {
+		if !ignoreShares && len(setsOfShares[i]) != int(rnger.threshold) {
 			panic("Unexpected invalid set of shares")
+		}
+
+		// Since this refutes our assumption that the sets of commitments
+		// are valid and correct
+		if len(setOfCommitments) != int(rnger.threshold) {
+			panic("Unexpected invalid sets of commitments to RNG")
 		}
 
 		// For j = 1 to N
 		// compute r_{i,j}
 		// append to ownSetsOfShares
 		// append to ownSetsOfCommitments
-		for j := 1; j <= int(rnger.N()); j++ {
+		for j := 1; j <= len(rnger.indices); j++ {
 			J := secp256k1.NewSecp256k1N(uint64(j))
 
 			// Initialise the accumulators with the first values
+			var multiplier = secp256k1.OneSecp256k1N()
 			var accCommitment shamir.Commitment
 			accCommitment.Set(setOfCommitments[0])
-			var multiplier = secp256k1.OneSecp256k1N()
 
 			var accShare shamir.VerifiableShare
 			if !ignoreShares {
@@ -363,11 +369,11 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []sham
 		return nil, nil
 	}
 
-	openings := make(shamir.VerifiableShares, 0, rnger.BatchSize())
-	commitments := make([]shamir.Commitment, 0, rnger.BatchSize())
+	openings := make(shamir.VerifiableShares, 0, rnger.batchSize)
+	commitments := make([]shamir.Commitment, 0, rnger.batchSize)
 
 	toIndex := int(to.Uint64())
-	for i := 0; i < int(rnger.BatchSize()); i++ {
+	for i := 0; i < int(rnger.batchSize); i++ {
 		// NOTE: This assumes sequential indices for players
 		// Hence openings for player `toIndex` would have been appended at array index `toIndex - 1`
 		// CONSIDER: Is this really the best way of achieving this?
@@ -409,7 +415,7 @@ func (rnger *RNGer) TransitionOpen(
 	commitments []shamir.Commitment,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `WaitingOpen` state
-	if rnger.State() != WaitingOpen {
+	if rnger.state != WaitingOpen {
 		return OpeningsIgnored
 	}
 
@@ -420,7 +426,7 @@ func (rnger *RNGer) TransitionOpen(
 
 	// Ignore if the number of openings/commitments supplied is not equal
 	// to the RNG machine's batch size
-	if len(openings) != int(rnger.BatchSize()) {
+	if len(openings) != int(rnger.batchSize) {
 		return OpeningsIgnored
 	}
 
@@ -460,7 +466,7 @@ func (rnger *RNGer) TransitionOpen(
 // This also means that the RNG machine is in the `Done` state.
 // If it isn't in the Done state this function returns `nil`
 func (rnger RNGer) ReconstructedShares() []open.Fn {
-	if rnger.State() == Done {
+	if rnger.state == Done {
 		return rnger.opener.Secrets()
 	}
 
@@ -471,7 +477,7 @@ func (rnger RNGer) ReconstructedShares() []open.Fn {
 // Note that the Opener state machine is not reset at this point in time
 // It is reset when the RNG receives its BRNG outputs again
 func (rnger *RNGer) Reset() TransitionEvent {
-	for i := 0; i < int(rnger.BatchSize()); i++ {
+	for i := 0; i < int(rnger.batchSize); i++ {
 		rnger.ownSetsOfShares[i] = rnger.ownSetsOfShares[i][:0]
 		rnger.ownSetsOfCommitments[i] = rnger.ownSetsOfCommitments[i][:0]
 	}
