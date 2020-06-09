@@ -32,6 +32,7 @@ func NewRngMachine(
 	indices []open.Fn,
 	b, k int,
 	h curve.Point,
+	isZero bool,
 	ownSetsOfShares []shamir.VerifiableShares,
 	ownSetsOfCommitments [][]shamir.Commitment,
 	hasEmptyShares bool,

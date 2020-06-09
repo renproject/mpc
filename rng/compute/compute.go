@@ -24,10 +24,16 @@ func OutputCommitment(coms []shamir.Commitment) shamir.Commitment {
 //
 // Panics: This function panics if the length of the slice of commitments is
 // less than 1.
-func ShareCommitment(index open.Fn, coms []shamir.Commitment) shamir.Commitment {
-	var acc shamir.Commitment
-
+func ShareCommitment(
+	index open.Fn,
+	coms []shamir.Commitment,
+	isZero bool,
+) shamir.Commitment {
 	acc.Set(coms[len(coms)-1])
+	if isZero {
+		acc.Scale(&acc, &index)
+	}
+
 	for l := len(coms) - 2; l >= 0; l-- {
 		acc.Scale(&acc, &index)
 		acc.Add(&acc, &coms[l])
@@ -43,8 +49,16 @@ func ShareCommitment(index open.Fn, coms []shamir.Commitment) shamir.Commitment 
 //
 // Panics: This function panics if the length of the slice of commitments is
 // less than 1.
-func ShareOfShare(index open.Fn, vshares shamir.VerifiableShares) shamir.VerifiableShare {
+func ShareOfShare(
+	index open.Fn,
+	vshares shamir.VerifiableShares,
+	isZero bool,
+) shamir.VerifiableShare {
 	acc := vshares[len(vshares)-1]
+	if isZero {
+		acc.Scale(&acc, &index)
+	}
+
 	for l := len(vshares) - 2; l >= 0; l-- {
 		acc.Scale(&acc, &index)
 		acc.Add(&acc, &vshares[l])

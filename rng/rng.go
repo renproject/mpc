@@ -280,6 +280,7 @@ func New(
 //  	 - In case the sets of shares are invalid, we simply proceed with
 //  	 	locally computing the Open commitments, since we assume the
 //  	 	supplied sets of commitments are correct
+//	 - isZero is a boolean indicating whether this is a Random Zero Generator or not
 //
 // - Returns
 //   - TransitionEvent
@@ -291,10 +292,19 @@ func New(
 func (rnger *RNGer) TransitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
+	isZero bool,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `Init` state.
 	if rnger.state != Init {
 		return SharesIgnored
+	}
+
+	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
+	var requiredBrngBatchSize int
+	if isZero {
+		requiredBrngBatchSize = int(rnger.threshold - 1)
+	} else {
+		requiredBrngBatchSize = int(rnger.threshold)
 	}
 
 	//
@@ -306,7 +316,7 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	for _, coms := range setsOfCommitments {
-		if len(coms) != int(rnger.threshold) {
+		if len(coms) != requiredBrngBatchSize {
 			panic("invalid sets of commitments")
 		}
 	}
@@ -328,7 +338,7 @@ func (rnger *RNGer) TransitionShares(
 
 	// Each set of shares in the batch should have the correct length.
 	for _, shares := range setsOfShares {
-		if !ignoreShares && len(shares) != int(rnger.threshold) {
+		if !ignoreShares && len(shares) != requiredBrngBatchSize {
 			panic("invalid set of shares")
 		}
 	}
@@ -342,7 +352,7 @@ func (rnger *RNGer) TransitionShares(
 
 		// Compute the share commitment and add it to the local set of
 		// commitments.
-		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments)
+		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments, isZero)
 		locallyComputedCommitments[i].Set(accCommitment)
 	}
 
@@ -355,7 +365,7 @@ func (rnger *RNGer) TransitionShares(
 			for _, setOfShares := range setsOfShares {
 				// if the sets of shares are valid, compute the share of the
 				// share and append to the directed openings map.
-				accShare := compute.ShareOfShare(j, setOfShares)
+				accShare := compute.ShareOfShare(j, setOfShares, isZero)
 				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
 			}
 		}

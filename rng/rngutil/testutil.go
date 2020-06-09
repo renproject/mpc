@@ -6,6 +6,7 @@ import (
 	"github.com/renproject/shamir/curve"
 
 	"github.com/renproject/mpc/brng"
+	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/brng/brngutil"
 	"github.com/renproject/mpc/open"
 )
@@ -32,6 +33,7 @@ func GetAllSharesAndCommitments(
 	indices []open.Fn,
 	b, k int,
 	h curve.Point,
+	isZero bool,
 ) (
 	map[open.Fn][]shamir.VerifiableShares,
 	map[open.Fn][][]shamir.Commitment,
@@ -45,13 +47,24 @@ func GetAllSharesAndCommitments(
 
 	brnger := brng.New(indices, h)
 	for i := 0; i < b; i++ {
-		table := brngutil.RandomValidTable(indices, h, k, k, len(indices))
+		var table table.Table
+		if isZero {
+			table = brngutil.RandomValidTable(indices, h, k, k-1, len(indices))
+		} else {
+			table = brngutil.RandomValidTable(indices, h, k, k, len(indices))
+		}
 
 		for _, index := range indices {
 			slice := table.TakeSlice(index, indices)
 
 			brnger.Reset()
-			brnger.TransitionStart(k, k)
+
+			if isZero {
+				brnger.TransitionStart(k, k-1)
+			} else {
+				brnger.TransitionStart(k, k)
+			}
+
 			shares, commitments, _ := brnger.TransitionSlice(slice)
 
 			// Assign them to the `from` player

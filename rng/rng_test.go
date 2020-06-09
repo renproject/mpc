@@ -28,6 +28,7 @@ var _ = Describe("Rng", func() {
 		var indices []open.Fn
 		var index open.Fn
 		var h curve.Point
+		var isZero bool
 
 		// Setup is run before every test. It randomises the test parameters
 		Setup := func() (
@@ -37,6 +38,7 @@ var _ = Describe("Rng", func() {
 			int,
 			int,
 			curve.Point,
+			bool,
 		) {
 			// n is the number of players participating in the RNG protocol
 			// n ∈ [5, 10]
@@ -65,11 +67,11 @@ var _ = Describe("Rng", func() {
 			// Scheme Parameter
 			h := curve.Random()
 
-			return n, indices, index, b, k, h
+			return n, indices, index, b, k, h, false
 		}
 
 		BeforeEach(func() {
-			n, indices, index, b, k, h = Setup()
+			n, indices, index, b, k, h, isZero = Setup()
 		})
 
 		Context("State Transitions and Events", func() {
@@ -119,7 +121,7 @@ var _ = Describe("Rng", func() {
 					// Once we have `b` sets of shares and commitments
 					// we are ready to transition the RNG machine
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesConstructed))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -196,7 +198,7 @@ var _ = Describe("Rng", func() {
 					// so as to not let its length match the threshold
 					setsOfShares[0] = setsOfShares[0][1:]
 
-					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments) }).To(Panic())
+					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero) }).To(Panic())
 
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
@@ -216,7 +218,7 @@ var _ = Describe("Rng", func() {
 					wrongBatch = append(wrongBatch[:j], wrongBatch[j+1:]...)
 					Expect(func() { rnger.TransitionShares(setsOfShares, wrongBatch) }).To(Panic())
 					Expect(func() {
-						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongBatch)
+						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongBatch, isZero)
 					}).To(Panic())
 
 					// Inccorect threshold.
@@ -225,7 +227,7 @@ var _ = Describe("Rng", func() {
 					wrongK[0] = append(wrongK[0][:j], wrongK[0][j+1:]...)
 					Expect(func() { rnger.TransitionShares(setsOfShares, wrongK) }).To(Panic())
 					Expect(func() {
-						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongK)
+						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongK, isZero)
 					}).To(Panic())
 
 					Expect(rnger.State()).To(Equal(rng.Init))
@@ -277,7 +279,7 @@ var _ = Describe("Rng", func() {
 
 					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
-					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 					Expect(event).To(Equal(rng.SharesConstructed))
 				}
 
@@ -299,7 +301,7 @@ var _ = Describe("Rng", func() {
 					// When an RNG machine in the WaitingOpen state is supplied BRNG shares
 					// it simply ignores them and continues to be in the same state
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
-					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -404,7 +406,7 @@ var _ = Describe("Rng", func() {
 
 					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
-					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 					count := 1
 					for _, from := range indices {
@@ -426,7 +428,7 @@ var _ = Describe("Rng", func() {
 				Specify("Supply BRNG shares", func() {
 					// When an RNG machine in the Done state is supplied own shares
 					// it simply ignores them, and continues to be in the same state
-					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
 					Expect(rnger.State()).To(Equal(rng.Done))
@@ -467,7 +469,7 @@ var _ = Describe("Rng", func() {
 
 				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
-				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 				// fetch the directed openings computed for the state machine itself
 				selfOpenings := rnger.DirectedOpenings(index)
@@ -519,7 +521,7 @@ var _ = Describe("Rng", func() {
 				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
-				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 			})
 
 			It("Should correctly marshal and unmarshal (WaitingOpen)", func() {
@@ -623,7 +625,7 @@ var _ = Describe("Rng", func() {
 			machines := make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, isZero)
 
 			// Append machines to the network
 			for i, index := range indices {
