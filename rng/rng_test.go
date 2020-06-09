@@ -271,6 +271,25 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
+
+				Specify("Special scenario when k = 1", func() {
+					// If an RNG machine in the Init state is supplied with
+					// valid sets of shares and commitments from its own BRNG outputs
+					// it transitions to the WaitingOpen state
+					// But if the reconstruction threshold is k = 1, then in that trivial case,
+					// a single machine can construct the entire secret just by itself.
+					// This should not be the scenario ideally, but we will cover it nonetheless
+					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, 1, h, isZero)
+
+					// Once we have `b` sets of shares and commitments
+					// we are ready to transition the RNG machine
+					_, rnger := rng.New(index, indices, uint32(b), uint32(1), h)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
+
+					Expect(event).To(Equal(rng.RNGsReconstructed))
+					Expect(rnger.State()).To(Equal(rng.Done))
+					Expect(rnger.HasConstructedShares()).To(BeTrue())
+				})
 			})
 
 			Context("When in WaitingOpen state", func() {
