@@ -115,6 +115,11 @@ func (machine RngMachine) RandomNumbersShares() []open.Fn {
 	return machine.rnger.ReconstructedShares()
 }
 
+// Commitments returns the commitments for the batch of unbiased random numbers
+func (machine RngMachine) Commitments() []shamir.Commitment {
+	return machine.rnger.Commitments()
+}
+
 // InitialMessages implements the interface as required by a Network machine
 // It returns the initial messages to be sent by a machine to another machine
 // participating in the said protocol
@@ -125,13 +130,12 @@ func (machine RngMachine) InitialMessages() []mtu.Message {
 			continue
 		}
 
-		openings, commitments := machine.rnger.DirectedOpenings(to)
+		openings := machine.rnger.DirectedOpenings(to)
 		messages = append(messages, &RngMessage{
-			from:        machine.id,
-			to:          mtu.ID(i),
-			fromIndex:   machine.index,
-			openings:    openings,
-			commitments: commitments,
+			from:      machine.id,
+			to:        mtu.ID(i),
+			fromIndex: machine.index,
+			openings:  openings,
 		})
 	}
 
@@ -145,7 +149,7 @@ func (machine RngMachine) InitialMessages() []mtu.Message {
 func (machine *RngMachine) Handle(msg mtu.Message) []mtu.Message {
 	switch msg := msg.(type) {
 	case *RngMessage:
-		machine.rnger.TransitionOpen(msg.fromIndex, msg.openings, msg.commitments)
+		machine.rnger.TransitionOpen(msg.fromIndex, msg.openings)
 		return nil
 
 	default:

@@ -41,12 +41,12 @@ type RNGer struct {
 	// number of secrets
 	opener open.Opener
 
-	// ownSetsOfShares signifies the given RNG state machine's own shares
-	ownSetsOfShares []shamir.VerifiableShares
+	// commitments signify the set of commitments for the batch of unbiased
+	// random numbers to be reconstructed in RNG
+	commitments []shamir.Commitment
 
-	// ownSetsOfCommitments signifies the given RNG state machine's sets of
-	// commitments for its respective sets of shares
-	ownSetsOfCommitments [][]shamir.Commitment
+	// openingsMap holds a map of directed openings towards a player
+	openingsMap map[open.Fn]shamir.VerifiableShares
 }
 
 // SizeHint implements the surge.SizeHinter interface
@@ -57,8 +57,8 @@ func (rnger RNGer) SizeHint() int {
 		surge.SizeHint(rnger.batchSize) +
 		surge.SizeHint(rnger.threshold) +
 		rnger.opener.SizeHint() +
-		surge.SizeHint(rnger.ownSetsOfShares) +
-		surge.SizeHint(rnger.ownSetsOfCommitments)
+		surge.SizeHint(rnger.commitments) +
+		surge.SizeHint(rnger.openingsMap)
 }
 
 // Marshal implements the surge.Marshaler interface
@@ -87,13 +87,13 @@ func (rnger RNGer) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("marshaling opener: %v", err)
 	}
-	m, err = surge.Marshal(w, rnger.ownSetsOfShares, m)
+	m, err = surge.Marshal(w, rnger.commitments, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling ownSetsOfShares: %v", err)
+		return m, fmt.Errorf("marshaling commitments: %v", err)
 	}
-	m, err = surge.Marshal(w, rnger.ownSetsOfCommitments, m)
+	m, err = surge.Marshal(w, rnger.openingsMap, m)
 	if err != nil {
-		return m, fmt.Errorf("marshaling ownSetsOfCommitments: %v", err)
+		return m, fmt.Errorf("marshaling openingsMap: %v", err)
 	}
 	return m, nil
 }
@@ -124,13 +124,13 @@ func (rnger *RNGer) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling opener: %v", err)
 	}
-	m, err = rnger.unmarshalSetsOfShares(r, m)
+	m, err = rnger.unmarshalCommitments(r, m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling ownSetsOfShares: %v", err)
+		return m, fmt.Errorf("unmarshaling commitments: %v", err)
 	}
-	m, err = rnger.unmarshalSetsOfCommitments(r, m)
+	m, err = rnger.unmarshalOpeningsMap(r, m)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling ownSetsOfCommitments: %v", err)
+		return m, fmt.Errorf("unmarshaling openingsMap: %v", err)
 	}
 	return m, nil
 }
@@ -159,10 +159,14 @@ func (rnger RNGer) Threshold() uint32 {
 	return rnger.threshold
 }
 
+// Commitments returns the shamir commitments to the batch of unbiased random numbers
+func (rnger RNGer) Commitments() []shamir.Commitment {
+	return rnger.commitments
+}
+
 // New creates a new RNG state machine for a given batch size
 // ownIndex is the current machine's index
 // indices is the set of player indices
-// n is the number of players participating in the RNG protocol
 // b is the number of random numbers generated in one invocation of RNG protocol
 // k is the reconstruction threshold for every random number
 // h is the Pedersen Commitment Parameter, a point on elliptic curve
@@ -176,11 +180,10 @@ func New(
 
 	// Declare variable to hold RNG machine's computed shares and commitments
 	// and allocate necessary memory
-	ownSetsOfShares := make([]shamir.VerifiableShares, b)
-	ownSetsOfCommitments := make([][]shamir.Commitment, b)
-	for i := 0; i < int(b); i++ {
-		ownSetsOfShares[i] = make(shamir.VerifiableShares, 0, len(indices))
-		ownSetsOfCommitments[i] = make([]shamir.Commitment, 0, len(indices))
+	commitments := make([]shamir.Commitment, b)
+	openingsMap := make(map[open.Fn]shamir.VerifiableShares)
+	for _, index := range indices {
+		openingsMap[index] = make(shamir.VerifiableShares, 0, b)
 	}
 
 	// Create an instance of the Opener state machine
@@ -188,14 +191,14 @@ func New(
 	opener := open.New(b, indices, h)
 
 	return Initialised, RNGer{
-		state:                state,
-		index:                ownIndex,
-		indices:              indices,
-		batchSize:            b,
-		threshold:            k,
-		opener:               opener,
-		ownSetsOfShares:      ownSetsOfShares,
-		ownSetsOfCommitments: ownSetsOfCommitments,
+		state:       state,
+		index:       ownIndex,
+		indices:     indices,
+		batchSize:   b,
+		threshold:   k,
+		opener:      opener,
+		commitments: commitments,
+		openingsMap: openingsMap,
 	}
 }
 
@@ -205,7 +208,6 @@ func New(
 // The machine should locally compute its own shares from the received sets of shares
 //
 // setsOfShares are the b sets of verifiable shares from the player's BRNG outputs
-// 	- We make no assumptions of correctness for the sets of shares
 //	- MUST be of length equal to the batch size to be valid
 //	- For invalid sets of shares, a nil slice []shamir.VerifiableShares{} MUST be supplied
 //	- If the above checks are met, we assume that every set of verifiable shares is valid
@@ -246,11 +248,7 @@ func (rnger *RNGer) TransitionShares(
 		ignoreShares = true
 	}
 
-	// Declare variable to hold field element for N
-	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
-	locallyComputedShares := make(shamir.VerifiableShares, rnger.batchSize)
-
-	// For every set of verifiable shares
+	// Panic in case our assumptions for shares/commitments are not met
 	for i, setOfCommitments := range setsOfCommitments {
 		// Since this refutes our assumption that if the sets of shares are of appropriate
 		// length, then every set of shares is valid and correct
@@ -263,14 +261,20 @@ func (rnger *RNGer) TransitionShares(
 		if len(setOfCommitments) != int(rnger.threshold) {
 			panic("Unexpected invalid sets of commitments to RNG")
 		}
+	}
+
+	// Declare variable to hold field element for N
+	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
+	locallyComputedShares := make(shamir.VerifiableShares, rnger.batchSize)
+
+	// For every set of verifiable shares
+	for i, setOfCommitments := range setsOfCommitments {
+		// construct rnger.commitments
+		rnger.commitments[i] = getCommitment(setOfCommitments, rnger.threshold)
 
 		// For j = 1 to N
 		// compute r_{i,j}
-		// append to ownSetsOfShares
-		// append to ownSetsOfCommitments
-		for j := 1; j <= len(rnger.indices); j++ {
-			J := secp256k1.NewSecp256k1N(uint64(j))
-
+		for _, j := range rnger.indices {
 			// Initialise the accumulators with the first values
 			var multiplier = secp256k1.OneSecp256k1N()
 			var accCommitment shamir.Commitment
@@ -284,7 +288,7 @@ func (rnger *RNGer) TransitionShares(
 			// For all other shares and commitments
 			for l := 1; l < len(setOfCommitments); l++ {
 				// Scale the multiplier
-				multiplier.Mul(&multiplier, &J)
+				multiplier.Mul(&multiplier, &j)
 
 				// Initialise
 				// Scale by the multiplier
@@ -304,16 +308,13 @@ func (rnger *RNGer) TransitionShares(
 			}
 
 			// append the accumulated values
-			rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], accCommitment)
 			if !ignoreShares {
-				rnger.ownSetsOfShares[i] = append(rnger.ownSetsOfShares[i], accShare)
-			} else {
-				rnger.ownSetsOfShares[i] = shamir.VerifiableShares{}
+				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
 			}
 
 			// If j is the current machine's index, then populate the local shares
 			// which will be later supplied to the Opener machine
-			if rnger.index.Uint64() == uint64(j) {
+			if rnger.index.Eq(&j) {
 				locallyComputedCommitments[i].Set(accCommitment)
 				if !ignoreShares {
 					locallyComputedShares[i] = accShare
@@ -355,33 +356,26 @@ func (rnger RNGer) HasConstructedShares() bool {
 	return rnger.state != Init
 }
 
-// ConstructedSetsOfShares returns the RNG state machine's all constructed sets of shares
-func (rnger RNGer) ConstructedSetsOfShares() ([]shamir.VerifiableShares, [][]shamir.Commitment) {
-	return rnger.ownSetsOfShares, rnger.ownSetsOfCommitments
-}
-
 // DirectedOpenings returns the openings from the RNG state machine to other
 // RNG state machines
-func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []shamir.Commitment) {
-	// If the RNG state machine is still in the Init state
-	// ignore this call and return nil
+func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 	if rnger.state == Init {
-		return nil, nil
+		return nil
 	}
 
-	openings := make(shamir.VerifiableShares, 0, rnger.batchSize)
-	commitments := make([]shamir.Commitment, 0, rnger.batchSize)
-
-	toIndex := int(to.Uint64())
-	for i := 0; i < int(rnger.batchSize); i++ {
-		// NOTE: This assumes sequential indices for players
-		// Hence openings for player `toIndex` would have been appended at array index `toIndex - 1`
-		// CONSIDER: Is this really the best way of achieving this?
-		openings = append(openings, rnger.ownSetsOfShares[i][toIndex-1])
-		commitments = append(commitments, rnger.ownSetsOfCommitments[i][toIndex-1])
+	indexExists := false
+	for _, index := range rnger.indices {
+		if index.Eq(&to) {
+			indexExists = true
+			break
+		}
 	}
 
-	return openings, commitments
+	if !indexExists {
+		return nil
+	}
+
+	return rnger.openingsMap[to]
 }
 
 // TransitionOpen performs the state transition for the RNG state machine upon
@@ -406,25 +400,16 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) (shamir.VerifiableShares, []sham
 // openings are the directed openings
 //	- MUST be of length b (batch size)
 //	- Will be ignored if they're not consistent with their respective commitments
-// commitments are their respective commitments
-//	- MUST be of length b (batch size)
-//	- MUST be the same as the RNG's opener's commitments (verified within RNG's opener)
 func (rnger *RNGer) TransitionOpen(
 	fromIndex open.Fn,
 	openings shamir.VerifiableShares,
-	commitments []shamir.Commitment,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `WaitingOpen` state
 	if rnger.state != WaitingOpen {
 		return OpeningsIgnored
 	}
 
-	// Ignore if the number of openings supplied is not equal to the number commitments
-	if len(openings) != len(commitments) {
-		return OpeningsIgnored
-	}
-
-	// Ignore if the number of openings/commitments supplied is not equal
+	// Ignore if the number of openings supplied is not equal
 	// to the RNG machine's batch size
 	if len(openings) != int(rnger.batchSize) {
 		return OpeningsIgnored
@@ -478,15 +463,30 @@ func (rnger RNGer) ReconstructedShares() []open.Fn {
 // It is reset when the RNG receives its BRNG outputs again
 func (rnger *RNGer) Reset() TransitionEvent {
 	for i := 0; i < int(rnger.batchSize); i++ {
-		rnger.ownSetsOfShares[i] = rnger.ownSetsOfShares[i][:0]
-		rnger.ownSetsOfCommitments[i] = rnger.ownSetsOfCommitments[i][:0]
+		rnger.commitments = rnger.commitments[:0]
 	}
+
+	for _, index := range rnger.indices {
+		rnger.openingsMap[index] = rnger.openingsMap[index][:0]
+	}
+
 	rnger.state = Init
 
 	return Reset
 }
 
 // Private functions
+func getCommitment(setOfCommitments []shamir.Commitment, k uint32) shamir.Commitment {
+	commitment := shamir.NewCommitmentWithCapacity(int(k))
+
+	for _, c := range setOfCommitments {
+		p := c.GetPoint(0)
+		commitment.AppendPoint(p)
+	}
+
+	return commitment
+}
+
 func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
 	var l uint32
 	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
@@ -506,17 +506,17 @@ func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
 	return m, nil
 }
 
-func (rnger *RNGer) unmarshalSetsOfShares(r io.Reader, m int) (int, error) {
+func (rnger *RNGer) unmarshalCommitments(r io.Reader, m int) (int, error) {
 	var l uint32
 	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
 
-	rnger.ownSetsOfShares = (rnger.ownSetsOfShares)[:0]
+	rnger.commitments = (rnger.commitments)[:0]
 	for i := uint32(0); i < l; i++ {
-		rnger.ownSetsOfShares = append(rnger.ownSetsOfShares, shamir.VerifiableShares{})
-		m, err = rnger.ownSetsOfShares[i].Unmarshal(r, m)
+		rnger.commitments = append(rnger.commitments, shamir.Commitment{})
+		m, err = rnger.commitments[i].Unmarshal(r, m)
 		if err != nil {
 			return m, err
 		}
@@ -525,39 +525,28 @@ func (rnger *RNGer) unmarshalSetsOfShares(r io.Reader, m int) (int, error) {
 	return m, nil
 }
 
-func (rnger *RNGer) unmarshalSetsOfCommitments(r io.Reader, m int) (int, error) {
+func (rnger *RNGer) unmarshalOpeningsMap(r io.Reader, m int) (int, error) {
 	var l uint32
 	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
 
-	rnger.ownSetsOfCommitments = (rnger.ownSetsOfCommitments)[:0]
+	rnger.openingsMap = make(map[open.Fn]shamir.VerifiableShares, l)
 	for i := uint32(0); i < l; i++ {
-		rnger.ownSetsOfCommitments = append(rnger.ownSetsOfCommitments, []shamir.Commitment{})
-		m, err = rnger.unmarshalCommitments(r, m, i)
+		var key open.Fn
+		m, err = key.Unmarshal(r, m)
 		if err != nil {
 			return m, err
 		}
-	}
 
-	return m, nil
-}
-
-func (rnger *RNGer) unmarshalCommitments(r io.Reader, m int, i uint32) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	rnger.ownSetsOfCommitments[i] = rnger.ownSetsOfCommitments[i][:0]
-	for j := uint32(0); j < l; j++ {
-		rnger.ownSetsOfCommitments[i] = append(rnger.ownSetsOfCommitments[i], shamir.Commitment{})
-		m, err = rnger.ownSetsOfCommitments[i][j].Unmarshal(r, m)
+		rnger.openingsMap[key] = make(shamir.VerifiableShares, rnger.batchSize)
+		var vshares shamir.VerifiableShares
+		m, err = vshares.Unmarshal(r, m)
 		if err != nil {
 			return m, err
 		}
+		rnger.openingsMap[key] = vshares
 	}
 
 	return m, nil
