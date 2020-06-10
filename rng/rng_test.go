@@ -45,6 +45,7 @@ var _ = Describe("Rng", func() {
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
 			indices := stu.SequentialIndices(n)
+			// indices := stu.RandomIndices(n)
 
 			// index denotes the current player's index
 			// This is a randomly chosen index from indices
@@ -84,9 +85,8 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 
 				for _, index := range indices {
-					directedOpeningShares, directedOpeningCommitments := rnger.DirectedOpenings(index)
+					directedOpeningShares := rnger.DirectedOpenings(index)
 					Expect(directedOpeningShares).To(BeNil())
-					Expect(directedOpeningCommitments).To(BeNil())
 				}
 			})
 
@@ -106,9 +106,8 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 
 					for _, index := range indices {
-						directedOpeningShares, directedOpeningCommitments := rnger.DirectedOpenings(index)
+						directedOpeningShares := rnger.DirectedOpenings(index)
 						Expect(directedOpeningShares).To(BeNil())
-						Expect(directedOpeningCommitments).To(BeNil())
 					}
 				})
 
@@ -152,20 +151,13 @@ var _ = Describe("Rng", func() {
 
 					// verify that the constructed shares are simply empty for rnger
 					// while they are non-empty for rnger2
-					shares, commitments := rnger.ConstructedSetsOfShares()
-					shares2, commitments2 := rnger2.ConstructedSetsOfShares()
-					for i, share := range shares {
-						Expect(share).To(Equal(shamir.VerifiableShares{}))
-						Expect(shares2[i]).ToNot(Equal(shamir.VerifiableShares{}))
-					}
+					for _, j := range indices {
+						shares := rnger.DirectedOpenings(j)
+						shares2 := rnger2.DirectedOpenings(j)
 
-					// verify that the constructed commitments are equal for both
-					Expect(len(commitments)).To(Equal(b))
-					Expect(len(commitments)).To(Equal(len(commitments2)))
-					for i, cs := range commitments {
-						Expect(len(cs)).To(Equal(len(indices)))
-						for j, c := range cs {
-							Expect(commitments2[i][j].Eq(&c)).To(BeTrue())
+						for i, share := range shares {
+							Expect(share).To(Equal(shamir.VerifiableShares{}))
+							Expect(shares2[i]).ToNot(Equal(shamir.VerifiableShares{}))
 						}
 					}
 				})
@@ -220,11 +212,11 @@ var _ = Describe("Rng", func() {
 					// get this `from` index's sets of shares and commitments
 					// also compute its openings for the player
 					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
-					openings, commitments := rtu.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
+					openings, _ := rtu.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
 
 					// initialise player's RNG machine and supply openings
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-					event := rnger.TransitionOpen(from, openings, commitments)
+					event := rnger.TransitionOpen(from, openings)
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.Init))
@@ -291,17 +283,12 @@ var _ = Describe("Rng", func() {
 					}
 
 					// Openings length not equal to batch size
-					event := rnger.TransitionOpen(from, openingsByPlayer[from][1:], commitmentsByPlayer[from])
-					Expect(event).To(Equal(rng.OpeningsIgnored))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
-
-					// Commitments length not equal to batch size
-					event = rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from][1:])
+					event := rnger.TransitionOpen(from, openingsByPlayer[from][1:])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 
 					// Sender index is randomly chosen, so does not exist in the initial player indices
-					event = rnger.TransitionOpen(secp256k1.RandomSecp256k1N(), openingsByPlayer[from], commitmentsByPlayer[from])
+					event = rnger.TransitionOpen(secp256k1.RandomSecp256k1N(), openingsByPlayer[from])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
@@ -316,7 +303,17 @@ var _ = Describe("Rng", func() {
 						from = indices[rand.Intn(len(indices))]
 					}
 
-					event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+					//// TODO: REMOVE THIS LATER /////
+					refComm := commitmentsByPlayer[index]
+					for _, j := range indices {
+						comm := commitmentsByPlayer[j]
+						for l, c := range comm {
+							Expect(c.Eq(&refComm[l])).To(BeTrue())
+						}
+					}
+					//// REMOVE THIS LATER /////
+
+					event := rnger.TransitionOpen(from, openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsAdded))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -337,7 +334,7 @@ var _ = Describe("Rng", func() {
 						}
 
 						if count == k-1 {
-							event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+							event := rnger.TransitionOpen(from, openingsByPlayer[from])
 
 							Expect(event).To(Equal(rng.RNGsReconstructed))
 							Expect(rnger.State()).To(Equal(rng.Done))
@@ -347,7 +344,7 @@ var _ = Describe("Rng", func() {
 						}
 
 						if count < k-1 {
-							event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+							event := rnger.TransitionOpen(from, openingsByPlayer[from])
 
 							Expect(event).To(Equal(rng.OpeningsAdded))
 							Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -360,7 +357,6 @@ var _ = Describe("Rng", func() {
 			Context("When in Done state", func() {
 				var rnger rng.RNGer
 				var openingsByPlayer map[open.Fn]shamir.VerifiableShares
-				var commitmentsByPlayer map[open.Fn][]shamir.Commitment
 				var ownSetsOfShares []shamir.VerifiableShares
 				var ownSetsOfCommitments [][]shamir.Commitment
 
@@ -376,7 +372,7 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
 
 					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
@@ -386,7 +382,7 @@ var _ = Describe("Rng", func() {
 							break
 						}
 
-						_ = rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+						_ = rnger.TransitionOpen(from, openingsByPlayer[from])
 					}
 
 					Expect(rnger.State()).To(Equal(rng.Done))
@@ -415,7 +411,7 @@ var _ = Describe("Rng", func() {
 						from = indices[rand.Intn(len(indices))]
 					}
 
-					event := rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+					event := rnger.TransitionOpen(from, openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.Done))
@@ -439,18 +435,17 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes own shares and commitments", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
 				// fetch the directed openings computed for the state machine itself
-				selfOpenings, selfCommitments := rnger.DirectedOpenings(index)
+				selfOpenings := rnger.DirectedOpenings(index)
 
 				// The directed openings from the RNG machine should be equal
 				// to what we have computed in the utils
 				for i, share := range selfOpenings {
 					Expect(share.Eq(&openingsByPlayer[index][i])).To(BeTrue())
-					Expect(selfCommitments[i].Eq(&commitmentsByPlayer[index][i])).To(BeTrue())
 				}
 			})
 		})
@@ -458,13 +453,12 @@ var _ = Describe("Rng", func() {
 		Context("Marshaling and Unmarshaling", func() {
 			var rnger rng.RNGer
 			var openingsByPlayer map[open.Fn]shamir.VerifiableShares
-			var commitmentsByPlayer map[open.Fn][]shamir.Commitment
 			var ownSetsOfShares []shamir.VerifiableShares
 			var ownSetsOfCommitments [][]shamir.Commitment
 
 			JustBeforeEach(func() {
 				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-				openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 			})
@@ -487,11 +481,12 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
 				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
 
-				expectedShares, expectedCommitments := rnger.ConstructedSetsOfShares()
-				shares, commitments := rnger2.ConstructedSetsOfShares()
+				for _, j := range indices {
+					expectedShares := rnger.DirectedOpenings(j)
+					shares := rnger2.DirectedOpenings(j)
 
-				Expect(expectedShares).To(Equal(shares))
-				Expect(expectedCommitments).To(Equal(commitments))
+					Expect(expectedShares).To(Equal(shares))
+				}
 			})
 
 			It("should correctly marshal and unmarshal (Done)", func() {
@@ -501,7 +496,7 @@ var _ = Describe("Rng", func() {
 						break
 					}
 
-					_ = rnger.TransitionOpen(from, openingsByPlayer[from], commitmentsByPlayer[from])
+					_ = rnger.TransitionOpen(from, openingsByPlayer[from])
 				}
 				Expect(rnger.State()).To(Equal(rng.Done))
 				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
@@ -523,11 +518,12 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
 				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
 
-				expectedShares, expectedCommitments := rnger.ConstructedSetsOfShares()
-				shares, commitments := rnger2.ConstructedSetsOfShares()
+				for _, j := range indices {
+					expectedShares := rnger.DirectedOpenings(j)
+					shares := rnger2.DirectedOpenings(j)
 
-				Expect(expectedShares).To(Equal(shares))
-				Expect(expectedCommitments).To(Equal(commitments))
+					Expect(expectedShares).To(Equal(shares))
+				}
 			})
 
 			It("Should fail when marshaling with not enough bytes", func() {
@@ -561,6 +557,7 @@ var _ = Describe("Rng", func() {
 		var shuffleMsgs func([]mtu.Message)
 		var isOffline map[mtu.ID]bool
 		var b, k int
+		var h curve.Point
 
 		JustBeforeEach(func() {
 			// Randomise RNG network scenario
@@ -568,7 +565,7 @@ var _ = Describe("Rng", func() {
 			indices := stu.SequentialIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
-			h := curve.Random()
+			h = curve.Random()
 
 			// Machines (players) participating in the RNG protocol
 			ids = make([]mtu.ID, n)
@@ -607,6 +604,7 @@ var _ = Describe("Rng", func() {
 
 			// Get the unbiased random numbers calculated by that RNG machine
 			referenceRNShares := machines[i].(*rtu.RngMachine).RandomNumbersShares()
+			referenceCommitments := machines[i].(*rtu.RngMachine).Commitments()
 
 			for j := i + 1; j < len(machines); j++ {
 				// Ignore if that machine is offline
@@ -616,7 +614,16 @@ var _ = Describe("Rng", func() {
 
 				rnShares := machines[j].(*rtu.RngMachine).RandomNumbersShares()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
+
+				comms := machines[j].(*rtu.RngMachine).Commitments()
+				for l, c := range comms {
+					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+				}
 			}
+
+			// TODO:
+			// Verify that each machine's share of the unbiased random number (for all batches)
+			// are valid with respect to the reference commitments
 
 			// For every batch in batch size, the shares that every player has
 			// should be consistent

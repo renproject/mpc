@@ -395,6 +395,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 		// Even if a single share is invalid, we mark the entire set of shares
 		// to be invalid
 		if !opener.checker.IsValid(&opener.commitments[i], &vshare) {
+			fmt.Println("[OPEN] Fails here *InvalidShares*")
 			return InvalidShares
 		}
 	}
