@@ -267,45 +267,25 @@ func (rnger *RNGer) TransitionShares(
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
 	locallyComputedShares := make(shamir.VerifiableShares, rnger.batchSize)
 
-	// For every set of verifiable shares
+	// construct the commitments for the batch of unbiased random numbers
 	for i, setOfCommitments := range setsOfCommitments {
-		// construct rnger.commitments
 		rnger.commitments[i] = getCommitment(setOfCommitments, rnger.threshold)
+	}
 
-		// For j = 1 to N
-		// compute r_{i,j}
-		for _, j := range rnger.indices {
-			// Initialise the accumulators with the first values
-			var multiplier = secp256k1.OneSecp256k1N()
-			var accCommitment shamir.Commitment
-			accCommitment.Set(setOfCommitments[0])
-
-			var accShare shamir.VerifiableShare
+	// For every player in the network
+	for _, j := range rnger.indices {
+		for i, setOfCommitments := range setsOfCommitments {
+			// we ignore share computation if the shares are invalid
+			// hence we can supply an empty set of shares to computeWeightedLinearCombination
+			var setOfShares shamir.VerifiableShares
 			if !ignoreShares {
-				accShare = setsOfShares[i][0]
+				setOfShares = setsOfShares[i]
 			}
 
-			// For all other shares and commitments
-			for l := 1; l < len(setOfCommitments); l++ {
-				// Scale the multiplier
-				multiplier.Mul(&multiplier, &j)
-
-				// Initialise
-				// Scale by the multiplier
-				// Add to the accumulator
-				var commitment shamir.Commitment
-				commitment.Set(setOfCommitments[l])
-				commitment.Scale(&commitment, &multiplier)
-				accCommitment.Add(&accCommitment, &commitment)
-
-				// If we have received valid sets of shares
-				// also do local computations for the shares
-				if !ignoreShares {
-					var share = setsOfShares[i][l]
-					share.Scale(&share, &multiplier)
-					accShare.Add(&accShare, &share)
-				}
-			}
+			// looped computation for specific player index and specific batch index
+			accCommitment, accShare := computeWeightedLinearCombination(
+				j, setOfCommitments, setOfShares, ignoreShares,
+			)
 
 			// append the accumulated values
 			if !ignoreShares {
@@ -476,7 +456,10 @@ func (rnger *RNGer) Reset() TransitionEvent {
 }
 
 // Private functions
-func getCommitment(setOfCommitments []shamir.Commitment, k uint32) shamir.Commitment {
+func getCommitment(
+	setOfCommitments []shamir.Commitment,
+	k uint32,
+) shamir.Commitment {
 	commitment := shamir.NewCommitmentWithCapacity(int(k))
 
 	for _, c := range setOfCommitments {
@@ -485,6 +468,51 @@ func getCommitment(setOfCommitments []shamir.Commitment, k uint32) shamir.Commit
 	}
 
 	return commitment
+}
+
+func computeWeightedLinearCombination(
+	toIndex open.Fn,
+	setOfCommitments []shamir.Commitment,
+	setOfShares shamir.VerifiableShares,
+	ignoreShares bool,
+) (
+	shamir.Commitment,
+	shamir.VerifiableShare,
+) {
+	// Initialise the accumulators with the first values
+	var multiplier open.Fn
+	var accCommitment shamir.Commitment
+	var accShare shamir.VerifiableShare
+
+	multiplier = secp256k1.OneSecp256k1N()
+	accCommitment.Set(setOfCommitments[0])
+	if !ignoreShares {
+		accShare = setOfShares[0]
+	}
+
+	// For all other shares and commitments
+	for l := 1; l < len(setOfCommitments); l++ {
+		// Scale the multiplier
+		multiplier.Mul(&multiplier, &toIndex)
+
+		// Initialise
+		// Scale by the multiplier
+		// Add to the accumulator
+		var commitment shamir.Commitment
+		commitment.Set(setOfCommitments[l])
+		commitment.Scale(&commitment, &multiplier)
+		accCommitment.Add(&accCommitment, &commitment)
+
+		// If we have received valid sets of shares
+		// also do local computations for the shares
+		if !ignoreShares {
+			var share = setOfShares[l]
+			share.Scale(&share, &multiplier)
+			accShare.Add(&accShare, &share)
+		}
+	}
+
+	return accCommitment, accShare
 }
 
 func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
