@@ -111,7 +111,7 @@ func (machine *RngMachine) Unmarshal(r io.Reader, m int) (int, error) {
 
 // RandomNumbersShares returns the reconstructed shares for the
 // unbiased random numbers.
-func (machine RngMachine) RandomNumbersShares() []open.Fn {
+func (machine RngMachine) RandomNumbersShares() shamir.VerifiableShares {
 	return machine.rnger.ReconstructedShares()
 }
 

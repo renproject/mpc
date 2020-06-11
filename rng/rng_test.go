@@ -447,6 +447,35 @@ var _ = Describe("Rng", func() {
 					Expect(share.Eq(&openingsByPlayer[index][i])).To(BeTrue())
 				}
 			})
+
+			It("Correctly computes share of unbiased random number, for the entire batch", func() {
+				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+
+				_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+
+				count := 1
+				for _, from := range indices {
+					if count == k {
+						break
+					}
+
+					_ = rnger.TransitionOpen(from, openingsByPlayer[from])
+				}
+
+				Expect(rnger.State()).To(Equal(rng.Done))
+				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
+
+				// the reconstructed verifiable shares of the batch of unbiased random numbers
+				// should be valid against the commitments for those unbiased random numbers
+				vssChecker := shamir.NewVSSChecker(h)
+				commitments := rnger.Commitments()
+				vshares := rnger.ReconstructedShares()
+				for i, c := range commitments {
+					Expect(vssChecker.IsValid(&c, &vshares[i])).To(BeTrue())
+				}
+			})
 		})
 
 		Context("Marshaling and Unmarshaling", func() {
@@ -605,6 +634,9 @@ var _ = Describe("Rng", func() {
 			referenceRNShares := machines[i].(*rtu.RngMachine).RandomNumbersShares()
 			referenceCommitments := machines[i].(*rtu.RngMachine).Commitments()
 
+			// checker to check validity of verifiable shares against commitments
+			vssChecker := shamir.NewVSSChecker(h)
+
 			for j := i + 1; j < len(machines); j++ {
 				// Ignore if that machine is offline
 				if isOffline[machines[j].ID()] {
@@ -614,15 +646,19 @@ var _ = Describe("Rng", func() {
 				rnShares := machines[j].(*rtu.RngMachine).RandomNumbersShares()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
+				// Every player has computed the same commitments for the batch of
+				// unbiased random numbers
 				comms := machines[j].(*rtu.RngMachine).Commitments()
 				for l, c := range comms {
 					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
 				}
-			}
 
-			// TODO:
-			// Verify that each machine's share of the unbiased random number (for all batches)
-			// are valid with respect to the reference commitments
+				// Verify that each machine's share of the unbiased random number (for all batches)
+				// are valid with respect to the reference commitments
+				for l, vshare := range rnShares {
+					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
+				}
+			}
 
 			// For every batch in batch size, the shares that every player has
 			// should be consistent
@@ -636,11 +672,10 @@ var _ = Describe("Rng", func() {
 					}
 
 					evaluationPoint := machines[j].(*rtu.RngMachine).Index()
-					evaluation := machines[j].(*rtu.RngMachine).RandomNumbersShares()[i]
-					share := shamir.NewShare(evaluationPoint, evaluation)
+					vshare := machines[j].(*rtu.RngMachine).RandomNumbersShares()[i]
 
 					indices = append(indices, evaluationPoint)
-					shares = append(shares, share)
+					shares = append(shares, vshare.Share())
 				}
 
 				reconstructor := shamir.NewReconstructor(indices)

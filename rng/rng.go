@@ -413,13 +413,22 @@ func (rnger *RNGer) TransitionOpen(
 	return OpeningsIgnored
 }
 
-// ReconstructedShares returns the `b` shares of the `b` random numbers
-// that have been reconstructed by the RNG machine (one share for each random number).
+// ReconstructedShares returns the `b` verifiable shares for the `b` random numbers
+// that have been reconstructed by the RNG machine (one verifiable share for each random number).
 // This also means that the RNG machine is in the `Done` state.
 // If it isn't in the Done state this function returns `nil`
-func (rnger RNGer) ReconstructedShares() []open.Fn {
+func (rnger RNGer) ReconstructedShares() shamir.VerifiableShares {
 	if rnger.state == Done {
-		return rnger.opener.Secrets()
+		secrets := rnger.opener.Secrets()
+		decommitments := rnger.opener.Decommitments()
+		vshares := make(shamir.VerifiableShares, len(secrets))
+
+		for i, secret := range secrets {
+			share := shamir.NewShare(rnger.index, secret)
+			vshares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+		}
+
+		return vshares
 	}
 
 	return nil
