@@ -238,10 +238,10 @@ var _ = Describe("Opener", func() {
 			It("should have the correct secret once Done", func() {
 				ProgressToDone()
 				reconstructed := opener.Secrets()
-				decommitmentsOnK := opener.Decommitments()
+				decommitments := opener.Decommitments()
 				Expect(len(reconstructed)).To(Equal(len(secrets)))
 				Expect(len(reconstructed)).To(Equal(b))
-				Expect(len(decommitmentsOnK)).To(Equal(b))
+				Expect(len(decommitments)).To(Equal(b))
 				for i, reconstructedSecret := range reconstructed {
 					Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
 				}
@@ -250,12 +250,8 @@ var _ = Describe("Opener", func() {
 					shares := openutil.GetSharesAt(setsOfShares, j)
 					_ = opener.TransitionShares(shares)
 					reconstructed = opener.Secrets()
-					decommitments := opener.Decommitments()
 					for i, reconstructedSecret := range reconstructed {
 						Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
-					}
-					for i, decomm := range decommitments {
-						Expect(decomm.Eq(&decommitmentsOnK[i])).To(BeTrue())
 					}
 				}
 			})

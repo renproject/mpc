@@ -279,12 +279,20 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 		shareBuffer := make(shamir.Shares, opener.reconstructor.N())
 		decomBuffer := make(shamir.Shares, opener.reconstructor.N())
 		n := copy(shareBuffer, opener.shareBuffers[i])
-		_ = copy(shareBuffer, opener.decomBuffers[i])
 		if n < len(opener.shareBuffers[i]) {
 			return m, fmt.Errorf(
 				"invalid marshalled data: "+
 					"%v shares in the share buffer but the reconstructor is instantiated for %v players",
 				len(opener.shareBuffers[i]),
+				opener.reconstructor.N(),
+			)
+		}
+		n = copy(decomBuffer, opener.decomBuffers[i])
+		if n < len(opener.decomBuffers[i]) {
+			return m, fmt.Errorf(
+				"invalid marshalled data: "+
+					"%v shares in the decom buffer but the reconstructor is instantiated for %v players",
+				len(opener.decomBuffers[i]),
 				opener.reconstructor.N(),
 			)
 		}
