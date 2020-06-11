@@ -238,8 +238,10 @@ var _ = Describe("Opener", func() {
 			It("should have the correct secret once Done", func() {
 				ProgressToDone()
 				reconstructed := opener.Secrets()
+				decommitmentsOnK := opener.Decommitments()
 				Expect(len(reconstructed)).To(Equal(len(secrets)))
 				Expect(len(reconstructed)).To(Equal(b))
+				Expect(len(decommitmentsOnK)).To(Equal(b))
 				for i, reconstructedSecret := range reconstructed {
 					Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
 				}
@@ -248,8 +250,12 @@ var _ = Describe("Opener", func() {
 					shares := openutil.GetSharesAt(setsOfShares, j)
 					_ = opener.TransitionShares(shares)
 					reconstructed = opener.Secrets()
+					decommitments := opener.Decommitments()
 					for i, reconstructedSecret := range reconstructed {
 						Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
+					}
+					for i, decomm := range decommitments {
+						Expect(decomm.Eq(&decommitmentsOnK[i])).To(BeTrue())
 					}
 				}
 			})
@@ -482,6 +488,7 @@ var _ = Describe("Opener", func() {
 					continue
 				}
 				reconstructed := machine.(*openMachine).Secrets()
+				decommitments := machine.(*openMachine).Decommitments()
 
 				for i := 0; i < b; i++ {
 					if !reconstructed[i].Eq(&secrets[i]) {
@@ -489,6 +496,8 @@ var _ = Describe("Opener", func() {
 						Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
 					}
 				}
+
+				Expect(len(decommitments)).To(Equal(b))
 			}
 		})
 	})
@@ -618,6 +627,10 @@ func newMachine(
 
 func (om openMachine) Secrets() []open.Fn {
 	return om.opener.Secrets()
+}
+
+func (om openMachine) Decommitments() []open.Fn {
+	return om.opener.Decommitments()
 }
 
 func (om openMachine) ID() ID {

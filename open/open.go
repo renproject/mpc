@@ -179,11 +179,13 @@ type Opener struct {
 	batchSize    uint32
 	commitments  []shamir.Commitment
 	shareBuffers []shamir.Shares
+	decomBuffers []shamir.Shares
 	// The state variable `k` in the formal description can be computed using
 	// the commitment alone.
 
 	// Other members
 	secrets       []Fn
+	decommitments []Fn
 	checker       shamir.VSSChecker
 	reconstructor shamir.Reconstructor
 }
@@ -193,7 +195,9 @@ func (opener Opener) SizeHint() int {
 	return surge.SizeHint(opener.batchSize) +
 		surge.SizeHint(opener.commitments) +
 		surge.SizeHint(opener.shareBuffers) +
+		surge.SizeHint(opener.decomBuffers) +
 		surge.SizeHint(opener.secrets) +
+		surge.SizeHint(opener.decommitments) +
 		opener.checker.SizeHint() +
 		opener.reconstructor.SizeHint()
 }
@@ -212,9 +216,17 @@ func (opener Opener) Marshal(w io.Writer, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("marshaling share buffers: %v", err)
 	}
+	m, err = surge.Marshal(w, opener.decomBuffers, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling decommitment buffers: %v", err)
+	}
 	m, err = surge.Marshal(w, opener.secrets, m)
 	if err != nil {
 		return m, fmt.Errorf("marshaling secrets: %v", err)
+	}
+	m, err = surge.Marshal(w, opener.decommitments, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling decommitments: %v", err)
 	}
 	m, err = opener.checker.Marshal(w, m)
 	if err != nil {
@@ -241,9 +253,17 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling share buffers: %v", err)
 	}
+	m, err = surge.Unmarshal(r, &opener.decomBuffers, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling decommitment buffers: %v", err)
+	}
 	m, err = surge.Unmarshal(r, &opener.secrets, m)
 	if err != nil {
 		return m, fmt.Errorf("unmarshaling secrets: %v", err)
+	}
+	m, err = surge.Unmarshal(r, &opener.decommitments, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling decommitments: %v", err)
 	}
 	m, err = opener.checker.Unmarshal(r, m)
 	if err != nil {
@@ -257,7 +277,9 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 	// Set the share buffer to have the correct capacity.
 	for i := 0; i < int(opener.batchSize); i++ {
 		shareBuffer := make(shamir.Shares, opener.reconstructor.N())
+		decomBuffer := make(shamir.Shares, opener.reconstructor.N())
 		n := copy(shareBuffer, opener.shareBuffers[i])
+		_ = copy(shareBuffer, opener.decomBuffers[i])
 		if n < len(opener.shareBuffers[i]) {
 			return m, fmt.Errorf(
 				"invalid marshalled data: "+
@@ -267,6 +289,7 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 			)
 		}
 		opener.shareBuffers[i] = shareBuffer[:n]
+		opener.decomBuffers[i] = decomBuffer[:n]
 	}
 
 	return m, nil
@@ -296,24 +319,37 @@ func (opener Opener) Secrets() []Fn {
 	return opener.secrets
 }
 
+// Decommitments returns the reconstructed decommitments for the current sharing instance,
+// but only if the state is Done. Otherwise it will return the decommitments for
+// the last sharing instance that made it to state Done. If the state machine has never
+// been in the state Done, then the zero shares are returned.
+func (opener Opener) Decommitments() []Fn {
+	return opener.decommitments
+}
+
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
 func New(b uint32, indices []Fn, h curve.Point) Opener {
 	shareBuffers := make([]shamir.Shares, b)
+	decomBuffers := make([]shamir.Shares, b)
 	for i := 0; i < int(b); i++ {
 		shareBuffers[i] = make(shamir.Shares, 0, len(indices))
+		decomBuffers[i] = make(shamir.Shares, 0, len(indices))
 	}
 
 	commitments := make([]shamir.Commitment, b)
 
 	secrets := make([]Fn, b)
+	decommitments := make([]Fn, b)
 
 	return Opener{
 		batchSize:     b,
 		commitments:   commitments,
 		shareBuffers:  shareBuffers,
+		decomBuffers:  decomBuffers,
 		secrets:       secrets,
+		decommitments: decommitments,
 		checker:       shamir.NewVSSChecker(h),
 		reconstructor: shamir.NewReconstructor(indices),
 	}
@@ -392,6 +428,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// respective buffers
 	for i := 0; i < int(opener.BatchSize()); i++ {
 		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i].Share())
+		opener.decomBuffers[i] = append(opener.decomBuffers[i], shares[i].DecommitmentShare())
 	}
 
 	// If we have just added the kth share, we can reconstruct.
@@ -405,6 +442,12 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 			// TODO: It seems wrong that we did the checks here, but then many of
 			// the same checks get run in CheckedOpen. Think about whether this is
 			// OK.
+			if err != nil {
+				panic(err)
+			}
+
+			opener.decommitments[i], err = opener.reconstructor.CheckedOpen(opener.decomBuffers[i], opener.K())
+
 			if err != nil {
 				panic(err)
 			}
@@ -449,6 +492,7 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 
 	for i := 0; i < int(opener.BatchSize()); i++ {
 		opener.shareBuffers[i] = opener.shareBuffers[i][:0]
+		opener.decomBuffers[i] = opener.decomBuffers[i][:0]
 		opener.commitments[i].Set(commitments[i])
 	}
 
