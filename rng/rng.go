@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	util "github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
+	rngCompute "github.com/renproject/mpc/rng/compute"
 )
 
 // RNGer describes the structure of the Random Number Generation machine
@@ -269,34 +269,29 @@ func (rnger *RNGer) TransitionShares(
 
 	// construct the commitments for the batch of unbiased random numbers
 	for i, setOfCommitments := range setsOfCommitments {
-		rnger.commitments[i] = getCommitment(setOfCommitments, rnger.threshold)
+		rnger.commitments[i] = rngCompute.Commitment(setOfCommitments, rnger.threshold)
 	}
 
 	// For every player in the network
 	for _, j := range rnger.indices {
 		for i, setOfCommitments := range setsOfCommitments {
-			// we ignore share computation if the shares are invalid
-			// hence we can supply an empty set of shares to computeWeightedLinearCombination
-			var setOfShares shamir.VerifiableShares
-			if !ignoreShares {
-				setOfShares = setsOfShares[i]
-			}
+			// Is this index the player's own index
+			isOwnIndex := rnger.index.Eq(&j)
 
-			// looped computation for specific player index and specific batch index
-			accCommitment, accShare := computeWeightedLinearCombination(
-				j, setOfCommitments, setOfShares, ignoreShares,
-			)
-
-			// append the accumulated values
-			if !ignoreShares {
-				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
-			}
-
-			// If j is the current machine's index, then populate the local shares
-			// which will be later supplied to the Opener machine
-			if rnger.index.Eq(&j) {
+			// If this index is in fact the same as the player's own index
+			// compute the accumulator commitment and add it to the local set of commitments
+			if isOwnIndex {
+				accCommitment := rngCompute.AccumulatorCommitment(j, setOfCommitments)
 				locallyComputedCommitments[i].Set(accCommitment)
-				if !ignoreShares {
+			}
+
+			// If the sets of shares are valid, compute the accumulator share
+			// and append to the directed openings map
+			if !ignoreShares {
+				accShare := rngCompute.AccumulatorShare(j, setsOfShares[i])
+				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
+
+				if isOwnIndex {
 					locallyComputedShares[i] = accShare
 				}
 			}
@@ -456,66 +451,6 @@ func (rnger *RNGer) Reset() TransitionEvent {
 }
 
 // Private functions
-func getCommitment(
-	setOfCommitments []shamir.Commitment,
-	k uint32,
-) shamir.Commitment {
-	commitment := shamir.NewCommitmentWithCapacity(int(k))
-
-	for _, c := range setOfCommitments {
-		p := c.GetPoint(0)
-		commitment.AppendPoint(p)
-	}
-
-	return commitment
-}
-
-func computeWeightedLinearCombination(
-	toIndex open.Fn,
-	setOfCommitments []shamir.Commitment,
-	setOfShares shamir.VerifiableShares,
-	ignoreShares bool,
-) (
-	shamir.Commitment,
-	shamir.VerifiableShare,
-) {
-	// Initialise the accumulators with the first values
-	var multiplier open.Fn
-	var accCommitment shamir.Commitment
-	var accShare shamir.VerifiableShare
-
-	multiplier = secp256k1.OneSecp256k1N()
-	accCommitment.Set(setOfCommitments[0])
-	if !ignoreShares {
-		accShare = setOfShares[0]
-	}
-
-	// For all other shares and commitments
-	for l := 1; l < len(setOfCommitments); l++ {
-		// Scale the multiplier
-		multiplier.Mul(&multiplier, &toIndex)
-		multiplier.Normalize()
-
-		// Initialise
-		// Scale by the multiplier
-		// Add to the accumulator
-		var commitment shamir.Commitment
-		commitment.Set(setOfCommitments[l])
-		commitment.Scale(&commitment, &multiplier)
-		accCommitment.Add(&accCommitment, &commitment)
-
-		// If we have received valid sets of shares
-		// also do local computations for the shares
-		if !ignoreShares {
-			var share = setOfShares[l]
-			share.Scale(&share, &multiplier)
-			accShare.Add(&accShare, &share)
-		}
-	}
-
-	return accCommitment, accShare
-}
-
 func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
 	var l uint32
 	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
