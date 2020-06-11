@@ -165,7 +165,7 @@ var _ = Describe("Rzg", func() {
 					Expect(len(commitment)).To(Equal(b))
 					Expect(len(commitment)).To(Equal(len(commitment2)))
 					for i, c := range commitment {
-						Expect(c.Len()).To(Equal(k - 1))
+						Expect(c.Len()).To(Equal(k))
 						Expect(commitment2[i].Eq(&c)).To(BeTrue())
 					}
 				})

@@ -3,12 +3,21 @@ package compute
 import (
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/shamir"
+
+	"github.com/renproject/shamir/curve"
 )
 
 // OutputCommitment returns the commitment that corresponds to the output
 // shares of RNG, given the input commitments from BRNG.
 func OutputCommitment(coms []shamir.Commitment, isZero bool) shamir.Commitment {
-	commitment := shamir.NewCommitmentWithCapacity(len(coms))
+	var commitment shamir.Commitment
+
+	if isZero {
+		commitment = shamir.NewCommitmentWithCapacity(len(coms) + 1)
+		commitment.AppendPoint(curve.Infinity())
+	} else {
+		commitment = shamir.NewCommitmentWithCapacity(len(coms))
+	}
 
 	for _, c := range coms {
 		commitment.AppendPoint(c.GetPoint(0))
