@@ -7,7 +7,7 @@ import (
 
 // OutputCommitment returns the commitment that corresponds to the output
 // shares of RNG, given the input commitments from BRNG.
-func OutputCommitment(coms []shamir.Commitment) shamir.Commitment {
+func OutputCommitment(coms []shamir.Commitment, isZero bool) shamir.Commitment {
 	commitment := shamir.NewCommitmentWithCapacity(len(coms))
 
 	for _, c := range coms {

@@ -348,7 +348,7 @@ func (rnger *RNGer) TransitionShares(
 
 	// Construct the commitments for the batch of unbiased random numbers.
 	for i, setOfCommitments := range setsOfCommitments {
-		rnger.commitments[i] = compute.OutputCommitment(setOfCommitments)
+		rnger.commitments[i] = compute.OutputCommitment(setOfCommitments, isZero)
 
 		// Compute the share commitment and add it to the local set of
 		// commitments.

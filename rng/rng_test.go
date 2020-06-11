@@ -515,9 +515,9 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes share of unbiased random number, for the entire batch", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
-				_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
+				_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 				count := 1
 				for _, from := range indices {
