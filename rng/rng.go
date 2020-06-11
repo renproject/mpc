@@ -494,6 +494,7 @@ func computeWeightedLinearCombination(
 	for l := 1; l < len(setOfCommitments); l++ {
 		// Scale the multiplier
 		multiplier.Mul(&multiplier, &toIndex)
+		multiplier.Normalize()
 
 		// Initialise
 		// Scale by the multiplier
