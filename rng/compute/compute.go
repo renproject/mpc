@@ -71,6 +71,7 @@ func initCommitmentComputation(
 
 	if isZero {
 		multiplier.Set(&toIndex)
+		accCommitment = shamir.NewCommitmentWithCapacity(setOfCommitments[0].Len())
 		accCommitment.Scale(&setOfCommitments[0], &multiplier)
 	} else {
 		multiplier = secp256k1.OneSecp256k1N()
