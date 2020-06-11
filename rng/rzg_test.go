@@ -44,7 +44,7 @@ var _ = Describe("Rzg", func() {
 
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
-			indices := stu.SequentialIndices(n)
+			indices := stu.RandomIndices(n)
 
 			// index denotes the current player's index
 			// This is a randomly chosen index from indices
@@ -471,7 +471,7 @@ var _ = Describe("Rzg", func() {
 		JustBeforeEach(func() {
 			// Randomise RZG network scenario
 			n := 5 + rand.Intn(6)
-			indices := stu.SequentialIndices(n)
+			indices := stu.RandomIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
 			h := curve.Random()
@@ -514,6 +514,7 @@ var _ = Describe("Rzg", func() {
 
 			// Get the unbiased random numbers calculated by that RZG machine
 			referenceRNShares := machines[i].(*rtu.RngMachine).RandomNumbersShares()
+			referenceCommitments := machines[i].(*rtu.RngMachine).Commitments()
 
 			for j := i + 1; j < len(machines); j++ {
 				// Ignore if that machine is offline
@@ -522,8 +523,17 @@ var _ = Describe("Rzg", func() {
 				}
 
 				rnShares := machines[j].(*rtu.RngMachine).RandomNumbersShares()
+				rnCommitments := machines[j].(*rtu.RngMachine).Commitments()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
+
+				for l, c := range rnCommitments {
+					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+				}
 			}
+
+			// TODO:
+			// Verify that each machine's share of the unbiased random number (all zeroes)
+			// are valid with respect to the reference commitments
 
 			// For every batch in batch size, the shares that every player has
 			// should be consistent
