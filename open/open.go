@@ -428,7 +428,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// respective buffers
 	for i := 0; i < int(opener.BatchSize()); i++ {
 		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i].Share())
-		opener.decomBuffers[i] = append(opener.decomBuffers[i], shares[i].DecommitmentShare())
+		opener.decomBuffers[i] = append(opener.decomBuffers[i], decommitmentShare(shares[i]))
 	}
 
 	// If we have just added the kth share, we can reconstruct.
@@ -497,4 +497,11 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 	}
 
 	return ret
+}
+
+// Private functions
+func decommitmentShare(vshare shamir.VerifiableShare) shamir.Share {
+	share := vshare.Share()
+
+	return shamir.NewShare(share.Index(), vshare.Decommitment())
 }
