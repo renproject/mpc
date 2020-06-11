@@ -44,8 +44,7 @@ var _ = Describe("Rng", func() {
 
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
-			indices := stu.SequentialIndices(n)
-			// indices := stu.RandomIndices(n)
+			indices := stu.RandomIndices(n)
 
 			// index denotes the current player's index
 			// This is a randomly chosen index from indices
