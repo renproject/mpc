@@ -174,6 +174,7 @@ func GetDirectedOpenings(
 		// For all other shares and commitments
 		for l := 1; l < len(setOfShares); l++ {
 			multiplier.Mul(&multiplier, &to)
+			multiplier.Normalize()
 
 			var share = setOfShares[l]
 			var commitment shamir.Commitment
