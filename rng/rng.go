@@ -265,35 +265,27 @@ func (rnger *RNGer) TransitionShares(
 
 	// Declare variable to hold field element for N
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
-	locallyComputedShares := make(shamir.VerifiableShares, rnger.batchSize)
 
 	// construct the commitments for the batch of unbiased random numbers
 	for i, setOfCommitments := range setsOfCommitments {
 		rnger.commitments[i] = rngCompute.Commitment(setOfCommitments, rnger.threshold)
+
+		// compute the accumulator commitment and add it to the local set of commitments
+		accCommitment := rngCompute.AccumulatorCommitment(rnger.index, setOfCommitments)
+		locallyComputedCommitments[i].Set(accCommitment)
 	}
 
-	// For every player in the network
-	for _, j := range rnger.indices {
-		for i, setOfCommitments := range setsOfCommitments {
-			// Is this index the player's own index
-			isOwnIndex := rnger.index.Eq(&j)
-
-			// If this index is in fact the same as the player's own index
-			// compute the accumulator commitment and add it to the local set of commitments
-			if isOwnIndex {
-				accCommitment := rngCompute.AccumulatorCommitment(j, setOfCommitments)
-				locallyComputedCommitments[i].Set(accCommitment)
-			}
-
-			// If the sets of shares are valid, compute the accumulator share
-			// and append to the directed openings map
-			if !ignoreShares {
-				accShare := rngCompute.AccumulatorShare(j, setsOfShares[i])
+	// If the sets of shares are valid, we must construct the directed openings
+	// to other players in the network
+	if !ignoreShares {
+		// For every player in the network
+		for _, j := range rnger.indices {
+			// For every set of commitments in the batch (sets of commitments)
+			for _, setOfShares := range setsOfShares {
+				// If the sets of shares are valid, compute the accumulator share
+				// and append to the directed openings map
+				accShare := rngCompute.AccumulatorShare(j, setOfShares)
 				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
-
-				if isOwnIndex {
-					locallyComputedShares[i] = accShare
-				}
 			}
 		}
 	}
@@ -311,7 +303,7 @@ func (rnger *RNGer) TransitionShares(
 	// This will only be a special case when the reconstruction threshold k
 	// is equal to one
 	if !ignoreShares {
-		event := rnger.opener.TransitionShares(locallyComputedShares)
+		event := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
 		if event == open.Done {
 			rnger.state = Done
 			return RNGsReconstructed
