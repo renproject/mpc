@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rkpg"
@@ -38,7 +38,7 @@ var _ = Describe("Rkpg", func() {
 
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 
 			// index denotes the current player's index
 			// This is a randomly chosen index from indices
