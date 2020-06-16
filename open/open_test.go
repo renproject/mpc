@@ -8,16 +8,16 @@ import (
 	"time"
 
 	"github.com/renproject/mpc/open"
-	openutil "github.com/renproject/mpc/open/util"
+	"github.com/renproject/mpc/open/openutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "github.com/renproject/mpc/testutil"
+	. "github.com/renproject/mpc/mpcutil"
 )
 
 // The main properties that we want to test for the Opener state machine are
@@ -58,7 +58,7 @@ var _ = Describe("Opener", func() {
 			[]shamir.Commitment,
 			shamir.VSSharer,
 		) {
-			indices := stu.SequentialIndices(n)
+			indices := shamirutil.SequentialIndices(n)
 			secrets := make([]open.Fn, b)
 			for i := 0; i < b; i++ {
 				secrets[i] = secp256k1.RandomSecp256k1N()
@@ -155,7 +155,7 @@ var _ = Describe("Opener", func() {
 						// perturb a random share from `sharesAtI`
 						shares := openutil.GetSharesAt(setsOfShares, i)
 						j := rand.Intn(b)
-						stu.PerturbIndex(&shares[j])
+						shamirutil.PerturbIndex(&shares[j])
 						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(i))
 					})
@@ -165,7 +165,7 @@ var _ = Describe("Opener", func() {
 
 						shares := openutil.GetSharesAt(setsOfShares, i)
 						j := rand.Intn(b)
-						stu.PerturbValue(&shares[j])
+						shamirutil.PerturbValue(&shares[j])
 						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(i))
 					})
@@ -176,7 +176,7 @@ var _ = Describe("Opener", func() {
 
 						shares := openutil.GetSharesAt(setsOfShares, i)
 						j := rand.Intn(b)
-						stu.PerturbDecommitment(&shares[j])
+						shamirutil.PerturbDecommitment(&shares[j])
 						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(i))
 					})
@@ -204,7 +204,7 @@ var _ = Describe("Opener", func() {
 						ProgressToDone()
 						shares := openutil.GetSharesAt(setsOfShares, k)
 						j := rand.Intn(b)
-						stu.PerturbIndex(&shares[j])
+						shamirutil.PerturbIndex(&shares[j])
 						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(k))
 					})
@@ -213,7 +213,7 @@ var _ = Describe("Opener", func() {
 						ProgressToDone()
 						shares := openutil.GetSharesAt(setsOfShares, k)
 						j := rand.Intn(b)
-						stu.PerturbValue(&shares[j])
+						shamirutil.PerturbValue(&shares[j])
 						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(k))
 					})
@@ -222,7 +222,7 @@ var _ = Describe("Opener", func() {
 						ProgressToDone()
 						shares := openutil.GetSharesAt(setsOfShares, k)
 						j := rand.Intn(b)
-						stu.PerturbDecommitment(&shares[j])
+						shamirutil.PerturbDecommitment(&shares[j])
 						_ = opener.TransitionShares(shares)
 						Expect(opener.I()).To(Equal(k))
 					})
@@ -365,17 +365,17 @@ var _ = Describe("Opener", func() {
 
 						// Index
 						sharesAt0 := openutil.GetSharesAt(setsOfShares, 0)
-						stu.PerturbIndex(&sharesAt0[0])
+						shamirutil.PerturbIndex(&sharesAt0[0])
 						event := opener.TransitionShares(sharesAt0)
 						Expect(event).To(Equal(open.InvalidShares))
 
 						// Value
-						stu.PerturbValue(&sharesAt0[0])
+						shamirutil.PerturbValue(&sharesAt0[0])
 						event = opener.TransitionShares(sharesAt0)
 						Expect(event).To(Equal(open.InvalidShares))
 
 						// Decommitment
-						stu.PerturbDecommitment(&sharesAt0[0])
+						shamirutil.PerturbDecommitment(&sharesAt0[0])
 						event = opener.TransitionShares(sharesAt0)
 						Expect(event).To(Equal(open.InvalidShares))
 
@@ -385,17 +385,17 @@ var _ = Describe("Opener", func() {
 
 							// Index
 							j := rand.Intn(b)
-							stu.PerturbIndex(&shares[j])
+							shamirutil.PerturbIndex(&shares[j])
 							event := opener.TransitionShares(shares)
 							Expect(event).To(Equal(open.InvalidShares))
 
 							// Value
-							stu.PerturbValue(&shares[j])
+							shamirutil.PerturbValue(&shares[j])
 							event = opener.TransitionShares(shares)
 							Expect(event).To(Equal(open.InvalidShares))
 
 							// Decommitment
-							stu.PerturbDecommitment(&shares[j])
+							shamirutil.PerturbDecommitment(&shares[j])
 							event = opener.TransitionShares(shares)
 							Expect(event).To(Equal(open.InvalidShares))
 						}
@@ -419,7 +419,7 @@ var _ = Describe("Opener", func() {
 						// To reach this case, we need a valid share that is
 						// out of the normal range of indices. We thus need to
 						// utilise the sharer to do this.
-						indices = stu.SequentialIndices(n + 1)
+						indices = shamirutil.SequentialIndices(n + 1)
 						sharer = shamir.NewVSSharer(indices, h)
 						for i := 0; i < b; i++ {
 							setsOfShares[i] = make(shamir.VerifiableShares, n+1)
@@ -446,7 +446,7 @@ var _ = Describe("Opener", func() {
 		n := 20
 		k := 7
 
-		indices := stu.SequentialIndices(n)
+		indices := shamirutil.SequentialIndices(n)
 		setsOfShares := make([]shamir.VerifiableShares, b)
 		commitments := make([]shamir.Commitment, b)
 		machines := make([]Machine, n)

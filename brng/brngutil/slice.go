@@ -1,4 +1,4 @@
-package testutil
+package brngutil
 
 import (
 	"math/rand"
@@ -7,7 +7,7 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/brng/table"
 )
@@ -199,7 +199,7 @@ func RowIsValid(row table.Row, k int, indices []secp256k1.Secp256k1N, h curve.Po
 			}
 		}
 
-		if !stu.VsharesAreConsistent(sharing.Shares(), &reconstructor, k) {
+		if !shamirutil.VsharesAreConsistent(sharing.Shares(), &reconstructor, k) {
 			return false
 		}
 	}
@@ -226,11 +226,11 @@ func perturbShare(share *shamir.VerifiableShare) {
 	r := rand.Intn(3)
 	switch r {
 	case 0:
-		stu.PerturbValue(share)
+		shamirutil.PerturbValue(share)
 	case 1:
-		stu.PerturbDecommitment(share)
+		shamirutil.PerturbDecommitment(share)
 	case 2:
-		stu.PerturbIndex(share)
+		shamirutil.PerturbIndex(share)
 	default:
 		panic("invalid case")
 	}

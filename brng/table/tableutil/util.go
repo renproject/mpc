@@ -1,4 +1,4 @@
-package testutil
+package tableutil
 
 import (
   "github.com/renproject/secp256k1-go"

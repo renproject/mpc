@@ -1,4 +1,4 @@
-package util
+package openutil
 
 import (
 	"github.com/renproject/shamir"

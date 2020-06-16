@@ -1,4 +1,4 @@
-package testutil
+package brngutil
 
 import (
 	"fmt"
@@ -12,13 +12,13 @@ import (
 	"github.com/renproject/mpc/brng"
 	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/brng/mock"
-	mtu "github.com/renproject/mpc/testutil"
+	"github.com/renproject/mpc/mpcutil"
 )
 
 // PlayerMachine represents one of the players participating in the BRNG
 // algorithm.
 type PlayerMachine struct {
-	id, consID mtu.ID
+	id, consID mpcutil.ID
 	row        table.Row
 	brnger     brng.BRNGer
 
@@ -71,13 +71,13 @@ func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 // ID implements the Machine interface.
-func (pm PlayerMachine) ID() mtu.ID {
+func (pm PlayerMachine) ID() mpcutil.ID {
 	return pm.id
 }
 
 // InitialMessages implements the Machine intercace.
-func (pm PlayerMachine) InitialMessages() []mtu.Message {
-	return []mtu.Message{
+func (pm PlayerMachine) InitialMessages() []mpcutil.Message {
+	return []mpcutil.Message{
 		&BrngMessage{
 			msg: &PlayerMessage{
 				from: pm.id,
@@ -89,7 +89,7 @@ func (pm PlayerMachine) InitialMessages() []mtu.Message {
 }
 
 // Handle implements the Machine interface.
-func (pm *PlayerMachine) Handle(msg mtu.Message) []mtu.Message {
+func (pm *PlayerMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	cmsg := msg.(*ConsensusMessage)
 	shares, commitments, _ := pm.brnger.TransitionSlice(cmsg.slice)
 	pm.SetOutput(shares, commitments)
@@ -116,8 +116,8 @@ func (pm PlayerMachine) Commitments() []shamir.Commitment {
 // ConsensusMachine represents the trusted party for the consensus algorithm
 // used by the BRNG algorithm.
 type ConsensusMachine struct {
-	id        mtu.ID
-	playerIDs []mtu.ID
+	id        mpcutil.ID
+	playerIDs []mpcutil.ID
 	indices   []secp256k1.Secp256k1N
 	engine    mock.PullConsensus
 }
@@ -167,17 +167,17 @@ func (cm *ConsensusMachine) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 // ID implements the Machine interface.
-func (cm ConsensusMachine) ID() mtu.ID {
+func (cm ConsensusMachine) ID() mpcutil.ID {
 	return cm.id
 }
 
 // InitialMessages implements the Machine intercace.
-func (cm ConsensusMachine) InitialMessages() []mtu.Message {
+func (cm ConsensusMachine) InitialMessages() []mpcutil.Message {
 	return nil
 }
 
 // Handle implements the Machine interface.
-func (cm *ConsensusMachine) Handle(msg mtu.Message) []mtu.Message {
+func (cm *ConsensusMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	pmsg := msg.(*PlayerMessage)
 
 	// if consensus has not yet been reached
@@ -198,8 +198,8 @@ func (cm *ConsensusMachine) Handle(msg mtu.Message) []mtu.Message {
 	return nil
 }
 
-func (cm ConsensusMachine) formConsensusMessages() []mtu.Message {
-	var messages []mtu.Message
+func (cm ConsensusMachine) formConsensusMessages() []mpcutil.Message {
+	var messages []mpcutil.Message
 
 	for i, id := range cm.playerIDs {
 		index := cm.indices[i]
@@ -221,7 +221,7 @@ func (cm ConsensusMachine) formConsensusMessages() []mtu.Message {
 // BrngMachine represents a participant in the BRNG algorithm and can be either
 // a player or the consensus trusted party.
 type BrngMachine struct {
-	machine mtu.Machine
+	machine mpcutil.Machine
 }
 
 // NewMachine constructs a new machine for the BRNG algorithm tests. The
@@ -235,8 +235,8 @@ type BrngMachine struct {
 // the Shamir threshold and b is the batch size.
 func NewMachine(
 	machineType TypeID,
-	id, consID mtu.ID,
-	playerIDs []mtu.ID,
+	id, consID mpcutil.ID,
+	playerIDs []mpcutil.ID,
 	indices, honestIndices []secp256k1.Secp256k1N,
 	h curve.Point,
 	k, b int,
@@ -323,17 +323,17 @@ func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 // ID implements the Machine interface.
-func (bm BrngMachine) ID() mtu.ID {
+func (bm BrngMachine) ID() mpcutil.ID {
 	return bm.machine.ID()
 }
 
 // InitialMessages implements the Machine intercace.
-func (bm BrngMachine) InitialMessages() []mtu.Message {
+func (bm BrngMachine) InitialMessages() []mpcutil.Message {
 	return bm.machine.InitialMessages()
 }
 
 // Handle implements the Machine interface.
-func (bm *BrngMachine) Handle(msg mtu.Message) []mtu.Message {
+func (bm *BrngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	bmsg := msg.(*BrngMessage)
 
 	switch msg := bmsg.msg.(type) {

@@ -1,27 +1,27 @@
-package testutil
+package brngutil
 
 import (
 	"fmt"
 	"io"
 
 	"github.com/renproject/mpc/brng/table"
-	mtu "github.com/renproject/mpc/testutil"
+	"github.com/renproject/mpc/mpcutil"
 )
 
 // PlayerMessage represents a message that a player sends to the consensus
 // trusted party in an invocation of the BRNG algorithm.
 type PlayerMessage struct {
-	from, to mtu.ID
+	from, to mpcutil.ID
 	row      table.Row
 }
 
 // From implements the Message interface.
-func (pm PlayerMessage) From() mtu.ID {
+func (pm PlayerMessage) From() mpcutil.ID {
 	return pm.from
 }
 
 // To implements the Message interface.
-func (pm PlayerMessage) To() mtu.ID {
+func (pm PlayerMessage) To() mpcutil.ID {
 	return pm.to
 }
 
@@ -66,17 +66,17 @@ func (pm *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
 // sends to all of the parties once consensus has been reached in the BRNG
 // algorithm.
 type ConsensusMessage struct {
-	from, to mtu.ID
+	from, to mpcutil.ID
 	slice    table.Slice
 }
 
 // From implements the Message interface.
-func (cm ConsensusMessage) From() mtu.ID {
+func (cm ConsensusMessage) From() mpcutil.ID {
 	return cm.from
 }
 
 // To implements the Message interface.
-func (cm ConsensusMessage) To() mtu.ID {
+func (cm ConsensusMessage) To() mpcutil.ID {
 	return cm.to
 }
 
@@ -116,16 +116,16 @@ func (cm *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
 // BrngMessage is a wrapper for any of the messages that can be sent during an
 // invocation of the BRNG algorithm.
 type BrngMessage struct {
-	msg mtu.Message
+	msg mpcutil.Message
 }
 
 // From implements the Message interface.
-func (bm BrngMessage) From() mtu.ID {
+func (bm BrngMessage) From() mpcutil.ID {
 	return bm.msg.From()
 }
 
 // To implements the Message interface.
-func (bm BrngMessage) To() mtu.ID {
+func (bm BrngMessage) To() mpcutil.ID {
 	return bm.msg.To()
 }
 

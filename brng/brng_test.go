@@ -8,15 +8,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/brng"
-	. "github.com/renproject/mpc/testutil"
+	. "github.com/renproject/mpc/mpcutil"
 	"github.com/renproject/surge"
 
+	"github.com/renproject/mpc/brng/brngutil"
 	"github.com/renproject/mpc/brng/table"
-	btu "github.com/renproject/mpc/brng/testutil"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 )
 
 // The main properties that we want to test for the BRNGer state machine are
@@ -52,7 +52,7 @@ var _ = Describe("BRNG", func() {
 	Setup := func() (BRNGer, int, int, secp256k1.Secp256k1N, []secp256k1.Secp256k1N) {
 		b := 5
 		t := k - 1
-		indices := stu.RandomIndices(n)
+		indices := shamirutil.RandomIndices(n)
 		to := indices[0]
 		brnger := New(indices, h)
 
@@ -70,7 +70,7 @@ var _ = Describe("BRNG", func() {
 		k, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		slice := btu.RandomValidSlice(to, indices, h, k, b, k)
+		slice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
@@ -81,7 +81,7 @@ var _ = Describe("BRNG", func() {
 		k, t, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
-		slice, _ := btu.RandomInvalidSlice(to, indices, h, n, k, b, k)
+		slice, _ := brngutil.RandomInvalidSlice(to, indices, h, n, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
@@ -104,7 +104,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
+				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 
 				brnger.TransitionSlice(validSlice)
 
@@ -131,7 +131,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Valid Slice -> Ok", func() {
-				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
+				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Ok))
@@ -139,7 +139,7 @@ var _ = Describe("BRNG", func() {
 
 			Context("Invalid Slice -> Error", func() {
 				Specify("Slice with wrong batch size", func() {
-					invalidSlice := btu.RandomValidSlice(to, indices, h, k, rand.Intn(b-1)+1, k-1)
+					invalidSlice := brngutil.RandomValidSlice(to, indices, h, k, rand.Intn(b-1)+1, k-1)
 					brnger.TransitionSlice(invalidSlice)
 
 					Expect(brnger.State()).To(Equal(Error))
@@ -157,7 +157,7 @@ var _ = Describe("BRNG", func() {
 				})
 
 				Specify("Slice with faults", func() {
-					invalidSlice, _ := btu.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
+					invalidSlice, _ := brngutil.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
 					brnger.TransitionSlice(invalidSlice)
 
 					Expect(brnger.State()).To(Equal(Error))
@@ -183,7 +183,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
+				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Ok))
@@ -208,7 +208,7 @@ var _ = Describe("BRNG", func() {
 			})
 
 			Specify("Slice -> Do nothing", func() {
-				validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
+				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 				brnger.TransitionSlice(validSlice)
 
 				Expect(brnger.State()).To(Equal(Error))
@@ -228,14 +228,14 @@ var _ = Describe("BRNG", func() {
 		Specify("the returned row should be valid", func() {
 			row := brnger.TransitionStart(k, b)
 
-			Expect(btu.RowIsValid(row, k, indices, h)).To(BeTrue())
+			Expect(brngutil.RowIsValid(row, k, indices, h)).To(BeTrue())
 		})
 
 		Specify("the reconstruction threshold is correct", func() {
 			row := brnger.TransitionStart(k, b)
 
-			Expect(btu.RowIsValid(row, k-1, indices, h)).To(BeFalse())
-			Expect(btu.RowIsValid(row, k, indices, h)).To(BeTrue())
+			Expect(brngutil.RowIsValid(row, k-1, indices, h)).To(BeFalse())
+			Expect(brngutil.RowIsValid(row, k, indices, h)).To(BeTrue())
 		})
 
 		Specify("the returned row should have the correct batch size", func() {
@@ -255,7 +255,7 @@ var _ = Describe("BRNG", func() {
 
 			expectedShares := make(shamir.VerifiableShares, b)
 			expectedCommitments := make([]shamir.Commitment, b)
-			validSlice := btu.RandomValidSlice(to, indices, h, k, b, k)
+			validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 
 			for i, col := range validSlice {
 				expectedShares[i], expectedCommitments[i] = col.Sum()
@@ -283,7 +283,7 @@ var _ = Describe("BRNG", func() {
 		It("should correctly identify faulty elements", func() {
 			brnger.TransitionStart(k, b)
 
-			invalidSlice, expectedFaults := btu.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
+			invalidSlice, expectedFaults := brngutil.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
 
 			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)
 
@@ -303,7 +303,7 @@ var _ = Describe("BRNG", func() {
 			b = 5
 			t = k - 1
 
-			indices = stu.SequentialIndices(n)
+			indices = shamirutil.SequentialIndices(n)
 
 			playerIDs := make([]ID, len(indices))
 			for i := range playerIDs {
@@ -315,14 +315,14 @@ var _ = Describe("BRNG", func() {
 			machines := make([]Machine, 0, len(indices)+1)
 			honestIndices := make([]secp256k1.Secp256k1N, 0, len(isOffline))
 			for i, id := range playerIDs {
-				machine := btu.NewMachine(btu.BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
+				machine := brngutil.NewMachine(brngutil.BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
 				machines = append(machines, &machine)
 				if !isOffline[id] {
 					honestIndices = append(honestIndices, indices[i])
 				}
 			}
-			cmachine := btu.NewMachine(
-				btu.BrngTypeConsensus,
+			cmachine := brngutil.NewMachine(
+				brngutil.BrngTypeConsensus,
 				consID,
 				consID,
 				playerIDs,
@@ -347,7 +347,7 @@ var _ = Describe("BRNG", func() {
 				var i int
 				for i = 0; isOffline[machines[i].ID()]; i++ {
 				}
-				machine := machines[i].(*btu.BrngMachine)
+				machine := machines[i].(*brngutil.BrngMachine)
 				comm := machine.Commitments()[j]
 
 				for i := 0; i < len(machines)-1; i++ {
@@ -355,7 +355,7 @@ var _ = Describe("BRNG", func() {
 						continue
 					}
 
-					machine := machines[i].(*btu.BrngMachine)
+					machine := machines[i].(*brngutil.BrngMachine)
 					Expect(machine.Commitments()[j].Eq(&comm)).To(BeTrue())
 				}
 			}
@@ -371,7 +371,7 @@ var _ = Describe("BRNG", func() {
 						continue
 					}
 
-					pmachine := machines[i].(*btu.BrngMachine)
+					pmachine := machines[i].(*brngutil.BrngMachine)
 					machineShares := pmachine.Shares()
 					machineCommitments := pmachine.Commitments()
 
@@ -380,7 +380,7 @@ var _ = Describe("BRNG", func() {
 					shares = append(shares, machineShares[j])
 				}
 
-				Expect(stu.VsharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+				Expect(shamirutil.VsharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 			}
 		})
 	})
@@ -394,7 +394,7 @@ var _ = Describe("BRNG", func() {
 
 		It("should be equal after marshalling and unmarshalling", func() {
 			buf := bytes.NewBuffer([]byte{})
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 
 			for i := 0; i < trials; i++ {
 				buf.Reset()
@@ -414,7 +414,7 @@ var _ = Describe("BRNG", func() {
 
 		It("should fail when marshalling without enough remaining bytes", func() {
 			buf := bytes.NewBuffer([]byte{})
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 			brnger := New(indices, h)
 
 			for i := 0; i < brnger.SizeHint(); i++ {
@@ -425,7 +425,7 @@ var _ = Describe("BRNG", func() {
 		})
 
 		It("should fail when marshalling without enough remaining bytes", func() {
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 			brnger1 := New(indices, h)
 			bs, _ := surge.ToBinary(brnger1)
 
@@ -441,7 +441,7 @@ var _ = Describe("BRNG", func() {
 
 	Context("Getters", func() {
 		It("should return the number of indices for the instance", func() {
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 			brnger := New(indices, h)
 
 			Expect(brnger.N()).To(Equal(len(indices)))

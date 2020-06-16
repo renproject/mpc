@@ -2,7 +2,6 @@ package table_test
 
 import (
 	"bytes"
-	// "fmt"
 	"math/rand"
 	"time"
 
@@ -12,11 +11,11 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 
 	. "github.com/renproject/mpc/brng/table"
-	ttu "github.com/renproject/mpc/brng/table/testutil"
-	btu "github.com/renproject/mpc/brng/testutil"
+	"github.com/renproject/mpc/brng/table/tableutil"
+	"github.com/renproject/mpc/brng/brngutil"
 )
 
 const (
@@ -32,9 +31,9 @@ var _ = Describe("Table", func() {
 				n := 10 + rand.Intn(40)
 				k := 2 + rand.Intn(n-2)
 				h := curve.Random()
-				indices := stu.RandomIndices(n)
+				indices := shamirutil.RandomIndices(n)
 
-				sharing := btu.RandomValidSharing(indices, k, h)
+				sharing := brngutil.RandomValidSharing(indices, k, h)
 
 				buf := bytes.NewBuffer([]byte{})
 				m, err := sharing.Marshal(buf, sharing.SizeHint())
@@ -58,7 +57,7 @@ var _ = Describe("Table", func() {
 				from := secp256k1.RandomSecp256k1N()
 				h := curve.Random()
 
-				element, _, _ := ttu.RandomValidElement(to, from, h)
+				element, _, _ := tableutil.RandomValidElement(to, from, h)
 
 				buf := bytes.NewBuffer([]byte{})
 				m, err := element.Marshal(buf, element.SizeHint())
@@ -97,9 +96,9 @@ var _ = Describe("Table", func() {
 					k := 2 + rand.Intn(n-2)
 					b := 5 + rand.Intn(45)
 					h := curve.Random()
-					indices := stu.RandomIndices(n)
+					indices := shamirutil.RandomIndices(n)
 
-					row := btu.RandomValidRow(indices, k, b, h)
+					row := brngutil.RandomValidRow(indices, k, b, h)
 
 					buf := bytes.NewBuffer([]byte{})
 					m, err := row.Marshal(buf, row.SizeHint())
@@ -123,9 +122,9 @@ var _ = Describe("Table", func() {
 				n := 10 + rand.Intn(40)
 				h := curve.Random()
 				to := secp256k1.RandomSecp256k1N()
-				indices := stu.RandomIndices(n)
+				indices := shamirutil.RandomIndices(n)
 
-				col, expectedSumShares, expectedSumCommitments := ttu.RandomValidCol(to, indices, h)
+				col, expectedSumShares, expectedSumCommitments := tableutil.RandomValidCol(to, indices, h)
 
 				sumShares, sumCommitments := col.Sum()
 
@@ -140,9 +139,9 @@ var _ = Describe("Table", func() {
 					n := 5 + rand.Intn(40)
 					h := curve.Random()
 					to := secp256k1.RandomSecp256k1N()
-					indices := stu.RandomIndices(n)
+					indices := shamirutil.RandomIndices(n)
 
-					col, _, _ := ttu.RandomValidCol(to, indices, h)
+					col, _, _ := tableutil.RandomValidCol(to, indices, h)
 
 					buf := bytes.NewBuffer([]byte{})
 					m, err := col.Marshal(buf, col.SizeHint())
@@ -172,13 +171,13 @@ var _ = Describe("Table", func() {
 				for t := 0; t < LoopTests; t++ {
 					n := 10 + rand.Intn(40)
 					h := curve.Random()
-					indices := stu.SequentialIndices(n)
+					indices := shamirutil.SequentialIndices(n)
 
 					slice := make(Slice, n)
 					for i := range slice {
 						// NOTE: its improbable that all r's will be the same
 						r := 1 + rand.Intn(n-1)
-						col, _, _ := ttu.RandomValidCol(indices[i], indices[:r], h)
+						col, _, _ := tableutil.RandomValidCol(indices[i], indices[:r], h)
 						slice[i] = col
 					}
 
@@ -194,11 +193,11 @@ var _ = Describe("Table", func() {
 					b := 5 + rand.Intn(35)
 					t := 1 + rand.Intn(k-1)
 					h := curve.Random()
-					indices := stu.RandomIndices(n)
+					indices := shamirutil.RandomIndices(n)
 					to_id := rand.Intn(n)
 					to := indices[to_id]
 
-					slice := btu.RandomValidSlice(to, indices, h, k, b, t)
+					slice := brngutil.RandomValidSlice(to, indices, h, k, b, t)
 
 					Expect(slice.HasValidForm()).To(BeTrue())
 				}
@@ -213,11 +212,11 @@ var _ = Describe("Table", func() {
 					b := 5 + rand.Intn(35)
 					t := 1 + rand.Intn(k-1)
 					h := curve.Random()
-					indices := stu.RandomIndices(n)
+					indices := shamirutil.RandomIndices(n)
 					to_id := rand.Intn(n)
 					to := indices[to_id]
 
-					slice := btu.RandomValidSlice(to, indices, h, k, b, t)
+					slice := brngutil.RandomValidSlice(to, indices, h, k, b, t)
 
 					buf := bytes.NewBuffer([]byte{})
 					m, err := slice.Marshal(buf, slice.SizeHint())
@@ -240,11 +239,11 @@ var _ = Describe("Table", func() {
 			b := 5 + rand.Intn(35)
 			t := 1 + rand.Intn(k-1)
 			h := curve.Random()
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 			to_id := rand.Intn(n)
 			to := indices[to_id]
 
-			invalidSlice, expectedFaults := btu.RandomInvalidSlice(to, indices, h, n, k, b, t)
+			invalidSlice, expectedFaults := brngutil.RandomInvalidSlice(to, indices, h, n, k, b, t)
 
 			vssChecker := shamir.NewVSSChecker(h)
 			faults := invalidSlice.Faults(&vssChecker)
@@ -262,9 +261,9 @@ var _ = Describe("Table", func() {
 					b := 5 + rand.Intn(35)
 					t := 1 + rand.Intn(k-1)
 					h := curve.Random()
-					indices := stu.RandomIndices(n)
+					indices := shamirutil.RandomIndices(n)
 
-					table := btu.RandomValidTable(indices, h, k, b, t)
+					table := brngutil.RandomValidTable(indices, h, k, b, t)
 
 					buf := bytes.NewBuffer([]byte{})
 					m, err := table.Marshal(buf, table.SizeHint())
@@ -293,9 +292,9 @@ var _ = Describe("Table", func() {
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(45)
 				h := curve.Random()
-				indices := stu.RandomIndices(n)
+				indices := shamirutil.RandomIndices(n)
 
-				validRow := btu.RandomValidRow(indices, k, b, h)
+				validRow := brngutil.RandomValidRow(indices, k, b, h)
 
 				table := Table{Row{}, validRow}
 
@@ -307,10 +306,10 @@ var _ = Describe("Table", func() {
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(45)
 				h := curve.Random()
-				indices := stu.RandomIndices(n)
+				indices := shamirutil.RandomIndices(n)
 
-				validRow1 := btu.RandomValidRow(indices, k, b, h)
-				validRow2 := btu.RandomValidRow(indices, k, b+1, h)
+				validRow1 := brngutil.RandomValidRow(indices, k, b, h)
+				validRow2 := brngutil.RandomValidRow(indices, k, b+1, h)
 
 				table := Table{validRow1, validRow2}
 
@@ -322,11 +321,11 @@ var _ = Describe("Table", func() {
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(45)
 				h := curve.Random()
-				indices1 := stu.RandomIndices(n)
-				indices2 := stu.RandomIndices(n + 1)
+				indices1 := shamirutil.RandomIndices(n)
+				indices2 := shamirutil.RandomIndices(n + 1)
 
-				validRow1 := btu.RandomValidRow(indices1, k, b, h)
-				validRow2 := btu.RandomValidRow(indices2, k, b, h)
+				validRow1 := brngutil.RandomValidRow(indices1, k, b, h)
+				validRow2 := brngutil.RandomValidRow(indices2, k, b, h)
 
 				table := Table{validRow1, validRow2}
 
@@ -339,9 +338,9 @@ var _ = Describe("Table", func() {
 				b := 5 + rand.Intn(35)
 				t := 1 + rand.Intn(k-1)
 				h := curve.Random()
-				indices := stu.RandomIndices(n)
+				indices := shamirutil.RandomIndices(n)
 
-				table := btu.RandomValidTable(indices, h, k, b, t)
+				table := brngutil.RandomValidTable(indices, h, k, b, t)
 
 				Expect(table.HasValidDimensions()).To(BeTrue())
 			})
@@ -353,9 +352,9 @@ var _ = Describe("Table", func() {
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(15)
 				h := curve.Random()
-				indices := stu.SequentialIndices(n)
+				indices := shamirutil.SequentialIndices(n)
 
-				table := btu.RandomValidTable(indices, h, k, b, n)
+				table := brngutil.RandomValidTable(indices, h, k, b, n)
 
 				for i := 1; i <= n; i++ {
 					at := secp256k1.NewSecp256k1N(uint64(i))
