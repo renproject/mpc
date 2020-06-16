@@ -238,7 +238,7 @@ var _ = Describe("Rng", func() {
 					// If an RNG machine is supplied with BRNG outputs that have at least one commitment,
 					// not of appropriate capacity (k-1) we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
 					ii := rand.Intn(k)
@@ -279,7 +279,7 @@ var _ = Describe("Rng", func() {
 					// But if the reconstruction threshold is k = 1, then in that trivial case,
 					// a single machine can construct the entire secret just by itself.
 					// This should not be the scenario ideally, but we will cover it nonetheless
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, 1, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, 1, h, isZero)
 
 					// Once we have `b` sets of shares and commitments
 					// we are ready to transition the RNG machine
@@ -662,7 +662,7 @@ var _ = Describe("Rng", func() {
 			for i, index := range indices {
 				id := mpcutil.ID(i)
 				rngMachine := rngutil.NewRngMachine(
-					id, index, indices, b, k, h,
+					id, index, indices, b, k, h, isZero,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer[index],
 					false,

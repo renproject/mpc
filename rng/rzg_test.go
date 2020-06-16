@@ -10,12 +10,12 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 
+	"github.com/renproject/mpc/mpcutil"
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
-	rtu "github.com/renproject/mpc/rng/testutil"
-	mtu "github.com/renproject/mpc/testutil"
+	"github.com/renproject/mpc/rng/rngutil"
 )
 
 var _ = Describe("Rzg", func() {
@@ -44,7 +44,7 @@ var _ = Describe("Rzg", func() {
 
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 
 			// index denotes the current player's index
 			// This is a randomly chosen index from indices
@@ -114,7 +114,7 @@ var _ = Describe("Rzg", func() {
 					// If an RZG machine in the Init state is supplied with
 					// valid sets of shares and commitments from its own BRNG outputs
 					// it transitions to the WaitingOpen state
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 
 					// Once we have `b` sets of shares and commitments
 					// we are ready to transition the RZG machine
@@ -131,7 +131,7 @@ var _ = Describe("Rzg", func() {
 					// RZG machine's batch size, those shares are simply ignored. But the machine
 					// still proceeds computing the commitments and moves to the WaitingOpen state
 					// while returning the CommitmentsConstructed event
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 
 					// Initialise two RZG replicas
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -177,7 +177,7 @@ var _ = Describe("Rzg", func() {
 					// our assumption about the correctness of sets of shares in case they
 					// are of appropriate batch size. The RZG machine hence panics, and continues
 					// to be in its initial state
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					// fool around with one of the set of shares
@@ -195,7 +195,7 @@ var _ = Describe("Rzg", func() {
 					// lengths (batch size) for shares and commitment, whereby the commitments
 					// are of incorrect size, we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
 					setsOfCommitments = append(setsOfCommitments[:j], setsOfCommitments[j+1:]...)
@@ -209,7 +209,7 @@ var _ = Describe("Rzg", func() {
 					// If an RZG machine is supplied with BRNG outputs that have at least one commitment,
 					// not of appropriate capacity (k-1) we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
 					ii := rand.Intn(k - 1)
@@ -231,8 +231,8 @@ var _ = Describe("Rzg", func() {
 
 					// get this `from` index's sets of shares and commitments
 					// also compute its openings for the player
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
-					openings, _ := rtu.GetDirectedOpenings(setsOfShares, setsOfCommitments, index, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					openings, _ := rngutil.GetDirectedOpenings(setsOfShares, setsOfCommitments, index, isZero)
 
 					// initialise player's RZG machine and supply openings
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -260,7 +260,7 @@ var _ = Describe("Rzg", func() {
 				) {
 					_, rzger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 					event := rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 					Expect(event).To(Equal(rng.SharesConstructed))
@@ -283,7 +283,7 @@ var _ = Describe("Rzg", func() {
 				Specify("Supply BRNG shares", func() {
 					// When an RZG machine in the WaitingOpen state is supplied BRNG shares
 					// it simply ignores them and continues to be in the same state
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					event := rzger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
@@ -381,7 +381,7 @@ var _ = Describe("Rzg", func() {
 				) {
 					_, rzger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 					_ = rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -444,7 +444,7 @@ var _ = Describe("Rzg", func() {
 			It("Correctly computes own shares and commitments", func() {
 				_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 				rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -461,7 +461,7 @@ var _ = Describe("Rzg", func() {
 			It("Correctly computes share of unbiased random number, for the entire batch", func() {
 				_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
 
 				_ = rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -491,34 +491,34 @@ var _ = Describe("Rzg", func() {
 	})
 
 	Describe("Network Simulation", func() {
-		var ids []mtu.ID
-		var machines []mtu.Machine
-		var network mtu.Network
-		var shuffleMsgs func([]mtu.Message)
-		var isOffline map[mtu.ID]bool
+		var ids []mpcutil.ID
+		var machines []mpcutil.Machine
+		var network mpcutil.Network
+		var shuffleMsgs func([]mpcutil.Message)
+		var isOffline map[mpcutil.ID]bool
 		var b, k int
 		var h curve.Point
 
 		JustBeforeEach(func() {
 			// Randomise RZG network scenario
 			n := 5 + rand.Intn(6)
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
 			h = curve.Random()
 			isZero := true
 
 			// Machines (players) participating in the RZG protocol
-			ids = make([]mtu.ID, n)
-			machines = make([]mtu.Machine, n)
+			ids = make([]mpcutil.ID, n)
+			machines = make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rtu.GetAllSharesAndCommitments(indices, b, k, h, isZero)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, isZero)
 
 			// Append machines to the network
 			for i, index := range indices {
-				id := mtu.ID(i)
-				rngMachine := rtu.NewRngMachine(
+				id := mpcutil.ID(i)
+				rngMachine := rngutil.NewRngMachine(
 					id, index, indices, b, k, h, isZero,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer[index],
@@ -528,8 +528,8 @@ var _ = Describe("Rzg", func() {
 			}
 
 			nOffline := rand.Intn(n - k + 1)
-			shuffleMsgs, isOffline = mtu.MessageShufflerDropper(ids, nOffline)
-			network = mtu.NewNetwork(machines, shuffleMsgs)
+			shuffleMsgs, isOffline = mpcutil.MessageShufflerDropper(ids, nOffline)
+			network = mpcutil.NewNetwork(machines, shuffleMsgs)
 			network.SetCaptureHist(true)
 		})
 
@@ -544,8 +544,8 @@ var _ = Describe("Rzg", func() {
 			}
 
 			// Get the unbiased random numbers calculated by that RZG machine
-			referenceRNShares := machines[i].(*rtu.RngMachine).RandomNumbersShares()
-			referenceCommitments := machines[i].(*rtu.RngMachine).Commitments()
+			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
+			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
 
 			vssChecker := shamir.NewVSSChecker(h)
 
@@ -555,8 +555,8 @@ var _ = Describe("Rzg", func() {
 					continue
 				}
 
-				rnShares := machines[j].(*rtu.RngMachine).RandomNumbersShares()
-				rnCommitments := machines[j].(*rtu.RngMachine).Commitments()
+				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
+				rnCommitments := machines[j].(*rngutil.RngMachine).Commitments()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
 				for l, c := range rnCommitments {
@@ -581,16 +581,16 @@ var _ = Describe("Rzg", func() {
 						continue
 					}
 
-					evaluationPoint := machines[j].(*rtu.RngMachine).Index()
-					vshare := machines[j].(*rtu.RngMachine).RandomNumbersShares()[i]
+					evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
+					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
 
 					indices = append(indices, evaluationPoint)
 					shares = append(shares, vshare.Share())
 				}
 
 				reconstructor := shamir.NewReconstructor(indices)
-				Expect(stu.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
-				Expect(stu.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 
 				expectedSecret := secp256k1.ZeroSecp256k1N()
 				secret, err := reconstructor.Open(shares)

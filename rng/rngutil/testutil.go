@@ -6,8 +6,8 @@ import (
 	"github.com/renproject/shamir/curve"
 
 	"github.com/renproject/mpc/brng"
-	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/brng/brngutil"
+	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/open"
 )
 
