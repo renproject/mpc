@@ -20,10 +20,10 @@ const (
 	// WaitingOpen as it waits for threshold number of openings from other machines
 	WaitingRNG
 
-	// RNGsConstructed represents the state when the RKPGer has successfully
+	// RNGsReady represents the state when the RKPGer has successfully
 	// constructed a batch of unbiased random numbers and is now waiting for
 	// BRNG outputs to begin the random zero generation
-	RNGsConstructed
+	RNGsReady
 
 	// WaitingRZG represents the state when the RKPGer has received BRNG outputs
 	// for its random zero generation and is waiting for threshold number of
@@ -50,8 +50,8 @@ func (s State) String() string {
 		return "Init"
 	case WaitingRNG:
 		return "WaitingRNG"
-	case RNGsConstructed:
-		return "RNGsConstructed"
+	case RNGsReady:
+		return "RNGsReady"
 	case WaitingRZG:
 		return "WaitingRZG"
 	case WaitingOpen:

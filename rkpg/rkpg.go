@@ -1,6 +1,7 @@
 package rkpg
 
 import (
+	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 
 	"github.com/renproject/mpc/open"
@@ -55,6 +56,7 @@ func (rkpger RKPGer) Threshold() uint32 {
 }
 
 // New creates a new RKPG state machine for a given batch size
+//
 // ownIndex is the current machine's index
 // indices is the set of player indices
 // b is the number of random keypairs generated in one invocation of RKPG protocol
@@ -79,4 +81,113 @@ func New(
 		rzger:  rzger,
 		opener: opener,
 	}
+}
+
+// TransitionRNGShares accepts the BRNG outputs for RNG, and passes them on to
+// the embedded RNGer. The RKPGer transitions to WaitingRNG on success. The machine
+// can also transition to a RNGsReady state for the trivial case of reconstruction
+// threshold being equal to one
+//
+// setsOfShares are the batch of verifiable shares from BRNG output
+// setsOfCommitments are the corresponding batch of commitments for the shares
+func (rkpger *RKPGer) TransitionRNGShares(
+	setsOfShares []shamir.VerifiableShares,
+	setsOfCommitments [][]shamir.Commitment,
+) {
+	if rkpger.state != Init {
+		return
+	}
+
+	event := rkpger.rnger.TransitionShares(setsOfShares, setsOfCommitments, false)
+
+	if event == rng.CommitmentsConstructed || event == rng.SharesConstructed {
+		rkpger.state = WaitingRNG
+	}
+
+	if event == rng.RNGsReconstructed {
+		rkpger.state = RNGsReady
+	}
+}
+
+// TransitionRNGOpen accepts openings from other machines for reconstructing the
+// unbiased random number shares. The RKPGer continues to be in the WaitingRNG
+// state until reconstructing its shares, upon which it transitions to RNGsReady
+//
+// fromIndex is the machine index of the open sender
+// openings are the verifiable shares opened to the current machine
+func (rkpger *RKPGer) TransitionRNGOpen(
+	fromIndex open.Fn,
+	openings shamir.VerifiableShares,
+) {
+	if rkpger.state != WaitingRNG {
+		return
+	}
+
+	event := rkpger.rnger.TransitionOpen(fromIndex, openings)
+
+	if event == rng.RNGsReconstructed {
+		rkpger.state = RNGsReady
+	}
+}
+
+// TransitionRZGShares accepts the BRNG outputs for RZG, and passes them on to
+// the embedded RZGer. The RKPGer transitions to WaitingRZG on success. The machine
+// can also transition to a WaitingOpen state for the trivial case of reconstruction
+// threshold being equal to one
+//
+// setsOfShares are the batch of verifiable shares from BRNG output
+// setsOfCommitments are the corresponding batch of commitments for the shares
+func (rkpger *RKPGer) TransitionRZGShares(
+	setsOfShares []shamir.VerifiableShares,
+	setsOfCommitments [][]shamir.Commitment,
+) {
+	if rkpger.state != RNGsReady {
+		return
+	}
+
+	event := rkpger.rzger.TransitionShares(setsOfShares, setsOfCommitments, true)
+
+	if event == rng.CommitmentsConstructed || event == rng.SharesConstructed {
+		rkpger.state = WaitingRZG
+	}
+
+	if event == rng.RNGsReconstructed {
+		rkpger.state = WaitingOpen
+	}
+}
+
+// TransitionRZGOpen accepts openings from other machines for reconstructing the
+// random shares for zero sharing. The RKPGer continues to be in the WaitingRZG
+// state until reconstructing its shares, upon which it transitions to WaitingOpen
+//
+// fromIndex is the machine index of the open sender
+// openings are the verifiable shares opened to the current machine
+func (rkpger *RKPGer) TransitionRZGOpen(
+	fromIndex open.Fn,
+	openings shamir.VerifiableShares,
+) {
+	if rkpger.state != WaitingRZG {
+		return
+	}
+
+	event := rkpger.rzger.TransitionOpen(fromIndex, openings)
+
+	if event == rng.RNGsReconstructed {
+		rkpger.state = WaitingOpen
+	}
+}
+
+// Reset transitions a RKPGer in any state to the Init state
+func (rkpger *RKPGer) Reset() {
+	event := rkpger.rnger.Reset()
+	if event != rng.Reset {
+		return
+	}
+
+	event = rkpger.rzger.Reset()
+	if event != rng.Reset {
+		return
+	}
+
+	rkpger.state = Init
 }
