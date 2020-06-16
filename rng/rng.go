@@ -6,11 +6,11 @@ import (
 
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	util "github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
-	rngCompute "github.com/renproject/mpc/rng/compute"
+	"github.com/renproject/mpc/rng/compute"
 )
 
 // RNGer describes the structure of the Random Number Generation machine.
@@ -326,10 +326,10 @@ func (rnger *RNGer) TransitionShares(
 
 	// construct the commitments for the batch of unbiased random numbers
 	for i, setOfCommitments := range setsOfCommitments {
-		rnger.commitments[i] = rngCompute.Commitment(setOfCommitments, rnger.threshold)
+		rnger.commitments[i] = compute.Commitment(setOfCommitments, rnger.threshold)
 
 		// compute the accumulator commitment and add it to the local set of commitments
-		accCommitment := rngCompute.AccumulatorCommitment(rnger.index, setOfCommitments)
+		accCommitment := compute.AccumulatorCommitment(rnger.index, setOfCommitments)
 		locallyComputedCommitments[i].Set(accCommitment)
 	}
 
@@ -342,7 +342,7 @@ func (rnger *RNGer) TransitionShares(
 			for _, setOfShares := range setsOfShares {
 				// If the sets of shares are valid, compute the accumulator share
 				// and append to the directed openings map
-				accShare := rngCompute.AccumulatorShare(j, setOfShares)
+				accShare := compute.AccumulatorShare(j, setOfShares)
 				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
 			}
 		}

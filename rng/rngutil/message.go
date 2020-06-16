@@ -1,4 +1,4 @@
-package testutil
+package rngutil
 
 import (
 	"fmt"
@@ -6,24 +6,24 @@ import (
 
 	"github.com/renproject/shamir"
 
+	"github.com/renproject/mpc/mpcutil"
 	"github.com/renproject/mpc/open"
-	mtu "github.com/renproject/mpc/testutil"
 )
 
 // RngMessage type represents the message structure in the RNG protocol
 type RngMessage struct {
-	from, to  mtu.ID
+	from, to  mpcutil.ID
 	fromIndex open.Fn
 	openings  shamir.VerifiableShares
 }
 
 // From returns the player ID of message sender
-func (msg RngMessage) From() mtu.ID {
+func (msg RngMessage) From() mpcutil.ID {
 	return msg.from
 }
 
 // To returns the player ID of message recipient
-func (msg RngMessage) To() mtu.ID {
+func (msg RngMessage) To() mpcutil.ID {
 	return msg.to
 }
 
