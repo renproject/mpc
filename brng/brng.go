@@ -149,18 +149,18 @@ func (brnger *BRNGer) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 // State returns the current state of the state machine.
-func (brnger *BRNGer) State() State {
+func (brnger BRNGer) State() State {
 	return brnger.state
 }
 
 // N returns the total number of players participating
 // in the BRNG protocol
-func (brnger *BRNGer) N() int {
+func (brnger BRNGer) N() int {
 	return brnger.sharer.N()
 }
 
 // BatchSize returns the expected batch size of the state machine.
-func (brnger *BRNGer) BatchSize() uint32 {
+func (brnger BRNGer) BatchSize() uint32 {
 	return brnger.batchSize
 }
 
@@ -168,7 +168,11 @@ func (brnger *BRNGer) BatchSize() uint32 {
 // parameter h.
 func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
 	state := Init
-	sharer := shamir.NewVSSharer(indices, h)
+
+	indicesCopy := make([]secp256k1.Secp256k1N, len(indices))
+	copy(indicesCopy, indices)
+
+	sharer := shamir.NewVSSharer(indicesCopy, h)
 	checker := shamir.NewVSSChecker(h)
 
 	// initialise the batch size as 0
@@ -209,20 +213,20 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 		return nil, nil, nil
 	}
 
-	// TODO: The `faults` don't account for invalid index errors
-	// Is it required to add them to the list of faults?
+	// Higher level checks ensure that the Element's within a slice have
+	// the correct index. So at the lower level, BRNG state machine can
+	// proceed without checking them
 	if !slice.HasValidForm() {
 		brnger.state = Error
 		return nil, nil, nil
 	}
 
-	// TODO: Should we try to reconstruct on a per column basis? Or just give
-	// up if any of the columns in the slice are invalid?
+	// This checks the validity of every element in every column of the slice
+	// Faults are an array of elements that fail the validity check
 	faults := slice.Faults(&brnger.checker)
 	if faults != nil {
 		brnger.state = Error
 
-		// TODO: Decide the best way to return the faults.
 		return nil, nil, faults
 	}
 
