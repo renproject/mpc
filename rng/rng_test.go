@@ -11,13 +11,13 @@ import (
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-	stu "github.com/renproject/shamir/testutil"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
+	"github.com/renproject/mpc/mpcutil"
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
-	rtu "github.com/renproject/mpc/rng/testutil"
-	mtu "github.com/renproject/mpc/testutil"
+	"github.com/renproject/mpc/rng/rngutil"
 )
 
 var _ = Describe("Rng", func() {
@@ -44,7 +44,7 @@ var _ = Describe("Rng", func() {
 
 			// indices represent the list of index for each player
 			// They are Secp256k1N representations of sequential n values
-			indices := stu.RandomIndices(n)
+			indices := shamirutil.RandomIndices(n)
 
 			// index denotes the current player's index
 			// This is a randomly chosen index from indices
@@ -114,7 +114,7 @@ var _ = Describe("Rng", func() {
 					// If an RNG machine in the Init state is supplied with
 					// valid sets of shares and commitments from its own BRNG outputs
 					// it transitions to the WaitingOpen state
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 
 					// Once we have `b` sets of shares and commitments
 					// we are ready to transition the RNG machine
@@ -131,7 +131,7 @@ var _ = Describe("Rng", func() {
 					// RNG machine's batch size, those shares are simply ignored. But the machine
 					// still proceeds computing the commitments and moves to the WaitingOpen state
 					// while returning the CommitmentsConstructed event
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 
 					// Initialise two RNG replicas
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -168,7 +168,7 @@ var _ = Describe("Rng", func() {
 					// our assumption about the correctness of sets of shares in case they
 					// are of appropriate batch size. The RNG machine hence panics, and continues
 					// to be in its initial state
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					// fool around with one of the set of shares
@@ -186,7 +186,7 @@ var _ = Describe("Rng", func() {
 					// lengths (batch size) for shares and commitment, whereby the commitments
 					// are of incorrect size, we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
 					setsOfCommitments = append(setsOfCommitments[:j], setsOfCommitments[j+1:]...)
@@ -210,8 +210,8 @@ var _ = Describe("Rng", func() {
 
 					// get this `from` index's sets of shares and commitments
 					// also compute its openings for the player
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
-					openings, _ := rtu.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					openings, _ := rngutil.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
 
 					// initialise player's RNG machine and supply openings
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -240,7 +240,7 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 					Expect(event).To(Equal(rng.SharesConstructed))
@@ -263,7 +263,7 @@ var _ = Describe("Rng", func() {
 				Specify("Supply BRNG shares", func() {
 					// When an RNG machine in the WaitingOpen state is supplied BRNG shares
 					// it simply ignores them and continues to be in the same state
-					setsOfShares, setsOfCommitments := rtu.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
@@ -371,7 +371,7 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
@@ -434,7 +434,7 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes own shares and commitments", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
@@ -451,7 +451,7 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes share of unbiased random number, for the entire batch", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
@@ -486,7 +486,7 @@ var _ = Describe("Rng", func() {
 
 			JustBeforeEach(func() {
 				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rtu.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 			})
@@ -579,33 +579,33 @@ var _ = Describe("Rng", func() {
 	})
 
 	Describe("Network Simulation", func() {
-		var ids []mtu.ID
-		var machines []mtu.Machine
-		var network mtu.Network
-		var shuffleMsgs func([]mtu.Message)
-		var isOffline map[mtu.ID]bool
+		var ids []mpcutil.ID
+		var machines []mpcutil.Machine
+		var network mpcutil.Network
+		var shuffleMsgs func([]mpcutil.Message)
+		var isOffline map[mpcutil.ID]bool
 		var b, k int
 		var h curve.Point
 
 		JustBeforeEach(func() {
 			// Randomise RNG network scenario
 			n := 5 + rand.Intn(6)
-			indices := stu.SequentialIndices(n)
+			indices := shamirutil.SequentialIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
 			h = curve.Random()
 
 			// Machines (players) participating in the RNG protocol
-			ids = make([]mtu.ID, n)
-			machines = make([]mtu.Machine, n)
+			ids = make([]mpcutil.ID, n)
+			machines = make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rtu.GetAllSharesAndCommitments(indices, b, k, h)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
 
 			// Append machines to the network
 			for i, index := range indices {
-				id := mtu.ID(i)
-				rngMachine := rtu.NewRngMachine(
+				id := mpcutil.ID(i)
+				rngMachine := rngutil.NewRngMachine(
 					id, index, indices, b, k, h,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer[index],
@@ -615,8 +615,8 @@ var _ = Describe("Rng", func() {
 			}
 
 			nOffline := rand.Intn(n - k + 1)
-			shuffleMsgs, isOffline = mtu.MessageShufflerDropper(ids, nOffline)
-			network = mtu.NewNetwork(machines, shuffleMsgs)
+			shuffleMsgs, isOffline = mpcutil.MessageShufflerDropper(ids, nOffline)
+			network = mpcutil.NewNetwork(machines, shuffleMsgs)
 			network.SetCaptureHist(true)
 		})
 
@@ -631,8 +631,8 @@ var _ = Describe("Rng", func() {
 			}
 
 			// Get the unbiased random numbers calculated by that RNG machine
-			referenceRNShares := machines[i].(*rtu.RngMachine).RandomNumbersShares()
-			referenceCommitments := machines[i].(*rtu.RngMachine).Commitments()
+			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
+			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
 
 			// checker to check validity of verifiable shares against commitments
 			vssChecker := shamir.NewVSSChecker(h)
@@ -643,12 +643,12 @@ var _ = Describe("Rng", func() {
 					continue
 				}
 
-				rnShares := machines[j].(*rtu.RngMachine).RandomNumbersShares()
+				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
 				// Every player has computed the same commitments for the batch of
 				// unbiased random numbers
-				comms := machines[j].(*rtu.RngMachine).Commitments()
+				comms := machines[j].(*rngutil.RngMachine).Commitments()
 				for l, c := range comms {
 					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
 				}
@@ -671,16 +671,16 @@ var _ = Describe("Rng", func() {
 						continue
 					}
 
-					evaluationPoint := machines[j].(*rtu.RngMachine).Index()
-					vshare := machines[j].(*rtu.RngMachine).RandomNumbersShares()[i]
+					evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
+					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
 
 					indices = append(indices, evaluationPoint)
 					shares = append(shares, vshare.Share())
 				}
 
 				reconstructor := shamir.NewReconstructor(indices)
-				Expect(stu.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
-				Expect(stu.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 			}
 		})
 	})

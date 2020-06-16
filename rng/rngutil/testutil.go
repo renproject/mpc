@@ -1,4 +1,4 @@
-package testutil
+package rngutil
 
 import (
 	"github.com/renproject/secp256k1-go"
@@ -6,7 +6,7 @@ import (
 	"github.com/renproject/shamir/curve"
 
 	"github.com/renproject/mpc/brng"
-	btu "github.com/renproject/mpc/brng/testutil"
+	"github.com/renproject/mpc/brng/brngutil"
 	"github.com/renproject/mpc/open"
 )
 
@@ -29,7 +29,7 @@ func GetAllSharesAndCommitments(
 
 	brnger := brng.New(indices, h)
 	for i := 0; i < b; i++ {
-		table := btu.RandomValidTable(indices, h, k, k, len(indices))
+		table := brngutil.RandomValidTable(indices, h, k, k, len(indices))
 
 		for _, index := range indices {
 			slice := table.TakeSlice(index, indices)
@@ -76,7 +76,7 @@ func GetAllDirectedOpenings(
 	// Generate random table and distribute appropriately
 	brnger := brng.New(indices, h)
 	for i := 0; i < b; i++ {
-		table := btu.RandomValidTable(indices, h, k, k, len(indices))
+		table := brngutil.RandomValidTable(indices, h, k, k, len(indices))
 
 		for _, from := range indices {
 			// Take the appropriate slice from table
@@ -133,7 +133,7 @@ func GetBrngOutputs(
 
 		// generate a valid table. Each table represents `k` BRNG runs
 		// which also means, a batch size of `k` for the BRNG call
-		table := btu.RandomValidTable(
+		table := brngutil.RandomValidTable(
 			indices,      // indices of players
 			h,            // pedersen commitment parameter
 			k,            // reconstruction threshold

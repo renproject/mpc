@@ -1,4 +1,4 @@
-package testutil
+package rngutil
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
-	mtu "github.com/renproject/mpc/testutil"
+	"github.com/renproject/mpc/mpcutil"
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
@@ -18,7 +18,7 @@ import (
 // RngMachine type represents the structure of an RNG machine
 // in the execution of the RNG protocol
 type RngMachine struct {
-	id      mtu.ID
+	id      mpcutil.ID
 	index   open.Fn
 	indices []open.Fn
 	rnger   rng.RNGer
@@ -27,7 +27,7 @@ type RngMachine struct {
 // NewRngMachine creates a new instance of RNG machine
 // and transitions it to the WaitingOpen state by supplying its own shares
 func NewRngMachine(
-	id mtu.ID,
+	id mpcutil.ID,
 	index open.Fn,
 	indices []open.Fn,
 	b, k int,
@@ -48,7 +48,7 @@ func NewRngMachine(
 }
 
 // ID returns the index of the RNG machine in the list of machines
-func (machine RngMachine) ID() mtu.ID {
+func (machine RngMachine) ID() mpcutil.ID {
 	return machine.id
 }
 
@@ -123,17 +123,17 @@ func (machine RngMachine) Commitments() []shamir.Commitment {
 // InitialMessages implements the interface as required by a Network machine
 // It returns the initial messages to be sent by a machine to another machine
 // participating in the said protocol
-func (machine RngMachine) InitialMessages() []mtu.Message {
-	messages := make([]mtu.Message, 0, len(machine.indices)-1)
+func (machine RngMachine) InitialMessages() []mpcutil.Message {
+	messages := make([]mpcutil.Message, 0, len(machine.indices)-1)
 	for i, to := range machine.indices {
-		if machine.id == mtu.ID(i) {
+		if machine.id == mpcutil.ID(i) {
 			continue
 		}
 
 		openings := machine.rnger.DirectedOpenings(to)
 		messages = append(messages, &RngMessage{
 			from:      machine.id,
-			to:        mtu.ID(i),
+			to:        mpcutil.ID(i),
 			fromIndex: machine.index,
 			openings:  openings,
 		})
@@ -146,7 +146,7 @@ func (machine RngMachine) InitialMessages() []mtu.Message {
 // It receives a message sent by another machine participating in the said
 // protocol, and handles the message appropriately, and returns response
 // messages if required
-func (machine *RngMachine) Handle(msg mtu.Message) []mtu.Message {
+func (machine *RngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	switch msg := msg.(type) {
 	case *RngMessage:
 		machine.rnger.TransitionOpen(msg.fromIndex, msg.openings)
