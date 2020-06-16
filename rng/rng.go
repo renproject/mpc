@@ -13,7 +13,51 @@ import (
 	rngCompute "github.com/renproject/mpc/rng/compute"
 )
 
-// RNGer describes the structure of the Random Number Generation machine
+// RNGer describes the structure of the Random Number Generation machine.
+// The machine can be used for an arbitrary number of invocations of RNG,
+// however each instance is specific to the set of machine indices it was
+// constructed with, as well as the batch size, reconstruction threshold and
+// Pedersen Commitment Scheme Parameter.
+//
+// RNGer can exist in one of the following states:
+// - Init
+// - WaitingOpen
+// - Done
+//
+// A new instance of RNGer can be created by calling:
+// - New(index, indices, b, k, h)
+//
+// State transitions can be triggered by three different functions
+// - TransitionShares(setsOfShares, setsOfCommitments)
+// - TransitionOpen(openings)
+// - Reset
+//
+// Every state transition function returns a transition event, depending
+// on how the inputs were processed. The various state transitions are as follows:
+// - state(Init)
+//	 - TransitionShares
+//			|
+//			|__ Invalid Shares --> event(CommitmentsConstructed) --> state(WaitingOpen)
+//			|__ Valid Shares   --> event(SharesConstructed)      --> state(WaitingOpen)
+//	 - TransitionOpen
+//			|
+//			|__ Invalid/Valid Openings --> event(OpeningsIgnored) --> state(Init)
+//	 - Reset
+//			|
+//			|__ Any --> event(Reset) --> state(Init)
+//
+// - state(WaitingOpen)
+//	 - TransitionShares
+//			|
+//			|__ Invalid/Valid Shares --> event(SharesIgnored) --> state(WaitingOpen)
+//	 - TransitionOpen
+//			|
+//			|__ Invalid Openings     --> event(OpeningsIgnored)      --> state(WaitingOpen)
+//			|__ Valid Openings       --> event(OpeningsAdded)        --> state(WaitingOpen)
+//			|__ Valid Openings (kth) --> event(RNGsReconstructed)    --> state(Done)
+//	 - Reset
+//			|
+//			|__ Any --> event(Reset) --> state(Init)
 type RNGer struct {
 	// state signifies the current state of the RNG state machine
 	state State
@@ -21,7 +65,6 @@ type RNGer struct {
 	// index signifies the given RNG state machine's index
 	index open.Fn
 
-	// TODO: add this field while marshaling/unmarshaling
 	// indices signifies the list of all such RNG state machines
 	// participating in the RNG protocol
 	indices []open.Fn
@@ -161,15 +204,22 @@ func (rnger RNGer) Threshold() uint32 {
 
 // Commitments returns the shamir commitments to the batch of unbiased random numbers
 func (rnger RNGer) Commitments() []shamir.Commitment {
-	return rnger.commitments
+	commitmentsCopy := make([]shamir.Commitment, len(rnger.commitments))
+	copy(commitmentsCopy, rnger.commitments)
+	return commitmentsCopy
 }
 
 // New creates a new RNG state machine for a given batch size
-// ownIndex is the current machine's index
-// indices is the set of player indices
-// b is the number of random numbers generated in one invocation of RNG protocol
-// k is the reconstruction threshold for every random number
-// h is the Pedersen Commitment Parameter, a point on elliptic curve
+// - Inputs
+// 	 - ownIndex is the current machine's index
+// 	 - indices is the set of player indices
+// 	 - b is the number of random numbers generated in one invocation of RNG protocol
+// 	 - k is the reconstruction threshold for every random number
+// 	 - h is the Pedersen Commitment Parameter, a point on elliptic curve
+//
+// - Returns
+//	 - TransitionEvent is the `Initialised` event emitted on creation
+//	 - RNGer the newly created RNGer instance
 func New(
 	ownIndex open.Fn,
 	indices []open.Fn,
@@ -207,16 +257,24 @@ func New(
 // and their respective commitments.
 // The machine should locally compute its own shares from the received sets of shares
 //
-// setsOfShares are the b sets of verifiable shares from the player's BRNG outputs
-//	- MUST be of length equal to the batch size to be valid
-//	- For invalid sets of shares, a nil slice []shamir.VerifiableShares{} MUST be supplied
-//	- If the above checks are met, we assume that every set of verifiable shares is valid
-//		- We assume it has a length equal to the RNG's reconstruction threshold
-// setsOfCommitments are the b sets of commitments from the player's BRNG outputs
-//	- We assume that the commitments are correct and valid (even if the shares may not be)
-//	- MUST be of length equal to the batch size
-//	- In case the sets of shares are invalid, we simply proceed with locally computing
-//		the Open commitments, since we assume the supplied sets of commitments are correct
+// - Inputs
+//   - setsOfShares are the b sets of verifiable shares from the player's BRNG outputs
+//  	 - MUST be of length equal to the batch size to be valid
+//  	 - For invalid sets of shares, a nil slice []shamir.VerifiableShares{} MUST be supplied
+//  	 - If the above checks are met, we assume that every set of verifiable shares is valid
+//  		 - We assume it has a length equal to the RNG's reconstruction threshold
+//   - setsOfCommitments are the b sets of commitments from the player's BRNG outputs
+//  	 - We assume that the commitments are correct and valid (even if the shares may not be)
+//  	 - MUST be of length equal to the batch size
+//  	 - In case the sets of shares are invalid, we simply proceed with locally computing
+//  		 the Open commitments, since we assume the supplied sets of commitments are correct
+//
+// - Returns
+//   - TransitionEvent
+//		 - SharesIgnored when the RNGer is not in `Init` state
+//		 - CommitmentsConstructed when the sets of shares were invalid
+//		 - SharesConstructed when the sets of shares were valid
+//		 - RNGsReconstructed when the RNGer was able to reconstruct the random shares (k = 1)
 func (rnger *RNGer) TransitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
@@ -229,7 +287,7 @@ func (rnger *RNGer) TransitionShares(
 	// Since this refutes our assumption that the sets of commitments
 	// are valid and correct
 	if len(setsOfCommitments) != int(rnger.batchSize) {
-		panic("Unexpected invalid sets of commitments to RNG")
+		panic("invalid sets of commitments")
 	}
 
 	// Boolean to keep a track of whether shares computation should be ignored or not
@@ -253,13 +311,13 @@ func (rnger *RNGer) TransitionShares(
 		// Since this refutes our assumption that if the sets of shares are of appropriate
 		// length, then every set of shares is valid and correct
 		if !ignoreShares && len(setsOfShares[i]) != int(rnger.threshold) {
-			panic("Unexpected invalid set of shares")
+			panic("invalid set of shares")
 		}
 
 		// Since this refutes our assumption that the sets of commitments
 		// are valid and correct
 		if len(setOfCommitments) != int(rnger.threshold) {
-			panic("Unexpected invalid sets of commitments to RNG")
+			panic("invalid sets of commitments")
 		}
 	}
 
@@ -361,12 +419,20 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 // When the RNG machine transitions to the Done state, it has a share each `r_j` for the
 // `b` random numbers
 //
-// fromIndex is the index of the RNG machine from which we are receiving directed openings
-//	- MUST be a part of the set of indices in RNG machine
-//	- Will be ignored if valid openings are already supplied by this index
-// openings are the directed openings
-//	- MUST be of length b (batch size)
-//	- Will be ignored if they're not consistent with their respective commitments
+// - Inputs
+//   - fromIndex is the index of the RNG machine from which we are receiving directed openings
+//	   - MUST be a part of the set of indices in RNG machine
+//	   - Will be ignored if valid openings are already supplied by this index
+//   - openings are the directed openings
+//	   - MUST be of length b (batch size)
+//	   - Will be ignored if they're not consistent with their respective commitments
+//
+// - Returns
+//   - TransitionEvent
+//     - OpeningsIgnored when the openings were invalid in form or consistency
+//		 - OpeningsAdded when the openings were valid are were added to the opener
+//		 - RNGsReconstructed when the set of openings was the kth valid set and hence
+//			 the RNGer could reconstruct its shares for the unbiased random numbers
 func (rnger *RNGer) TransitionOpen(
 	fromIndex open.Fn,
 	openings shamir.VerifiableShares,
@@ -409,7 +475,6 @@ func (rnger *RNGer) TransitionOpen(
 		return OpeningsAdded
 	}
 
-	// CONSIDER: This may be several different scenarios, should we handle separately?
 	return OpeningsIgnored
 }
 

@@ -302,7 +302,8 @@ var _ = Describe("Rng", func() {
 						from = indices[rand.Intn(len(indices))]
 					}
 
-					//// TODO: REMOVE THIS LATER /////
+					// Make sure every player has computed the same commitments
+					// for the unbiased random numbers
 					refComm := commitmentsByPlayer[index]
 					for _, j := range indices {
 						comm := commitmentsByPlayer[j]
@@ -310,7 +311,6 @@ var _ = Describe("Rng", func() {
 							Expect(c.Eq(&refComm[l])).To(BeTrue())
 						}
 					}
-					//// REMOVE THIS LATER /////
 
 					event := rnger.TransitionOpen(from, openingsByPlayer[from])
 
