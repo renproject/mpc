@@ -31,11 +31,6 @@ const (
 	// received directed openings that were invalid in some way
 	OpeningsIgnored
 
-	// OpeningsInconsistent represents the event returned when the RNG state machine
-	// received directed openings from a player which are inconsistent with their
-	// respective commitments
-	OpeningsInconsistent
-
 	// OpeningsAdded represents the event returned when the RNG state machine
 	// received valid directed openings and hence added them to its sets of openings
 	OpeningsAdded
@@ -64,8 +59,6 @@ func (e TransitionEvent) String() string {
 		return "SharesConstructed"
 	case OpeningsIgnored:
 		return "OpeningsIgnored"
-	case OpeningsInconsistent:
-		return "OpeningsInconsistent"
 	case OpeningsAdded:
 		return "OpeningsAdded"
 	case RNGsReconstructed:
