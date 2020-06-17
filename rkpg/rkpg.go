@@ -9,6 +9,7 @@ import (
 )
 
 // RKPGer describes the structure of the Random KeyPair Generation machine
+// TODO: document
 type RKPGer struct {
 	// state signifies the current state of the RKPG state machine
 	state State
@@ -69,13 +70,22 @@ func New(
 	indices []open.Fn,
 	b, k uint32,
 	h curve.Point,
-) RKPGer {
+) (TransitionEvent, RKPGer) {
 	state := Init
-	_, rnger := rng.New(ownIndex, indices, b, k, h)
-	_, rzger := rng.New(ownIndex, indices, b, k, h)
+
+	event, rnger := rng.New(ownIndex, indices, b, k, h)
+	if event != rng.Initialised {
+		panic("RNGer initialisation failed")
+	}
+
+	event, rzger := rng.New(ownIndex, indices, b, k, h)
+	if event != rng.Initialised {
+		panic("RZGer initialisation failed")
+	}
+
 	opener := open.New(b, indices, h)
 
-	return RKPGer{
+	return Initialised, RKPGer{
 		state:  state,
 		rnger:  rnger,
 		rzger:  rzger,
@@ -93,20 +103,24 @@ func New(
 func (rkpger *RKPGer) TransitionRNGShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
-) {
+) TransitionEvent {
 	if rkpger.state != Init {
-		return
+		return RNGInputsIgnored
 	}
 
 	event := rkpger.rnger.TransitionShares(setsOfShares, setsOfCommitments, false)
 
 	if event == rng.CommitmentsConstructed || event == rng.SharesConstructed {
 		rkpger.state = WaitingRNG
+		return RNGInputsAccepted
 	}
 
 	if event == rng.RNGsReconstructed {
 		rkpger.state = RNGsReady
+		return RNGReady
 	}
+
+	return RNGInputsIgnored
 }
 
 // TransitionRNGOpen accepts openings from other machines for reconstructing the
@@ -118,16 +132,23 @@ func (rkpger *RKPGer) TransitionRNGShares(
 func (rkpger *RKPGer) TransitionRNGOpen(
 	fromIndex open.Fn,
 	openings shamir.VerifiableShares,
-) {
+) TransitionEvent {
 	if rkpger.state != WaitingRNG {
-		return
+		return RNGOpeningsIgnored
 	}
 
 	event := rkpger.rnger.TransitionOpen(fromIndex, openings)
 
+	if event == rng.OpeningsAdded {
+		return RNGOpeningsAccepted
+	}
+
 	if event == rng.RNGsReconstructed {
 		rkpger.state = RNGsReady
+		return RNGReady
 	}
+
+	return RNGOpeningsIgnored
 }
 
 // TransitionRZGShares accepts the BRNG outputs for RZG, and passes them on to
@@ -140,20 +161,24 @@ func (rkpger *RKPGer) TransitionRNGOpen(
 func (rkpger *RKPGer) TransitionRZGShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
-) {
+) TransitionEvent {
 	if rkpger.state != RNGsReady {
-		return
+		return RZGInputsIgnored
 	}
 
 	event := rkpger.rzger.TransitionShares(setsOfShares, setsOfCommitments, true)
 
 	if event == rng.CommitmentsConstructed || event == rng.SharesConstructed {
 		rkpger.state = WaitingRZG
+		return RZGInputsAccepted
 	}
 
 	if event == rng.RNGsReconstructed {
 		rkpger.state = WaitingOpen
+		return RZGReady
 	}
+
+	return RZGInputsIgnored
 }
 
 // TransitionRZGOpen accepts openings from other machines for reconstructing the
@@ -165,29 +190,37 @@ func (rkpger *RKPGer) TransitionRZGShares(
 func (rkpger *RKPGer) TransitionRZGOpen(
 	fromIndex open.Fn,
 	openings shamir.VerifiableShares,
-) {
+) TransitionEvent {
 	if rkpger.state != WaitingRZG {
-		return
+		return RZGOpeningsIgnored
 	}
 
 	event := rkpger.rzger.TransitionOpen(fromIndex, openings)
 
+	if event == rng.OpeningsAdded {
+		return RZGOpeningsAccepted
+	}
+
 	if event == rng.RNGsReconstructed {
 		rkpger.state = WaitingOpen
+		return RZGReady
 	}
+
+	return RZGOpeningsIgnored
 }
 
 // Reset transitions a RKPGer in any state to the Init state
-func (rkpger *RKPGer) Reset() {
+func (rkpger *RKPGer) Reset() TransitionEvent {
 	event := rkpger.rnger.Reset()
 	if event != rng.Reset {
-		return
+		return ResetAborted
 	}
 
 	event = rkpger.rzger.Reset()
 	if event != rng.Reset {
-		return
+		return ResetAborted
 	}
 
 	rkpger.state = Init
+	return ResetDone
 }

@@ -68,8 +68,9 @@ var _ = Describe("Rkpg", func() {
 
 		Context("State transitions", func() {
 			Specify("Initialise RKPG state machine", func() {
-				rkpger := rkpg.New(index, indices, uint32(b), uint32(k), h)
+				event, rkpger := rkpg.New(index, indices, uint32(b), uint32(k), h)
 
+				Expect(event).To(Equal(rkpg.Initialised))
 				Expect(rkpger.State()).To(Equal(rkpg.Init))
 				Expect(rkpger.N()).To(Equal(n))
 				Expect(rkpger.BatchSize()).To(Equal(uint32(b)))
