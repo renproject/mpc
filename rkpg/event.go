@@ -63,6 +63,23 @@ const (
 	// successfully reconstruct its shares for the random zeroes
 	RZGReady
 
+	// HidingOpeningsIgnored represents the event returned when a set of share-hiding
+	// openings is ignored because either the machine is not in appropriate state
+	// or the openings were invalid for the commitment
+	HidingOpeningsIgnored
+
+	// HidingOpeningsAccepted represents the event returned when a set of share-hiding
+	// openings is successfully added to the RKPGer's opener, but also means that
+	// the opener has not yet been able to reconstruct the underlying secrets
+	HidingOpeningsAccepted
+
+	// KeyPairsReady represents the event returned when the kth valid set of share-hiding
+	// openings was successfully added to the RKPGer's opener, meaning, it was
+	// able to reconstruct the underlying secrets. The batch of secrets also allows
+	// the RKPGer to compute the batch of public keys in the exponent, hence marking
+	// an end to the RKPG protocol
+	KeyPairsReady
+
 	// ResetAborted is the event returned when a reset operation on the RKPGer
 	// failed and hence transition to the Init state was aborted
 	ResetAborted
@@ -97,6 +114,16 @@ func (e TransitionEvent) String() string {
 		return "RZGOpeningsAccepted"
 	case RZGReady:
 		return "RZGReady"
+	case HidingOpeningsIgnored:
+		return "HidingOpeningsIgnored"
+	case HidingOpeningsAccepted:
+		return "HidingOpeningsAccepted"
+	case KeyPairsReady:
+		return "KeyPairsReady"
+	case ResetAborted:
+		return "ResetAborted"
+	case ResetDone:
+		return "ResetDone"
 	default:
 		return fmt.Sprintf("Unknown transition event (%v)", uint8(e))
 	}
