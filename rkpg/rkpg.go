@@ -1,9 +1,12 @@
 package rkpg
 
 import (
+	"io"
+
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
+	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
@@ -39,6 +42,28 @@ type RKPGer struct {
 	// publicKeys hold the batch of public keys that will be computed once
 	// RKPGer's share-hiding secrets are reconstructed
 	publicKeys []curve.Point
+}
+
+// SizeHint implements the surge SizeHinter interface
+func (rkpger RKPGer) SizeHint() int {
+	return rkpger.state.SizeHint() +
+		rkpger.h.SizeHint() +
+		rkpger.rnger.SizeHint() +
+		rkpger.rzger.SizeHint() +
+		rkpger.opener.SizeHint() +
+		surge.SizeHint(rkpger.publicKeys)
+}
+
+// Marshal implements the surge Marshaler interface
+func (rkpger RKPGer) Marshal(w io.Writer, m int) (int, error) {
+	// TODO:
+	return m, nil
+}
+
+// Unmarshal implements the surge Unmarshaler interface
+func (rkpger *RKPGer) Unmarshal(r io.Reader, m int) (int, error) {
+	// TODO:
+	return m, nil
 }
 
 // State returns the current state of the RKPGer state machine
@@ -98,7 +123,10 @@ func New(
 	opener := open.New(b, indices, h)
 
 	// Allocate memory for the public keys
-	publicKeys := make([]curve.Point, b)
+	publicKeys := make([]curve.Point, int(b))
+	for i := 0; i < int(b); i++ {
+		publicKeys[i] = curve.New()
+	}
 
 	return Initialised, RKPGer{
 		state:      state,
@@ -269,27 +297,6 @@ func (rkpger *RKPGer) TransitionRZGOpen(
 	return RZGOpeningsIgnored
 }
 
-// HidingOpenings returns the share-hiding openings from this RKPGer machine
-func (rkpger RKPGer) HidingOpenings() shamir.VerifiableShares {
-	// Ignore if the RKPGer is not in appropriate state
-	if rkpger.state != WaitingOpen {
-		return nil
-	}
-
-	// Fetch shares to the RNG and RZG
-	rngShares := rkpger.rnger.ReconstructedShares()
-	rzgShares := rkpger.rzger.ReconstructedShares()
-
-	// Add both the RNG and RZG shares to construct the share-hiding openings
-	// s_i = r_i + z_i
-	hidingOpenings := make(shamir.VerifiableShares, rkpger.BatchSize())
-	for i, rngShare := range rngShares {
-		hidingOpenings[i].Add(&rngShare, &rzgShares[i])
-	}
-
-	return hidingOpenings
-}
-
 // TransitionHidingOpenings accepts the share-hiding openings from other machines
 // in the network participating in the RKPG protocol. Valid openings are added
 // to the RKPGer's embedded Opener, and once k valid openings are available,
@@ -325,6 +332,65 @@ func (rkpger *RKPGer) TransitionHidingOpenings(
 	return HidingOpeningsIgnored
 }
 
+// Reset transitions a RKPGer in any state to the Init state
+func (rkpger *RKPGer) Reset() TransitionEvent {
+	// If the embedded RNG cannot be reset, abort the operation
+	event := rkpger.rnger.Reset()
+	if event != rng.Reset {
+		return ResetAborted
+	}
+
+	// If the embedded RZG cannot be reset, abort the operation
+	event = rkpger.rzger.Reset()
+	if event != rng.Reset {
+		return ResetAborted
+	}
+
+	// Reset the public key points
+	newPoint := curve.New()
+	for _, publicKey := range rkpger.publicKeys {
+		publicKey.Set(&newPoint)
+	}
+
+	// The reset operation was successful, so transition to the appropriate
+	// state and emit the appropriate event
+	rkpger.state = Init
+	return ResetDone
+}
+
+// DirectedRNGOpenings returns the RNG specific directed openings from this
+// machine to another specified machine in the RKPG protocol
+func (rkpger RKPGer) DirectedRNGOpenings(to open.Fn) shamir.VerifiableShares {
+	return rkpger.rnger.DirectedOpenings(to)
+}
+
+// DirectedRZGOpenings returns the RZG specific directed openings from this
+// machine to another specified machine in the RKPG protocol
+func (rkpger RKPGer) DirectedRZGOpenings(to open.Fn) shamir.VerifiableShares {
+	return rkpger.rzger.DirectedOpenings(to)
+}
+
+// HidingOpenings returns the share-hiding openings from this RKPGer machine
+func (rkpger RKPGer) HidingOpenings() shamir.VerifiableShares {
+	// Ignore if the RKPGer is not in appropriate state
+	if rkpger.state != WaitingOpen {
+		return nil
+	}
+
+	// Fetch shares to the RNG and RZG
+	rngShares := rkpger.rnger.ReconstructedShares()
+	rzgShares := rkpger.rzger.ReconstructedShares()
+
+	// Add both the RNG and RZG shares to construct the share-hiding openings
+	// s_i = r_i + z_i
+	hidingOpenings := make(shamir.VerifiableShares, rkpger.BatchSize())
+	for i, rngShare := range rngShares {
+		hidingOpenings[i].Add(&rngShare, &rzgShares[i])
+	}
+
+	return hidingOpenings
+}
+
 // KeyPairs returns a tuple of the reconstructed batch of random keypairs
 // and the RKPGer's own share of the corresponding unbiased random numbers
 func (rkpger RKPGer) KeyPairs() ([]curve.Point, []open.Fn) {
@@ -349,29 +415,6 @@ func (rkpger RKPGer) KeyPairs() ([]curve.Point, []open.Fn) {
 	return rkpger.publicKeys, rngShares
 }
 
-// Reset transitions a RKPGer in any state to the Init state
-func (rkpger *RKPGer) Reset() TransitionEvent {
-	// If the embedded RNG cannot be reset, abort the operation
-	event := rkpger.rnger.Reset()
-	if event != rng.Reset {
-		return ResetAborted
-	}
-
-	// If the embedded RZG cannot be reset, abort the operation
-	event = rkpger.rzger.Reset()
-	if event != rng.Reset {
-		return ResetAborted
-	}
-
-	// Set the public keys to an empty slice
-	rkpger.publicKeys = rkpger.publicKeys[:0]
-
-	// The reset operation was successful, so transition to the appropriate
-	// state and emit the appropriate event
-	rkpger.state = Init
-	return ResetDone
-}
-
 // Private functions
 
 // resetOpener is called once RZG is done. At this stage, the RKPGer has
@@ -388,6 +431,7 @@ func (rkpger *RKPGer) resetOpener() {
 	// to compute the commitment for the share-hiding opening
 	comms := make([]shamir.Commitment, rkpger.BatchSize())
 	for i, rngComm := range rngComms {
+		comms[i] = shamir.NewCommitmentWithCapacity(int(rkpger.Threshold()))
 		comms[i].Add(&rngComm, &rzgComms[i])
 	}
 	rkpger.opener.TransitionReset(comms)
@@ -395,7 +439,6 @@ func (rkpger *RKPGer) resetOpener() {
 	// Initialise the public keys to be the first point of each commitment.
 	// These will be later scaled by the reconstructed decommitments from the
 	// share-hiding opening
-	rkpger.publicKeys = rkpger.publicKeys[:0]
 	for i, comm := range comms {
 		point := comm.GetPoint(0)
 		rkpger.publicKeys[i].Set(&point)
