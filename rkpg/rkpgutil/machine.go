@@ -84,7 +84,7 @@ func (machine *RkpgMachine) Unmarshal(r io.Reader, m int) (int, error) {
 
 // KeyPairs returns the random keypairs constructed by the machine at the
 // end of the RKPG protocol
-func (machine RkpgMachine) KeyPairs() ([]curve.Point, []open.Fn) {
+func (machine RkpgMachine) KeyPairs() ([]curve.Point, shamir.VerifiableShares) {
 	return machine.rkpger.KeyPairs()
 }
 

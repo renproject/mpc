@@ -191,7 +191,7 @@ func (rkpger *RKPGer) TransitionRNGOpen(
 		return RNGOpeningsIgnored
 	}
 
-	// Pass the openings to the embedded RZGer
+	// Pass the openings to the embedded RNGer
 	event := rkpger.rnger.TransitionOpen(fromIndex, openings)
 
 	// If the openings were added, emit an appropriate event. This means the
@@ -393,26 +393,21 @@ func (rkpger RKPGer) HidingOpenings() shamir.VerifiableShares {
 
 // KeyPairs returns a tuple of the reconstructed batch of random keypairs
 // and the RKPGer's own share of the corresponding unbiased random numbers
-func (rkpger RKPGer) KeyPairs() ([]curve.Point, []open.Fn) {
+func (rkpger RKPGer) KeyPairs() ([]curve.Point, shamir.VerifiableShares) {
 	// Return nil values if the RKPGer is not in the Done state
 	if rkpger.state != Done {
 		return nil, nil
 	}
 
-	// Fetch the reconstructed verifiable shares from the embedded RNGer
-	// and populate the x_i's as RNG shares from this machine
-	vshares := rkpger.rnger.ReconstructedShares()
-	rngShares := make([]open.Fn, rkpger.BatchSize())
-	for i, vshare := range vshares {
-		share := vshare.Share()
-		rngShares[i] = share.Value()
-	}
-
-	// Copy the public keys and return
+	// Copy the public keys
 	publicKeysCopy := make([]curve.Point, rkpger.BatchSize())
 	copy(publicKeysCopy, rkpger.publicKeys)
 
-	return rkpger.publicKeys, rngShares
+	// Copy the machine's shares for the unbiased random numbers
+	sharesCopy := make(shamir.VerifiableShares, rkpger.BatchSize())
+	copy(sharesCopy, rkpger.rnger.ReconstructedShares())
+
+	return publicKeysCopy, sharesCopy
 }
 
 // Private functions
@@ -455,7 +450,7 @@ func (rkpger *RKPGer) computeKeyPairs() {
 
 	// For each of the initialised public keys, scale them to reveal the
 	// unbiased random numbers "in the exponent", i.e. the random public keys
-	for i, publicKey := range rkpger.publicKeys {
+	for i := 0; i < len(rkpger.publicKeys); i++ {
 		// Compute the negation of t_0, i.e. (-t_0)
 		var decommInv secp256k1.Secp256k1N
 		decommInv.Neg(&decomms[i], 1)
@@ -472,6 +467,6 @@ func (rkpger *RKPGer) computeKeyPairs() {
 
 		// Add this to the initialised public key
 		// g^(c_0) . h^(t_0) . h^(-t_0) = g^(c_0)
-		publicKey.Add(&publicKey, &hPow)
+		rkpger.publicKeys[i].Add(&rkpger.publicKeys[i], &hPow)
 	}
 }
