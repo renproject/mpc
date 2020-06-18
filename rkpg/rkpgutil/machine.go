@@ -1,6 +1,7 @@
 package rkpgutil
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/renproject/mpc/mpcutil"
@@ -9,6 +10,7 @@ import (
 	"github.com/renproject/mpc/rng/rngutil"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
+	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
 
@@ -72,13 +74,45 @@ func (machine RkpgMachine) SizeHint() int {
 
 // Marshal implements surge Marshaler
 func (machine RkpgMachine) Marshal(w io.Writer, m int) (int, error) {
-	// TODO:
+	m, err := machine.id.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling id: %v", err)
+	}
+	m, err = machine.index.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling index: %v", err)
+	}
+	m, err = surge.Marshal(w, machine.indices, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling indices: %v", err)
+	}
+	m, err = machine.rkpger.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling rkpger: %v", err)
+	}
+
 	return m, nil
 }
 
 // Unmarshal implements surge Unmarshaler
 func (machine *RkpgMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	// TODO:
+	m, err := machine.id.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling id: %v", err)
+	}
+	m, err = machine.index.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling index: %v", err)
+	}
+	m, err = machine.unmarshalIndices(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling indices: %v", err)
+	}
+	m, err = machine.rkpger.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling rkpger: %v", err)
+	}
+
 	return m, nil
 }
 
@@ -187,4 +221,25 @@ func (machine *RkpgMachine) formHidingOpenings() []mpcutil.Message {
 	}
 
 	return messages
+}
+
+// unmarshalIndices reads from the io.Reader and unmarshals the data into
+// machine.indices
+func (machine *RkpgMachine) unmarshalIndices(r io.Reader, m int) (int, error) {
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	machine.indices = (machine.indices)[:0]
+	for i := uint32(0); i < l; i++ {
+		machine.indices = append(machine.indices, open.Fn{})
+		m, err = machine.indices[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }

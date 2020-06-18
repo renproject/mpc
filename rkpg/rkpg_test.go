@@ -1,12 +1,14 @@
 package rkpg_test
 
 import (
+	"bytes"
 	"math/rand"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
@@ -65,6 +67,206 @@ var _ = Describe("Rkpg", func() {
 			return n, indices, index, b, k, h
 		}
 
+		InStateInit := func(
+			index open.Fn,
+			indices []open.Fn,
+			b, k int,
+			h curve.Point,
+		) rkpg.RKPGer {
+			event, rkpger := rkpg.New(index, indices, uint32(b), uint32(k), h)
+			Expect(event).To(Equal(rkpg.Initialised))
+
+			return rkpger
+		}
+
+		InStateWaitingRNG := func(
+			index open.Fn,
+			indices []open.Fn,
+			b, k int,
+			h curve.Point,
+			rngShares []shamir.VerifiableShares,
+			rngCommitments [][]shamir.Commitment,
+		) rkpg.RKPGer {
+			rkpger := InStateInit(index, indices, b, k, h)
+
+			event := rkpger.TransitionRNGShares(rngShares, rngCommitments)
+			Expect(event).To(Equal(rkpg.RNGInputsAccepted))
+			Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+
+			return rkpger
+		}
+
+		InStateRNGsReady := func(
+			index open.Fn,
+			indices []open.Fn,
+			b, k int,
+			h curve.Point,
+			rngShares []shamir.VerifiableShares,
+			rngCommitments [][]shamir.Commitment,
+			rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares,
+		) rkpg.RKPGer {
+			rkpger := InStateWaitingRNG(index, indices, b, k, h, rngShares, rngCommitments)
+
+			for _, fromIndex := range indices {
+				if fromIndex.Eq(&index) {
+					continue
+				}
+
+				event := rkpger.TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+				if event == rkpg.RNGReady {
+					break
+				}
+			}
+
+			Expect(rkpger.State()).To(Equal(rkpg.RNGsReady))
+
+			return rkpger
+		}
+
+		InStateWaitingRZG := func(
+			index open.Fn,
+			indices []open.Fn,
+			b, k int,
+			h curve.Point,
+			rngShares []shamir.VerifiableShares,
+			rngCommitments [][]shamir.Commitment,
+			rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares,
+			rzgShares []shamir.VerifiableShares,
+			rzgCommitments [][]shamir.Commitment,
+		) rkpg.RKPGer {
+			rkpger := InStateRNGsReady(index, indices, b, k, h, rngShares, rngCommitments, rngOpeningsByPlayer)
+
+			event := rkpger.TransitionRZGShares(rzgShares, rzgCommitments)
+			Expect(event).To(Equal(rkpg.RZGInputsAccepted))
+			Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+
+			return rkpger
+		}
+
+		InStateWaitingOpen := func(
+			index open.Fn,
+			indices []open.Fn,
+			b, k int,
+			h curve.Point,
+			rngShares []shamir.VerifiableShares,
+			rngCommitments [][]shamir.Commitment,
+			rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares,
+			rzgShares []shamir.VerifiableShares,
+			rzgCommitments [][]shamir.Commitment,
+			rzgOpeningsByPlayer map[open.Fn]shamir.VerifiableShares,
+		) rkpg.RKPGer {
+			rkpger := InStateWaitingRZG(index, indices, b, k, h, rngShares, rngCommitments, rngOpeningsByPlayer, rzgShares, rzgCommitments)
+
+			for _, fromIndex := range indices {
+				if fromIndex.Eq(&index) {
+					continue
+				}
+
+				event := rkpger.TransitionRZGOpen(fromIndex, rzgOpeningsByPlayer[fromIndex])
+				if event == rkpg.RZGReady {
+					break
+				}
+			}
+
+			Expect(rkpger.State()).To(Equal(rkpg.WaitingOpen))
+
+			return rkpger
+		}
+
+		InStateDone := func(
+			indices []open.Fn,
+			b, k int,
+			h curve.Point,
+			rngSharesByPlayer map[open.Fn][]shamir.VerifiableShares,
+			rngCommitmentsByPlayer map[open.Fn][][]shamir.Commitment,
+			rzgSharesByPlayer map[open.Fn][]shamir.VerifiableShares,
+			rzgCommitmentsByPlayer map[open.Fn][][]shamir.Commitment,
+		) []rkpg.RKPGer {
+			// Declare slice to hold the RKPGers
+			rkpgers := make([]rkpg.RKPGer, len(indices))
+
+			// Create new RKPGers
+			for i, index := range indices {
+				event, rkpger := rkpg.New(index, indices, uint32(b), uint32(k), h)
+				Expect(event).To(Equal(rkpg.Initialised))
+				Expect(rkpger.State()).To(Equal(rkpg.Init))
+				rkpgers[i] = rkpger
+			}
+
+			// Transition to WaitingRNG state
+			for i, index := range indices {
+				event := rkpgers[i].TransitionRNGShares(
+					rngSharesByPlayer[index],
+					rngCommitmentsByPlayer[index],
+				)
+				Expect(event).To(Equal(rkpg.RNGInputsAccepted))
+				Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingRNG))
+			}
+
+			// Transition to RNGsReady state
+			for i, ownIndex := range indices {
+				for j, otherIndex := range indices {
+					if otherIndex.Eq(&ownIndex) {
+						continue
+					}
+
+					rngOpenings := rkpgers[j].DirectedRNGOpenings(ownIndex)
+					event := rkpgers[i].TransitionRNGOpen(otherIndex, rngOpenings)
+					if event == rkpg.RNGReady {
+						break
+					}
+				}
+
+				Expect(rkpgers[i].State()).To(Equal(rkpg.RNGsReady))
+			}
+
+			// Transition to WaitingRZG state
+			for i, index := range indices {
+				event := rkpgers[i].TransitionRZGShares(
+					rzgSharesByPlayer[index],
+					rzgCommitmentsByPlayer[index],
+				)
+				Expect(event).To(Equal(rkpg.RZGInputsAccepted))
+				Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingRZG))
+			}
+
+			// Transition to WaitingOpen state
+			for i, ownIndex := range indices {
+				for j, otherIndex := range indices {
+					if otherIndex.Eq(&ownIndex) {
+						continue
+					}
+
+					rzgOpenings := rkpgers[j].DirectedRZGOpenings(ownIndex)
+					event := rkpgers[i].TransitionRZGOpen(otherIndex, rzgOpenings)
+					if event == rkpg.RZGReady {
+						break
+					}
+				}
+
+				Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+			}
+
+			// Transition to Done state
+			for i, ownIndex := range indices {
+				for j, otherIndex := range indices {
+					if otherIndex.Eq(&ownIndex) {
+						continue
+					}
+
+					hidingOpenings := rkpgers[j].HidingOpenings()
+					event := rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+					if event == rkpg.KeyPairsReady {
+						break
+					}
+				}
+
+				Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+			}
+
+			return rkpgers
+		}
+
 		BeforeEach(func() {
 			n, indices, index, b, k, h = Setup()
 		})
@@ -78,6 +280,152 @@ var _ = Describe("Rkpg", func() {
 				Expect(rkpger.N()).To(Equal(n))
 				Expect(rkpger.BatchSize()).To(Equal(uint32(b)))
 				Expect(rkpger.Threshold()).To(Equal(uint32(k)))
+			})
+		})
+
+		Context("Marshaling and Unmarshaling", func() {
+			var rngShares []shamir.VerifiableShares
+			var rzgShares []shamir.VerifiableShares
+			var rngCommitments [][]shamir.Commitment
+			var rzgCommitments [][]shamir.Commitment
+			var rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares
+			var rzgOpeningsByPlayer map[open.Fn]shamir.VerifiableShares
+			buf := bytes.NewBuffer([]byte{})
+
+			JustBeforeEach(func() {
+				rngOpeningsByPlayer, _, rngShares, rngCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, false)
+				rzgOpeningsByPlayer, _, rzgShares, rzgCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, true)
+			})
+
+			It("Init state", func() {
+				rkpger := InStateInit(index, indices, b, k, h)
+
+				buf.Reset()
+				m, err := rkpger.Marshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rkpger2 rkpg.RKPGer
+				m, err = rkpger2.Unmarshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+			})
+
+			It("WaitingRNG state", func() {
+				rkpger := InStateWaitingRNG(
+					index, indices, b, k, h,
+					rngShares, rngCommitments,
+				)
+
+				buf.Reset()
+				m, err := rkpger.Marshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rkpger2 rkpg.RKPGer
+				m, err = rkpger2.Unmarshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+			})
+
+			It("RNGsReady state", func() {
+				rkpger := InStateRNGsReady(
+					index, indices, b, k, h,
+					rngShares, rngCommitments, rngOpeningsByPlayer,
+				)
+
+				buf.Reset()
+				m, err := rkpger.Marshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rkpger2 rkpg.RKPGer
+				m, err = rkpger2.Unmarshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+			})
+
+			It("WaitingRZG state", func() {
+				rkpger := InStateWaitingRZG(
+					index, indices, b, k, h,
+					rngShares, rngCommitments, rngOpeningsByPlayer,
+					rzgShares, rzgCommitments,
+				)
+
+				buf.Reset()
+				m, err := rkpger.Marshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rkpger2 rkpg.RKPGer
+				m, err = rkpger2.Unmarshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+			})
+
+			It("WaitingOpen state", func() {
+				rkpger := InStateWaitingOpen(
+					index, indices, b, k, h,
+					rngShares, rngCommitments, rngOpeningsByPlayer,
+					rzgShares, rzgCommitments, rzgOpeningsByPlayer,
+				)
+
+				buf.Reset()
+				m, err := rkpger.Marshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rkpger2 rkpg.RKPGer
+				m, err = rkpger2.Unmarshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+			})
+
+			It("Done state", func() {
+				rngSharesByPlayer, rngCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, false)
+				rzgSharesByPlayer, rzgCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, true)
+				rkpgers := InStateDone(
+					indices, b, k, h,
+					rngSharesByPlayer, rngCommitmentsByPlayer,
+					rzgSharesByPlayer, rzgCommitmentsByPlayer,
+				)
+
+				for i := range indices {
+					// Error marshaling with byte size less than the size hint
+					for b := 0; b < rkpgers[i].SizeHint(); b++ {
+						buf.Reset()
+						_, err := rkpgers[i].Marshal(buf, b)
+						Expect(err).To(HaveOccurred())
+					}
+
+					m, err := rkpgers[i].Marshal(buf, rkpgers[i].SizeHint())
+					Expect(err).ToNot(HaveOccurred())
+					Expect(m).To(Equal(0))
+
+					var rkpger2 rkpg.RKPGer
+					m, err = rkpger2.Unmarshal(buf, rkpgers[i].SizeHint())
+					Expect(err).ToNot(HaveOccurred())
+					Expect(m).To(Equal(0))
+				}
+			})
+
+			It("Should not be able to unmarshal with insufficient bytes", func() {
+				rkpger := InStateWaitingOpen(
+					index, indices, b, k, h,
+					rngShares, rngCommitments, rngOpeningsByPlayer,
+					rzgShares, rzgCommitments, rzgOpeningsByPlayer,
+				)
+
+				buf.Reset()
+				m, err := rkpger.Marshal(buf, rkpger.SizeHint())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(Equal(0))
+
+				var rkpger2 rkpg.RKPGer
+				for b := 0; b < rkpger.SizeHint(); b++ {
+					_, err := rkpger2.Unmarshal(buf, b)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 		})
 	})

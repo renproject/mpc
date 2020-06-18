@@ -1,11 +1,13 @@
 package rkpg
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
+	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
@@ -56,13 +58,62 @@ func (rkpger RKPGer) SizeHint() int {
 
 // Marshal implements the surge Marshaler interface
 func (rkpger RKPGer) Marshal(w io.Writer, m int) (int, error) {
-	// TODO:
+	m, err := rkpger.state.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling state: %v", err)
+	}
+	m, err = rkpger.h.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling h: %v", err)
+	}
+	m, err = rkpger.rnger.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling rnger: %v", err)
+	}
+	m, err = rkpger.rzger.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling rzger: %v", err)
+	}
+	m, err = rkpger.opener.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling opener: %v", err)
+	}
+	m, err = surge.Marshal(w, rkpger.publicKeys, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling publicKeys: %v", err)
+	}
+
 	return m, nil
 }
 
 // Unmarshal implements the surge Unmarshaler interface
 func (rkpger *RKPGer) Unmarshal(r io.Reader, m int) (int, error) {
-	// TODO:
+	m, err := rkpger.state.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling state: %v", err)
+	}
+	rkpger.h = curve.New()
+	m, err = rkpger.h.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling h: %v", err)
+	}
+	m, err = rkpger.rnger.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling rnger: %v", err)
+	}
+	m, err = rkpger.rzger.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling rzger: %v", err)
+	}
+	m, err = rkpger.opener.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling opener: %v", err)
+	}
+	m, err = rkpger.unmarshalPublicKeys(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling publicKeys: %v", err)
+	}
+
 	return m, nil
 }
 
@@ -125,7 +176,7 @@ func New(
 	// Allocate memory for the public keys
 	publicKeys := make([]curve.Point, int(b))
 	for i := 0; i < int(b); i++ {
-		publicKeys[i] = curve.New()
+		publicKeys[i] = curve.Infinity()
 	}
 
 	return Initialised, RKPGer{
@@ -347,9 +398,9 @@ func (rkpger *RKPGer) Reset() TransitionEvent {
 	}
 
 	// Reset the public key points
-	newPoint := curve.New()
+	defaultPoint := curve.Infinity()
 	for _, publicKey := range rkpger.publicKeys {
-		publicKey.Set(&newPoint)
+		publicKey.Set(&defaultPoint)
 	}
 
 	// The reset operation was successful, so transition to the appropriate
@@ -373,7 +424,8 @@ func (rkpger RKPGer) DirectedRZGOpenings(to open.Fn) shamir.VerifiableShares {
 // HidingOpenings returns the share-hiding openings from this RKPGer machine
 func (rkpger RKPGer) HidingOpenings() shamir.VerifiableShares {
 	// Ignore if the RKPGer is not in appropriate state
-	if rkpger.state != WaitingOpen {
+	// Provide the hiding openings only if in the WaitingOpen or Done state
+	if rkpger.state != WaitingOpen && rkpger.state != Done {
 		return nil
 	}
 
@@ -469,4 +521,25 @@ func (rkpger *RKPGer) computeKeyPairs() {
 		// g^(c_0) . h^(t_0) . h^(-t_0) = g^(c_0)
 		rkpger.publicKeys[i].Add(&rkpger.publicKeys[i], &hPow)
 	}
+}
+
+// unmarshalPublicKeys reads from the io.Reader and unmarshals data into
+// rkpger.publicKeys
+func (rkpger *RKPGer) unmarshalPublicKeys(r io.Reader, m int) (int, error) {
+	var l uint32
+	m, err := util.UnmarshalSliceLen32(&l, curve.PointSizeBytes, r, m)
+	if err != nil {
+		return m, err
+	}
+
+	rkpger.publicKeys = (rkpger.publicKeys)[:0]
+	for i := uint32(0); i < l; i++ {
+		rkpger.publicKeys = append(rkpger.publicKeys, curve.New())
+		m, err = rkpger.publicKeys[i].Unmarshal(r, m)
+		if err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }

@@ -1,6 +1,7 @@
 package rkpgutil
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/renproject/mpc/mpcutil"
@@ -32,12 +33,36 @@ func (msg RkpgMessage) SizeHint() int {
 
 // Marshal implements surge Marshaler
 func (msg RkpgMessage) Marshal(w io.Writer, m int) (int, error) {
-	// TODO:
+	m, err := msg.from.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling from: %v", err)
+	}
+	m, err = msg.to.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling to: %v", err)
+	}
+	m, err = msg.hidingOpenings.Marshal(w, m)
+	if err != nil {
+		return m, fmt.Errorf("marshaling hidingOpenings: %v", err)
+	}
+
 	return m, nil
 }
 
 // Unmarshal implements surge Unmarshaler
 func (msg *RkpgMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	// TODO:
+	m, err := msg.from.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling from: %v", err)
+	}
+	m, err = msg.to.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling to: %v", err)
+	}
+	m, err = msg.hidingOpenings.Unmarshal(r, m)
+	if err != nil {
+		return m, fmt.Errorf("unmarshaling hidingOpenings: %v", err)
+	}
+
 	return m, nil
 }
