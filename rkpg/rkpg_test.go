@@ -173,7 +173,8 @@ var _ = Describe("Rkpg", func() {
 			return rkpger
 		}
 
-		InStateDone := func(
+		InState := func(
+			state rkpg.State,
 			indices []open.Fn,
 			b, k int,
 			h curve.Point,
@@ -192,6 +193,9 @@ var _ = Describe("Rkpg", func() {
 				Expect(rkpger.State()).To(Equal(rkpg.Init))
 				rkpgers[i] = rkpger
 			}
+			if state == rkpg.Init {
+				return rkpgers
+			}
 
 			// Transition to WaitingRNG state
 			for i, index := range indices {
@@ -201,6 +205,9 @@ var _ = Describe("Rkpg", func() {
 				)
 				Expect(event).To(Equal(rkpg.RNGInputsAccepted))
 				Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingRNG))
+			}
+			if state == rkpg.WaitingRNG {
+				return rkpgers
 			}
 
 			// Transition to RNGsReady state
@@ -219,6 +226,9 @@ var _ = Describe("Rkpg", func() {
 
 				Expect(rkpgers[i].State()).To(Equal(rkpg.RNGsReady))
 			}
+			if state == rkpg.RNGsReady {
+				return rkpgers
+			}
 
 			// Transition to WaitingRZG state
 			for i, index := range indices {
@@ -228,6 +238,9 @@ var _ = Describe("Rkpg", func() {
 				)
 				Expect(event).To(Equal(rkpg.RZGInputsAccepted))
 				Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingRZG))
+			}
+			if state == rkpg.WaitingRZG {
+				return rkpgers
 			}
 
 			// Transition to WaitingOpen state
@@ -245,6 +258,9 @@ var _ = Describe("Rkpg", func() {
 				}
 
 				Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+			}
+			if state == rkpg.WaitingOpen {
+				return rkpgers
 			}
 
 			// Transition to Done state
@@ -267,11 +283,23 @@ var _ = Describe("Rkpg", func() {
 			return rkpgers
 		}
 
+		RandomIndexExcept := func(
+			index open.Fn,
+			indices []open.Fn,
+		) (int, open.Fn) {
+			j := rand.Intn(len(indices))
+			for indices[j].Eq(&index) {
+				j = rand.Intn(len(indices))
+			}
+
+			return j, indices[j]
+		}
+
 		BeforeEach(func() {
 			n, indices, index, b, k, h = Setup()
 		})
 
-		Context("State transitions", func() {
+		Context("Initialisation", func() {
 			Specify("Initialise RKPG state machine", func() {
 				event, rkpger := rkpg.New(index, indices, uint32(b), uint32(k), h)
 
@@ -280,6 +308,602 @@ var _ = Describe("Rkpg", func() {
 				Expect(rkpger.N()).To(Equal(n))
 				Expect(rkpger.BatchSize()).To(Equal(uint32(b)))
 				Expect(rkpger.Threshold()).To(Equal(uint32(k)))
+			})
+		})
+
+		Context("State Transitions", func() {
+			Context("Init state", func() {
+				var rkpger rkpg.RKPGer
+				var rngShares []shamir.VerifiableShares
+				var rngCommitments [][]shamir.Commitment
+
+				JustBeforeEach(func() {
+					rngShares, rngCommitments = rngutil.GetBrngOutputs(
+						indices, index, b, k, h, false,
+					)
+
+					rkpger = InStateInit(index, indices, b, k, h)
+				})
+
+				Specify("Supply valid BRNG shares for RNG", func() {
+					event := rkpger.TransitionRNGShares(rngShares, rngCommitments)
+
+					Expect(event).To(Equal(rkpg.RNGInputsAccepted))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+					for i := range indices {
+						directedOpenings := rkpger.DirectedRNGOpenings(indices[i])
+						Expect(cap(directedOpenings)).To(Equal(b))
+						Expect(len(directedOpenings)).To(Equal(b))
+					}
+				})
+
+				Specify("Supply invalid BRNG shares with valid commitments for RNG", func() {
+					event := rkpger.TransitionRNGShares([]shamir.VerifiableShares{}, rngCommitments)
+
+					Expect(event).To(Equal(rkpg.RNGInputsAccepted))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+					for i := range indices {
+						directedOpenings := rkpger.DirectedRNGOpenings(indices[i])
+						Expect(cap(directedOpenings)).To(Equal(b))
+						Expect(len(directedOpenings)).To(Equal(0))
+					}
+				})
+
+				Specify("Supply invalid BRNG commitments (defeats the assumption) for RNG", func() {
+					Expect(func() {
+						rkpger.TransitionRNGShares(rngShares, rngCommitments[1:])
+					}).To(Panic())
+
+					rngShares[0] = rngShares[0][1:]
+					Expect(func() {
+						rkpger.TransitionRNGShares(rngShares, rngCommitments)
+					}).To(Panic())
+				})
+
+				It("Should ignore any other message", func() {
+					rzgShares, rzgCommitments := rngutil.GetBrngOutputs(
+						indices, index, b, k, h, true,
+					)
+					event := rkpger.TransitionRZGShares(rzgShares, rzgCommitments)
+					Expect(event).To(Equal(rkpg.RZGInputsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.Init))
+				})
+			})
+
+			Context("WaitingRNG state", func() {
+				var rkpger rkpg.RKPGer
+				var rngShares []shamir.VerifiableShares
+				var rngCommitments [][]shamir.Commitment
+				var rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares
+
+				JustBeforeEach(func() {
+					rngOpeningsByPlayer, _, rngShares, rngCommitments = rngutil.GetAllDirectedOpenings(
+						indices, index, b, k, h, false,
+					)
+
+					rkpger = InStateWaitingRNG(index, indices, b, k, h, rngShares, rngCommitments)
+				})
+
+				Specify("Supply valid RNG openings", func() {
+					_, otherIndex := RandomIndexExcept(index, indices)
+
+					event := rkpger.TransitionRNGOpen(otherIndex, rngOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsAccepted))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+				})
+
+				Specify("Supply kth valid RNG openings", func() {
+					// The player has already passed their own openings
+					count := 1
+
+					for _, fromIndex := range indices {
+						if fromIndex.Eq(&index) {
+							continue
+						}
+
+						// If this is the kth set of openings
+						if count == k-1 {
+							event := rkpger.TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+							Expect(event).To(Equal(rkpg.RNGReady))
+							Expect(rkpger.State()).To(Equal(rkpg.RNGsReady))
+							break
+						}
+
+						// If this is not the kth set of openings
+						if count < k-1 {
+							event := rkpger.TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+							Expect(event).To(Equal(rkpg.RNGOpeningsAccepted))
+							Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+							count = count + 1
+						}
+					}
+				})
+
+				Specify("Supply invalid RNG openings", func() {
+					// Invalid length for the set of openings
+					_, otherIndex := RandomIndexExcept(index, indices)
+					event := rkpger.TransitionRNGOpen(otherIndex, rngOpeningsByPlayer[otherIndex][1:])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+
+					// Perturb index
+					// Choose a random share that will be perturbed
+					l := rand.Intn(b)
+					_, otherIndex = RandomIndexExcept(index, indices)
+					shamirutil.PerturbIndex(&rngOpeningsByPlayer[otherIndex][l])
+					event = rkpger.TransitionRNGOpen(otherIndex, rngOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+
+					// Perturb value
+					// Choose a random share that will be perturbed
+					l = rand.Intn(b)
+					_, otherIndex = RandomIndexExcept(index, indices)
+					shamirutil.PerturbValue(&rngOpeningsByPlayer[otherIndex][l])
+					event = rkpger.TransitionRNGOpen(otherIndex, rngOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+
+					// Perturb decommitment
+					// Choose a random share that will be perturbed
+					l = rand.Intn(b)
+					_, otherIndex = RandomIndexExcept(index, indices)
+					shamirutil.PerturbDecommitment(&rngOpeningsByPlayer[otherIndex][l])
+					event = rkpger.TransitionRNGOpen(otherIndex, rngOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+				})
+
+				It("Should ignore any other message", func() {
+					rngShares, rngCommitments := rngutil.GetBrngOutputs(
+						indices, index, b, k, h, false,
+					)
+
+					rzgShares, rzgCommitments := rngutil.GetBrngOutputs(
+						indices, index, b, k, h, true,
+					)
+
+					event := rkpger.TransitionRNGShares(rngShares, rngCommitments)
+					Expect(event).To(Equal(rkpg.RNGInputsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+
+					event = rkpger.TransitionRZGShares(rzgShares, rzgCommitments)
+					Expect(event).To(Equal(rkpg.RZGInputsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRNG))
+				})
+			})
+
+			Context("RNGsReady state", func() {
+				var rkpger rkpg.RKPGer
+				var rngShares []shamir.VerifiableShares
+				var rngCommitments [][]shamir.Commitment
+				var rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares
+				var rzgShares []shamir.VerifiableShares
+				var rzgCommitments [][]shamir.Commitment
+
+				JustBeforeEach(func() {
+					rngOpeningsByPlayer, _, rngShares, rngCommitments = rngutil.GetAllDirectedOpenings(
+						indices, index, b, k, h, false,
+					)
+
+					rzgShares, rzgCommitments = rngutil.GetBrngOutputs(
+						indices, index, b, k, h, true,
+					)
+
+					rkpger = InStateRNGsReady(
+						index, indices, b, k, h,
+						rngShares, rngCommitments, rngOpeningsByPlayer,
+					)
+				})
+
+				Specify("Supply valid BRNG shares for RZG", func() {
+					event := rkpger.TransitionRZGShares(rzgShares, rzgCommitments)
+
+					Expect(event).To(Equal(rkpg.RZGInputsAccepted))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+					for i := range indices {
+						directedOpenings := rkpger.DirectedRZGOpenings(indices[i])
+						Expect(cap(directedOpenings)).To(Equal(b))
+						Expect(len(directedOpenings)).To(Equal(b))
+					}
+				})
+
+				Specify("Supply invalid BRNG shares for RZG", func() {
+					event := rkpger.TransitionRZGShares([]shamir.VerifiableShares{}, rzgCommitments)
+
+					Expect(event).To(Equal(rkpg.RZGInputsAccepted))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+					for i := range indices {
+						directedOpenings := rkpger.DirectedRZGOpenings(indices[i])
+						Expect(cap(directedOpenings)).To(Equal(b))
+						Expect(len(directedOpenings)).To(Equal(0))
+					}
+				})
+
+				Specify("Supply invalid BRNG commitments (defeats the assumption) for RZG", func() {
+					Expect(func() {
+						rkpger.TransitionRZGShares(rzgShares, rzgCommitments[1:])
+					}).To(Panic())
+
+					rzgShares[0] = rzgShares[0][1:]
+					Expect(func() {
+						rkpger.TransitionRZGShares(rzgShares, rzgCommitments)
+					}).To(Panic())
+				})
+
+				It("Should ignore any other message", func() {
+					event := rkpger.TransitionRNGShares(rngShares, rngCommitments)
+					Expect(event).To(Equal(rkpg.RNGInputsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.RNGsReady))
+
+					_, fromIndex := RandomIndexExcept(index, indices)
+					event = rkpger.TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.RNGsReady))
+				})
+			})
+
+			Context("WaitingRZG state", func() {
+				var rkpger rkpg.RKPGer
+				var rngShares []shamir.VerifiableShares
+				var rngCommitments [][]shamir.Commitment
+				var rngOpeningsByPlayer map[open.Fn]shamir.VerifiableShares
+				var rzgShares []shamir.VerifiableShares
+				var rzgCommitments [][]shamir.Commitment
+				var rzgOpeningsByPlayer map[open.Fn]shamir.VerifiableShares
+
+				JustBeforeEach(func() {
+					rngOpeningsByPlayer, _, rngShares, rngCommitments = rngutil.GetAllDirectedOpenings(
+						indices, index, b, k, h, false,
+					)
+
+					rzgOpeningsByPlayer, _, rzgShares, rzgCommitments = rngutil.GetAllDirectedOpenings(
+						indices, index, b, k, h, true,
+					)
+
+					rkpger = InStateWaitingRZG(
+						index, indices, b, k, h,
+						rngShares, rngCommitments, rngOpeningsByPlayer,
+						rzgShares, rzgCommitments,
+					)
+				})
+
+				Specify("Supply valid RZG openings", func() {
+					_, otherIndex := RandomIndexExcept(index, indices)
+
+					event := rkpger.TransitionRZGOpen(otherIndex, rzgOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RZGOpeningsAccepted))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+				})
+
+				Specify("Supply kth valid RZG openings", func() {
+					// The player has already passed their own openings
+					count := 1
+
+					for _, fromIndex := range indices {
+						if fromIndex.Eq(&index) {
+							continue
+						}
+
+						// If this is the kth set of openings
+						if count == k-1 {
+							event := rkpger.TransitionRZGOpen(fromIndex, rzgOpeningsByPlayer[fromIndex])
+							Expect(event).To(Equal(rkpg.RZGReady))
+							Expect(rkpger.State()).To(Equal(rkpg.WaitingOpen))
+							break
+						}
+
+						// If this is not the kth set of openings
+						if count < k-1 {
+							event := rkpger.TransitionRZGOpen(fromIndex, rzgOpeningsByPlayer[fromIndex])
+							Expect(event).To(Equal(rkpg.RZGOpeningsAccepted))
+							Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+							count = count + 1
+						}
+					}
+				})
+
+				Specify("Supply invalid RZG openings", func() {
+					// Invalid length for the set of openings
+					_, otherIndex := RandomIndexExcept(index, indices)
+					event := rkpger.TransitionRZGOpen(otherIndex, rzgOpeningsByPlayer[otherIndex][1:])
+					Expect(event).To(Equal(rkpg.RZGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+
+					// Perturb index
+					// Choose a random share that will be perturbed
+					l := rand.Intn(b)
+					_, otherIndex = RandomIndexExcept(index, indices)
+					shamirutil.PerturbIndex(&rzgOpeningsByPlayer[otherIndex][l])
+					event = rkpger.TransitionRZGOpen(otherIndex, rzgOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RZGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+
+					// Perturb value
+					// Choose a random share that will be perturbed
+					l = rand.Intn(b)
+					_, otherIndex = RandomIndexExcept(index, indices)
+					shamirutil.PerturbValue(&rzgOpeningsByPlayer[otherIndex][l])
+					event = rkpger.TransitionRZGOpen(otherIndex, rzgOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RZGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+
+					// Perturb decommitment
+					// Choose a random share that will be perturbed
+					l = rand.Intn(b)
+					_, otherIndex = RandomIndexExcept(index, indices)
+					shamirutil.PerturbDecommitment(&rzgOpeningsByPlayer[otherIndex][l])
+					event = rkpger.TransitionRZGOpen(otherIndex, rzgOpeningsByPlayer[otherIndex])
+					Expect(event).To(Equal(rkpg.RZGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+				})
+
+				It("Should ignore any other message", func() {
+					event := rkpger.TransitionRNGShares(rngShares, rngCommitments)
+					Expect(event).To(Equal(rkpg.RNGInputsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+
+					_, fromIndex := RandomIndexExcept(index, indices)
+					event = rkpger.TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+
+					event = rkpger.TransitionRZGShares(rzgShares, rzgCommitments)
+					Expect(event).To(Equal(rkpg.RZGInputsIgnored))
+					Expect(rkpger.State()).To(Equal(rkpg.WaitingRZG))
+				})
+			})
+
+			Context("WaitingOpen state", func() {
+				var rkpgers []rkpg.RKPGer
+
+				JustBeforeEach(func() {
+					rngSharesByPlayer, rngCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, false)
+					rzgSharesByPlayer, rzgCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, true)
+
+					rkpgers = InState(
+						rkpg.WaitingOpen,
+						indices, b, k, h,
+						rngSharesByPlayer, rngCommitmentsByPlayer,
+						rzgSharesByPlayer, rzgCommitmentsByPlayer,
+					)
+				})
+
+				Specify("Supply valid hiding openings", func() {
+					// For every player
+					for i, toIndex := range indices {
+						// Choose another player at random
+						j, _ := RandomIndexExcept(toIndex, indices)
+
+						// Fetch the share-hiding openings
+						hidingOpenings := rkpgers[j].HidingOpenings()
+
+						// Broadcasted openings reach the `to` player
+						event := rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+
+						Expect(event).To(Equal(rkpg.HidingOpeningsAccepted))
+						Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+					}
+				})
+
+				Specify("Supply kth valid hiding openings", func() {
+					// For every player
+					for i, toIndex := range indices {
+						// The players themselves have provided one set of openings
+						count := 1
+
+						// From other players
+						for j, fromIndex := range indices {
+							if fromIndex.Eq(&toIndex) {
+								continue
+							}
+
+							// If the Done state has already reached, it simply ignores
+							// the new hiding openings
+							if count == k {
+								// Ensure that it is in fact in the Done state
+								Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+
+								hidingOpenings := rkpgers[j].HidingOpenings()
+								event := rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+								Expect(event).To(Equal(rkpg.HidingOpeningsIgnored))
+								Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+							}
+
+							// If this is the kth set of openings
+							if count == k-1 {
+								hidingOpenings := rkpgers[j].HidingOpenings()
+								event := rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+								Expect(event).To(Equal(rkpg.KeyPairsReady))
+								Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+								count = count + 1
+							}
+
+							// If this is not the kth set of openings
+							if count < k-1 {
+								hidingOpenings := rkpgers[j].HidingOpenings()
+								event := rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+								Expect(event).To(Equal(rkpg.HidingOpeningsAccepted))
+								Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+								count = count + 1
+							}
+						}
+					}
+				})
+
+				Specify("Supply invalid hiding openings", func() {
+					// For every player
+					for i, toIndex := range indices {
+						// Modify length of the set of openings
+						j, _ := RandomIndexExcept(toIndex, indices)
+						hidingOpenings := rkpgers[j].HidingOpenings()
+						l := rand.Intn(b)
+						hidingOpenings = append(hidingOpenings[:l], hidingOpenings[l+1:]...)
+						event := rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+						Expect(event).To(Equal(rkpg.HidingOpeningsIgnored))
+						Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+
+						// Perturb index
+						j, _ = RandomIndexExcept(toIndex, indices)
+						hidingOpenings = rkpgers[j].HidingOpenings()
+						l = rand.Intn(b)
+						shamirutil.PerturbIndex(&hidingOpenings[l])
+						event = rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+						Expect(event).To(Equal(rkpg.HidingOpeningsIgnored))
+						Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+
+						// Perturb value
+						j, _ = RandomIndexExcept(toIndex, indices)
+						hidingOpenings = rkpgers[j].HidingOpenings()
+						l = rand.Intn(b)
+						shamirutil.PerturbValue(&hidingOpenings[l])
+						event = rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+						Expect(event).To(Equal(rkpg.HidingOpeningsIgnored))
+						Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+
+						// Perturb decommitment
+						j, _ = RandomIndexExcept(toIndex, indices)
+						hidingOpenings = rkpgers[j].HidingOpenings()
+						l = rand.Intn(b)
+						shamirutil.PerturbDecommitment(&hidingOpenings[l])
+						event = rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+						Expect(event).To(Equal(rkpg.HidingOpeningsIgnored))
+						Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+					}
+				})
+
+				It("Should ignore any other message", func() {
+					i := 0
+					toIndex := indices[i]
+					rngOpeningsByPlayer, _, rngShares, rngCommitments := rngutil.GetAllDirectedOpenings(indices, toIndex, b, k, h, false)
+					rzgOpeningsByPlayer, _, rzgShares, rzgCommitments := rngutil.GetAllDirectedOpenings(indices, toIndex, b, k, h, true)
+
+					_, fromIndex := RandomIndexExcept(toIndex, indices)
+
+					event := rkpgers[i].TransitionRNGShares(rngShares, rngCommitments)
+					Expect(event).To(Equal(rkpg.RNGInputsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+
+					event = rkpgers[i].TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+
+					event = rkpgers[i].TransitionRZGShares(rzgShares, rzgCommitments)
+					Expect(event).To(Equal(rkpg.RZGInputsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+
+					event = rkpgers[i].TransitionRZGOpen(fromIndex, rzgOpeningsByPlayer[fromIndex])
+					Expect(event).To(Equal(rkpg.RZGOpeningsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.WaitingOpen))
+				})
+			})
+
+			Context("Done state", func() {
+				var rkpgers []rkpg.RKPGer
+
+				JustBeforeEach(func() {
+					rngSharesByPlayer, rngCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, false)
+					rzgSharesByPlayer, rzgCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, true)
+
+					rkpgers = InState(
+						rkpg.Done,
+						indices, b, k, h,
+						rngSharesByPlayer, rngCommitmentsByPlayer,
+						rzgSharesByPlayer, rzgCommitmentsByPlayer,
+					)
+				})
+
+				It("Should respond with keypairs", func() {
+					// VSS Checker to validate vshares
+					vssChecker := shamir.NewVSSChecker(h)
+
+					// Initialise array to hold the batch of verifiable shares
+					batchOfVerifiableShares := make([]shamir.VerifiableShares, b)
+
+					// Fetch commitments, keypairs, shares from the first player
+					refCommitments := rkpgers[0].RNGCommitments()
+					refKeypairs, refShares := rkpgers[0].KeyPairs()
+
+					// Start populating the batch of verifiable shares
+					for j := 0; j < b; j++ {
+						batchOfVerifiableShares[j] = append(batchOfVerifiableShares[j], refShares[j])
+					}
+
+					for i := 1; i < len(indices); i++ {
+						commitments := rkpgers[i].RNGCommitments()
+						keypairs, shares := rkpgers[i].KeyPairs()
+
+						// Commitments should be the same
+						for j, c := range commitments {
+							Expect(c.Eq(&refCommitments[j])).To(BeTrue())
+							Expect(vssChecker.IsValid(&c, &shares[j])).To(BeTrue())
+						}
+
+						// Keypairs should be the same
+						for j, keypair := range keypairs {
+							Expect(keypair.Eq(&refKeypairs[j])).To(BeTrue())
+						}
+
+						// Populate the verifiable shares to the batch of verifiable shares
+						for j := 0; j < b; j++ {
+							batchOfVerifiableShares[j] = append(batchOfVerifiableShares[j], shares[j])
+						}
+					}
+
+					// Batch of verifiable shares should be consistent
+					reconstructor := shamir.NewReconstructor(indices)
+					for j := 0; j < b; j++ {
+						Expect(shamirutil.VsharesAreConsistent(batchOfVerifiableShares[j], &reconstructor, k)).To(BeTrue())
+					}
+				})
+
+				It("Should reset to Init state", func() {
+					for i := range indices {
+						event := rkpgers[i].Reset()
+						Expect(event).To(Equal(rkpg.ResetDone))
+						Expect(rkpgers[i].State()).To(Equal(rkpg.Init))
+
+						// Ensure that the public keys are reset to points at infinity
+						pointAtInfinity := curve.Infinity()
+						publicKeys, shares := rkpgers[i].KeyPairs()
+						for _, publicKey := range publicKeys {
+							Expect(publicKey.Eq(&pointAtInfinity)).To(BeTrue())
+						}
+
+						// Ensure that the shares are reset
+						Expect(shares).To(BeNil())
+					}
+				})
+
+				It("Should ignore any other message", func() {
+					i := 0
+					toIndex := indices[i]
+					rngOpeningsByPlayer, _, rngShares, rngCommitments := rngutil.GetAllDirectedOpenings(indices, toIndex, b, k, h, false)
+					rzgOpeningsByPlayer, _, rzgShares, rzgCommitments := rngutil.GetAllDirectedOpenings(indices, toIndex, b, k, h, true)
+
+					j, fromIndex := RandomIndexExcept(toIndex, indices)
+
+					event := rkpgers[i].TransitionRNGShares(rngShares, rngCommitments)
+					Expect(event).To(Equal(rkpg.RNGInputsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+
+					event = rkpgers[i].TransitionRNGOpen(fromIndex, rngOpeningsByPlayer[fromIndex])
+					Expect(event).To(Equal(rkpg.RNGOpeningsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+
+					event = rkpgers[i].TransitionRZGShares(rzgShares, rzgCommitments)
+					Expect(event).To(Equal(rkpg.RZGInputsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+
+					event = rkpgers[i].TransitionRZGOpen(fromIndex, rzgOpeningsByPlayer[fromIndex])
+					Expect(event).To(Equal(rkpg.RZGOpeningsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+
+					hidingOpenings := rkpgers[j].HidingOpenings()
+					event = rkpgers[i].TransitionHidingOpenings(hidingOpenings)
+					Expect(event).To(Equal(rkpg.HidingOpeningsIgnored))
+					Expect(rkpgers[i].State()).To(Equal(rkpg.Done))
+				})
 			})
 		})
 
@@ -384,7 +1008,8 @@ var _ = Describe("Rkpg", func() {
 			It("Done state", func() {
 				rngSharesByPlayer, rngCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, false)
 				rzgSharesByPlayer, rzgCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, true)
-				rkpgers := InStateDone(
+				rkpgers := InState(
+					rkpg.Done,
 					indices, b, k, h,
 					rngSharesByPlayer, rngCommitmentsByPlayer,
 					rzgSharesByPlayer, rzgCommitmentsByPlayer,

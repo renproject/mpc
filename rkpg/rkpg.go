@@ -340,6 +340,11 @@ func (rkpger *RKPGer) TransitionRZGOpen(
 	if event == rng.RNGsReconstructed {
 		rkpger.resetOpener()
 		rkpger.state = WaitingOpen
+
+		// Open its own share-hiding openings now that we have
+		// reset the opener and are ready with the hiding openings
+		rkpger.TransitionHidingOpenings(rkpger.HidingOpenings())
+
 		return RZGReady
 	}
 
@@ -441,6 +446,11 @@ func (rkpger RKPGer) HidingOpenings() shamir.VerifiableShares {
 	}
 
 	return hidingOpenings
+}
+
+// RNGCommitments returns the commitments to the batch of unbiased random numbers
+func (rkpger RKPGer) RNGCommitments() []shamir.Commitment {
+	return rkpger.rnger.Commitments()
 }
 
 // KeyPairs returns a tuple of the reconstructed batch of random keypairs
