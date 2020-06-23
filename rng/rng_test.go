@@ -126,37 +126,47 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 				})
 
-				Specify("Supply invalid sets of shares", func() {
-					// If an RNG machine is supplied with BRNG output shares that don't match the
-					// RNG machine's batch size, those shares are simply ignored. But the machine
-					// still proceeds computing the commitments and moves to the WaitingOpen state
-					// while returning the CommitmentsConstructed event
+				Specify("Supply empty sets of shares, or sets of shares of length not equal to the batch size", func() {
+					// If an RNG machine is supplied with BRNG output commitments, but empty shares,
+					// those shares are simply ignored. The machine still proceeds computing the
+					// commitments and moves to the WaitingOpen state while returning the
+					// CommitmentsConstructed event. Sets of shares of length not equal to the
+					// batch size of the RNG machine are also ignored, simply proceeding to
+					// processing the commitments
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 
-					// Initialise two RNG replicas
+					// Initialise three RNG replicas
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					_, rnger2 := rng.New(index, indices, uint32(b), uint32(k), h)
+					_, rnger3 := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					event := rnger.TransitionShares([]shamir.VerifiableShares{}, setsOfCommitments)
-					event2 := rnger2.TransitionShares(setsOfShares, setsOfCommitments)
+					event2 := rnger2.TransitionShares(setsOfShares[1:], setsOfCommitments)
+					event3 := rnger3.TransitionShares(setsOfShares, setsOfCommitments)
 
 					Expect(event).To(Equal(rng.CommitmentsConstructed))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 
-					Expect(event2).To(Equal(rng.SharesConstructed))
+					Expect(event2).To(Equal(rng.CommitmentsConstructed))
 					Expect(rnger2.State()).To(Equal(rng.WaitingOpen))
 					Expect(rnger2.HasConstructedShares()).To(BeTrue())
+
+					Expect(event3).To(Equal(rng.SharesConstructed))
+					Expect(rnger3.State()).To(Equal(rng.WaitingOpen))
+					Expect(rnger3.HasConstructedShares()).To(BeTrue())
 
 					// verify that the constructed shares are simply empty for rnger
 					// while they are non-empty for rnger2
 					for _, j := range indices {
 						shares := rnger.DirectedOpenings(j)
 						shares2 := rnger2.DirectedOpenings(j)
+						shares3 := rnger3.DirectedOpenings(j)
 
 						for i, share := range shares {
 							Expect(share).To(Equal(shamir.VerifiableShares{}))
-							Expect(shares2[i]).ToNot(Equal(shamir.VerifiableShares{}))
+							Expect(shares2[i]).To(Equal(shamir.VerifiableShares{}))
+							Expect(shares3[i]).ToNot(Equal(shamir.VerifiableShares{}))
 						}
 					}
 				})
@@ -210,7 +220,7 @@ var _ = Describe("Rng", func() {
 
 					// get this `from` index's sets of shares and commitments
 					// also compute its openings for the player
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, from, b, k, h)
 					openings, _ := rngutil.GetDirectedOpenings(setsOfShares, setsOfCommitments, index)
 
 					// initialise player's RNG machine and supply openings
@@ -226,7 +236,6 @@ var _ = Describe("Rng", func() {
 			Context("When in WaitingOpen state", func() {
 				var rnger rng.RNGer
 				var openingsByPlayer map[open.Fn]shamir.VerifiableShares
-				var commitmentsByPlayer map[open.Fn][]shamir.Commitment
 				var ownSetsOfShares []shamir.VerifiableShares
 				var ownSetsOfCommitments [][]shamir.Commitment
 
@@ -240,7 +249,7 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, commitmentsByPlayer, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 					Expect(event).To(Equal(rng.SharesConstructed))
@@ -300,16 +309,6 @@ var _ = Describe("Rng", func() {
 					from := indices[rand.Intn(len(indices))]
 					for from.Eq(&index) {
 						from = indices[rand.Intn(len(indices))]
-					}
-
-					// Make sure every player has computed the same commitments
-					// for the unbiased random numbers
-					refComm := commitmentsByPlayer[index]
-					for _, j := range indices {
-						comm := commitmentsByPlayer[j]
-						for l, c := range comm {
-							Expect(c.Eq(&refComm[l])).To(BeTrue())
-						}
 					}
 
 					event := rnger.TransitionOpen(from, openingsByPlayer[from])
@@ -579,25 +578,17 @@ var _ = Describe("Rng", func() {
 	})
 
 	Describe("Network Simulation", func() {
-		var ids []mpcutil.ID
-		var machines []mpcutil.Machine
-		var network mpcutil.Network
-		var shuffleMsgs func([]mpcutil.Message)
-		var isOffline map[mpcutil.ID]bool
-		var b, k int
-		var h curve.Point
-
-		JustBeforeEach(func() {
+		Specify("RNG machines should reconstruct the consistent shares for random numbers", func() {
 			// Randomise RNG network scenario
 			n := 5 + rand.Intn(6)
 			indices := shamirutil.SequentialIndices(n)
-			b = 3 + rand.Intn(3)
-			k = 3 + rand.Intn(n-3)
-			h = curve.Random()
+			b := 3 + rand.Intn(3)
+			k := 3 + rand.Intn(n-3)
+			h := curve.Random()
 
 			// Machines (players) participating in the RNG protocol
-			ids = make([]mpcutil.ID, n)
-			machines = make([]mpcutil.Machine, n)
+			ids := make([]mpcutil.ID, n)
+			machines := make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
 			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
@@ -609,18 +600,17 @@ var _ = Describe("Rng", func() {
 					id, index, indices, b, k, h,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer[index],
+					false,
 				)
 				machines[i] = &rngMachine
 				ids[i] = id
 			}
 
 			nOffline := rand.Intn(n - k + 1)
-			shuffleMsgs, isOffline = mpcutil.MessageShufflerDropper(ids, nOffline)
-			network = mpcutil.NewNetwork(machines, shuffleMsgs)
+			shuffleMsgs, isOffline := mpcutil.MessageShufflerDropper(ids, nOffline)
+			network := mpcutil.NewNetwork(machines, shuffleMsgs)
 			network.SetCaptureHist(true)
-		})
 
-		Specify("RNG machines should reconstruct the consistent shares for random numbers", func() {
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -660,10 +650,21 @@ var _ = Describe("Rng", func() {
 				}
 			}
 
+			// Form the indices for machines that were online
+			// and a reconstructor for those indices
+			onlineIndices := make([]open.Fn, 0, len(machines))
+			for j := 0; j < len(machines); j++ {
+				if isOffline[machines[j].ID()] {
+					continue
+				}
+				evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
+				onlineIndices = append(onlineIndices, evaluationPoint)
+			}
+			reconstructor := shamir.NewReconstructor(onlineIndices)
+
 			// For every batch in batch size, the shares that every player has
 			// should be consistent
 			for i := 0; i < b; i++ {
-				indices := make([]open.Fn, 0, len(machines))
 				shares := make(shamir.Shares, 0, len(machines))
 
 				for j := 0; j < len(machines); j++ {
@@ -671,14 +672,140 @@ var _ = Describe("Rng", func() {
 						continue
 					}
 
-					evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
 					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
 
-					indices = append(indices, evaluationPoint)
 					shares = append(shares, vshare.Share())
 				}
 
-				reconstructor := shamir.NewReconstructor(indices)
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+			}
+		})
+
+		Specify("With not all RNG machines contributing their BRNG shares", func() {
+			// Randomise RNG network scenario
+			n := 15 + rand.Intn(6)
+			indices := shamirutil.SequentialIndices(n)
+			b := 3 + rand.Intn(3)
+			k := rngutil.Min(3+rand.Intn(n-3), 7)
+			h := curve.Random()
+
+			// Machines (players) participating in the RNG protocol
+			ids := make([]mpcutil.ID, n)
+			machines := make([]mpcutil.Machine, n)
+
+			// Get BRNG outputs for all players
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
+
+			// Append machine IDs and get offline machines
+			hasEmptyShares := make(map[mpcutil.ID]bool)
+			for i := range indices {
+				id := mpcutil.ID(i)
+				ids[i] = id
+				hasEmptyShares[id] = false
+			}
+			nOffline := rand.Intn(n - k + 1)
+			shuffleMsgs, isOffline := mpcutil.MessageShufflerDropper(ids, nOffline)
+
+			// Mark some machines as being idle
+			// specifically, at the most k+1 should not be idle
+			// so (n - nOffline) - k - 1 should be idle
+			// because only (n - nOffline) machines are online
+			idleCount := 0
+			for j := range indices {
+				if isOffline[mpcutil.ID(j)] {
+					continue
+				}
+
+				if idleCount == rngutil.Max(0, (n-nOffline)-k-1) {
+					break
+				}
+
+				hasEmptyShares[mpcutil.ID(j)] = true
+				idleCount += 1
+			}
+
+			// Append machines to the network
+			for i, index := range indices {
+				id := mpcutil.ID(i)
+				rngMachine := rngutil.NewRngMachine(
+					id, index, indices, b, k, h,
+					setsOfSharesByPlayer[index],
+					setsOfCommitmentsByPlayer[index],
+					hasEmptyShares[id],
+				)
+				machines[i] = &rngMachine
+			}
+
+			network := mpcutil.NewNetwork(machines, shuffleMsgs)
+			network.SetCaptureHist(true)
+
+			err := network.Run()
+			Expect(err).ToNot(HaveOccurred())
+
+			// ID of the first online machine
+			i := 0
+			for isOffline[machines[i].ID()] {
+				i = i + 1
+			}
+
+			// Get the unbiased random numbers calculated by that RNG machine
+			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
+			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
+
+			// checker to check validity of verifiable shares against commitments
+			vssChecker := shamir.NewVSSChecker(h)
+
+			for j := i + 1; j < len(machines); j++ {
+				// Ignore if that machine is offline
+				if isOffline[machines[j].ID()] {
+					continue
+				}
+
+				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
+				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
+
+				// Every player has computed the same commitments for the batch of
+				// unbiased random numbers
+				comms := machines[j].(*rngutil.RngMachine).Commitments()
+				for l, c := range comms {
+					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+				}
+
+				// Verify that each machine's share of the unbiased random number (for all batches)
+				// are valid with respect to the reference commitments
+				for l, vshare := range rnShares {
+					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
+				}
+			}
+
+			// Form the indices for machines that were online
+			// and a reconstructor for those indices
+			onlineIndices := make([]open.Fn, 0, len(machines))
+			for j := 0; j < len(machines); j++ {
+				if isOffline[machines[j].ID()] {
+					continue
+				}
+				evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
+				onlineIndices = append(onlineIndices, evaluationPoint)
+			}
+			reconstructor := shamir.NewReconstructor(onlineIndices)
+
+			// For every batch in batch size, the shares that every player has
+			// should be consistent
+			for i := 0; i < b; i++ {
+				shares := make(shamir.Shares, 0, len(machines))
+
+				for j := 0; j < len(machines); j++ {
+					if isOffline[machines[j].ID()] {
+						continue
+					}
+
+					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
+
+					shares = append(shares, vshare.Share())
+				}
+
 				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
 				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 			}

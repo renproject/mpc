@@ -10,6 +10,22 @@ import (
 	"github.com/renproject/mpc/open"
 )
 
+// Max returns the maximum of the two arguments
+func Max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// Min returns the minimum of the two arguments
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // GetAllSharesAndCommitments computes BRNG shares and commitments for
 // all players participating in the RNG protocol
 func GetAllSharesAndCommitments(
