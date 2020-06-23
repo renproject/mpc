@@ -14,8 +14,107 @@ import (
 	"github.com/renproject/mpc/rng"
 )
 
-// RKPGer describes the structure of the Random KeyPair Generation machine
-// TODO: document
+// RKPGer describes the structure of the Random KeyPair Generation machine.
+// The machine can be used for an arbitrary number of invocations of RKPG,
+// however each instance is specific to the set of machine indices (parties) it
+// was initially constructed with, as well as the batch size, reconstruction
+// threshold and Pedersen Commitment Scheme Parameter.
+//
+// An RKPGer consists of:
+// - An embedded RNGer for random number generation
+// - An embedded RNGer for random zero generation
+// - An embedded Opener for reconstructing the share-hiding openings
+//
+// RKPG state machine has also been covered in this Github issue:
+// https://github.com/renproject/mpc/issues/14
+//
+// RKPGer can exist in one of the following states:
+// - Init
+// - WaitingRNG
+// - RNGsReady
+// - WaitingRZG
+// - WaitingOpen
+// - Done
+//
+// A new instance of RKPGer can be created by calling:
+// - New(index, indices, b, k, h)
+//
+// State transitions can be triggered by the following functions
+// - TransitionRNGShares
+// - TransitionRNGOpen
+// - TransitionRZGShares
+// - TransitionRZGOpen
+// - TransitionHidingOpenings
+// - Reset
+//
+// Every state transition function returns a transition event, depending
+// on the validity of the inputs and their processing. The various state
+// transitions are as follows:
+// - state(Init)
+//		- TransitionRNGShares
+//			|
+//			|__ Valid Inputs   --> event(RNGInputsAccepted) --> state(WaitingRNG)
+//			|__ Invalid Inputs --> event(RNGInputsIgnored)  --> state(Init)
+//		- Reset
+//			|
+//			|__ Reset --> event(ResetDone) --> state(Init)
+//			|__ Invalid reset criteria --> event(ResetAborted) --> state()
+//		- Any other message
+//			|__ Message(E) --> event(E) --> state(Init)
+//
+// Note: Here `E` is a an appropriate event returned by the Message(E)
+// For example, on a call Message(TransitionRZGOpen), event(RZGOpeningsIgnored) is returned
+//
+// - state(WaitingRNG)
+//		- TransitionRNGOpen
+//			|
+//			|__ Valid Inputs       --> event(RNGOpeningsAccepted) --> state(WaitingRNG)
+//			|__ Valid Inputs (kth) --> event(RNGReady)            --> state(RNGsReady)
+//			|__ Invalid Inputs     --> event(RNGOpeningsIgnored)  --> state(WaitingRNG)
+//		- Reset
+//			|
+//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
+//			|__ Invalid reset criteria --> event(ResetAborted) --> state(WaitingRNG)
+//		- Any other message
+//			|__ Message(E) --> event(E) --> state(WaitingRNG)
+//
+// - state(RNGsReady)
+//		- TransitionRZGShares
+//			|
+//			|__ Valid Inputs   --> event(RZGInputsAccepted) --> state(WaitingRZG)
+//			|__ Invalid Inputs --> event(RZGInputsIgnored)  --> state(RNGsReady)
+//		- Reset
+//			|
+//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
+//			|__ Invalid reset criteria --> event(ResetAborted) --> state(RNGsReady)
+//		- Any other message
+//			|__ Message(E) --> event(E) --> state(RNGsReady)
+//
+// - state(WaitingRZG)
+//		- TransitionRZGOpen
+//			|
+//			|__ Valid Inputs       --> event(RZGOpeningsAccepted) --> state(WaitingRZG)
+//			|__ Valid Inputs (kth) --> event(RZGReady)            --> state(WaitingOpen)
+//			|__ Invalid Inputs     --> event(RZGOpeningsIgnored)  --> state(WaitingRZG)
+//		- Reset
+//			|
+//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
+//			|__ Invalid reset criteria --> event(ResetAborted) --> state(WaitingRZG)
+//		- Any other message
+//			|__ Message(E) --> event(E) --> state(WaitingRZG)
+//
+// - state(WaitingOpen)
+//		- TransitionHidingOpenings
+//			|
+//			|__ Valid Inputs       --> event(HidingOpeningsAccepted) --> state(WaitingOpen)
+//			|__ Valid Inputs (kth) --> event(KeyPairsReady)          --> state(Done)
+//			|__ Invalid Inputs     --> event(HidingOpeningsIgnored) --> state(WaitingOpen)
+//		- Reset
+//			|
+//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
+//			|__ Invalid reset criteria --> event(ResetAborted) --> state(WaitingOpen)
+//		- Any other message
+//			|__ Message(E) --> event(E) --> state(WaitingOpen)
 type RKPGer struct {
 	// state signifies the current state of the RKPG state machine
 	state State
