@@ -522,6 +522,7 @@ var _ = Describe("Rzg", func() {
 					id, index, indices, b, k, h, isZero,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer[index],
+					false,
 				)
 				machines[i] = &rngMachine
 				ids[i] = id

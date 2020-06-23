@@ -153,9 +153,9 @@ var _ = Describe("Rng", func() {
 					_, rnger2 := rng.New(index, indices, uint32(b), uint32(k), h)
 					_, rnger3 := rng.New(index, indices, uint32(b), uint32(k), h)
 
-					event := rnger.TransitionShares([]shamir.VerifiableShares{}, setsOfCommitments)
-					event2 := rnger2.TransitionShares(setsOfShares[1:], setsOfCommitments)
-					event3 := rnger3.TransitionShares(setsOfShares, setsOfCommitments)
+					event := rnger.TransitionShares([]shamir.VerifiableShares{}, setsOfCommitments, isZero)
+					event2 := rnger2.TransitionShares(setsOfShares[1:], setsOfCommitments, isZero)
+					event3 := rnger3.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.CommitmentsConstructed))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -650,6 +650,7 @@ var _ = Describe("Rng", func() {
 			b := 3 + rand.Intn(3)
 			k := 3 + rand.Intn(n-3)
 			h := curve.Random()
+			isZero := false
 
 			// Machines (players) participating in the RNG protocol
 			ids := make([]mpcutil.ID, n)
@@ -754,13 +755,14 @@ var _ = Describe("Rng", func() {
 			b := 3 + rand.Intn(3)
 			k := rngutil.Min(3+rand.Intn(n-3), 7)
 			h := curve.Random()
+			isZero := false
 
 			// Machines (players) participating in the RNG protocol
 			ids := make([]mpcutil.ID, n)
 			machines := make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, isZero)
 
 			// Append machine IDs and get offline machines
 			hasEmptyShares := make(map[mpcutil.ID]bool)
@@ -794,7 +796,7 @@ var _ = Describe("Rng", func() {
 			for i, index := range indices {
 				id := mpcutil.ID(i)
 				rngMachine := rngutil.NewRngMachine(
-					id, index, indices, b, k, h,
+					id, index, indices, b, k, h, isZero,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer[index],
 					hasEmptyShares[id],
