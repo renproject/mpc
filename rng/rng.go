@@ -263,6 +263,8 @@ func New(
 //  	 - For invalid sets of shares, a nil slice []shamir.VerifiableShares{} MUST be supplied
 //  	 - If the above checks are met, we assume that every set of verifiable shares is valid
 //  		 - We assume it has a length equal to the RNG's reconstruction threshold
+//		 - For sets of shares of length not equal to the batch size, we ignore those shares
+//			 while simply computing the commitments
 //   - setsOfCommitments are the b sets of commitments from the player's BRNG outputs
 //  	 - We assume that the commitments are correct and valid (even if the shares may not be)
 //  	 - MUST be of length equal to the batch size
@@ -297,12 +299,6 @@ func (rnger *RNGer) TransitionShares(
 	// Ignore the shares if their number of sets does not match
 	// the number of sets of commitments
 	if len(setsOfShares) != len(setsOfCommitments) {
-		ignoreShares = true
-	}
-
-	// Ignore the shares if their number of sets does not match
-	// the batch size of the RNG state machine
-	if len(setsOfShares) != int(rnger.batchSize) {
 		ignoreShares = true
 	}
 
