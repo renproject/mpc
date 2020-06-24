@@ -297,10 +297,18 @@ func (rnger *RNGer) TransitionShares(
 		return SharesIgnored
 	}
 
-	// Since this refutes our assumption that the sets of commitments are valid
-	// and correct.
+	//
+	// Commitments validity
+	//
+
 	if len(setsOfCommitments) != int(rnger.batchSize) {
 		panic("invalid sets of commitments")
+	}
+
+	for _, coms := range setsOfCommitments {
+		if len(coms) != int(rnger.threshold) {
+			panic("invalid sets of commitments")
+		}
 	}
 
 	// Boolean to keep a track of whether shares computation should be ignored
@@ -314,18 +322,14 @@ func (rnger *RNGer) TransitionShares(
 		ignoreShares = true
 	}
 
-	// Panic in case our assumptions for shares/commitments are not met.
-	for i, setOfCommitments := range setsOfCommitments {
-		// Since this refutes our assumption that if the sets of shares are of
-		// appropriate length, then every set of shares is valid and correct.
-		if !ignoreShares && len(setsOfShares[i]) != int(rnger.threshold) {
-			panic("invalid set of shares")
-		}
+	//
+	// Shares validity
+	//
 
-		// Since this refutes our assumption that the sets of commitments are
-		// valid and correct.
-		if len(setOfCommitments) != int(rnger.threshold) {
-			panic("invalid sets of commitments")
+	// Each set of shares in the batch should have the correct length.
+	for _, shares := range setsOfShares {
+		if !ignoreShares && len(shares) != int(rnger.threshold) {
+			panic("invalid set of shares")
 		}
 	}
 
