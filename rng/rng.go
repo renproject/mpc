@@ -496,20 +496,20 @@ func (rnger *RNGer) TransitionOpen(
 // share for each random number). This also means that the RNG machine is in
 // the `Done` state. If it isn't in the Done state this function returns `nil`.
 func (rnger RNGer) ReconstructedShares() shamir.VerifiableShares {
-	if rnger.state == Done {
-		secrets := rnger.opener.Secrets()
-		decommitments := rnger.opener.Decommitments()
-		vshares := make(shamir.VerifiableShares, len(secrets))
-
-		for i, secret := range secrets {
-			share := shamir.NewShare(rnger.index, secret)
-			vshares[i] = shamir.NewVerifiableShare(share, decommitments[i])
-		}
-
-		return vshares
+	if rnger.state != Done {
+		return nil
 	}
 
-	return nil
+	secrets := rnger.opener.Secrets()
+	decommitments := rnger.opener.Decommitments()
+	vshares := make(shamir.VerifiableShares, len(secrets))
+
+	for i, secret := range secrets {
+		share := shamir.NewShare(rnger.index, secret)
+		vshares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+	}
+
+	return vshares
 }
 
 // Reset transitions the RNG state machine back to the Init state. Note that
