@@ -370,10 +370,11 @@ func (rnger *RNGer) TransitionShares(
 	// Transition the machine's state.
 	rnger.state = WaitingOpen
 
-	// Supply the locally computed shares to the opener. This will only be a
-	// special case when the reconstruction threshold k is equal to one.
+	// Supply the locally computed shares to the opener.
 	if !ignoreShares {
 		event := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
+
+		// This only happens when k = 1.
 		if event == open.Done {
 			rnger.state = Done
 			return RNGsReconstructed
@@ -401,19 +402,12 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 		return nil
 	}
 
-	indexExists := false
-	for _, index := range rnger.indices {
-		if index.Eq(&to) {
-			indexExists = true
-			break
-		}
-	}
-
-	if !indexExists {
+	shares, ok := rnger.openingsMap[to]
+	if !ok {
 		return nil
 	}
 
-	return rnger.openingsMap[to]
+	return shares
 }
 
 // TransitionOpen performs the state transition for the RNG state machine upon
