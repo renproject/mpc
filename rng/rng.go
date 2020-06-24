@@ -362,10 +362,7 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	// Reset the Opener machine with the computed commitments.
-	resetEvent := rnger.opener.TransitionReset(locallyComputedCommitments)
-	if resetEvent != open.Reset {
-		panic(fmt.Sprintf("Could not set commitments in Opener: %v", locallyComputedCommitments))
-	}
+	rnger.opener.TransitionReset(locallyComputedCommitments)
 
 	// Transition the machine's state.
 	rnger.state = WaitingOpen
