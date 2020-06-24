@@ -376,6 +376,12 @@ var _ = Describe("Rng", func() {
 						}
 					}
 				})
+
+				Specify("directed opens should be nil for invalid indices", func() {
+					// The chance that a random index is valid is negligible.
+					invalidIndex := secp256k1.RandomSecp256k1N()
+					Expect(rnger.DirectedOpenings(invalidIndex)).To(BeNil())
+				})
 			})
 
 			Context("When in Done state", func() {
