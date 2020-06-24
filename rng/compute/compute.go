@@ -38,14 +38,16 @@ func ShareCommitment(
 	coms []shamir.Commitment,
 	isZero bool,
 ) shamir.Commitment {
-	acc.Set(coms[len(coms)-1])
-	if isZero {
-		acc.Scale(&acc, &index)
-	}
+	var acc shamir.Commitment
 
+	acc.Set(coms[len(coms)-1])
 	for l := len(coms) - 2; l >= 0; l-- {
 		acc.Scale(&acc, &index)
 		acc.Add(&acc, &coms[l])
+	}
+
+	if isZero {
+		acc.Scale(&acc, &index)
 	}
 
 	return acc
@@ -64,13 +66,13 @@ func ShareOfShare(
 	isZero bool,
 ) shamir.VerifiableShare {
 	acc := vshares[len(vshares)-1]
-	if isZero {
-		acc.Scale(&acc, &index)
-	}
-
 	for l := len(vshares) - 2; l >= 0; l-- {
 		acc.Scale(&acc, &index)
 		acc.Add(&acc, &vshares[l])
+	}
+
+	if isZero {
+		acc.Scale(&acc, &index)
 	}
 
 	return acc

@@ -36,7 +36,7 @@ var _ = Describe("RNG computation helper functions", func() {
 		return acc
 	}
 
-	Specify("output commitments should be computed correctly", func() {
+	Specify("output commitments should be computed correctly (RNG)", func() {
 		coms := make([]shamir.Commitment, k)
 
 		for i := range coms {
@@ -48,7 +48,7 @@ var _ = Describe("RNG computation helper functions", func() {
 				randomiseCommitment(&coms[j])
 			}
 
-			output := OutputCommitment(coms)
+			output := OutputCommitment(coms, false)
 
 			for j := 0; j < output.Len(); j++ {
 				actual := output.GetPoint(j)
@@ -58,7 +58,33 @@ var _ = Describe("RNG computation helper functions", func() {
 		}
 	})
 
-	Specify("commitments for shares should be computed correctly", func() {
+	Specify("output commitments should be computed correctly (RZG)", func() {
+		coms := make([]shamir.Commitment, k-1)
+
+		for i := range coms {
+			coms[i] = shamir.NewCommitmentWithCapacity(k)
+		}
+
+		for i := 0; i < trials; i++ {
+			for j := range coms {
+				randomiseCommitment(&coms[j])
+			}
+
+			output := OutputCommitment(coms, true)
+
+			// the first point in the output commitment is the point at infinity
+			zeroCom := output.GetPoint(0)
+			Expect(zeroCom.IsInfinity()).To(BeTrue())
+
+			for j := 1; j < output.Len(); j++ {
+				actual := output.GetPoint(j)
+				expected := coms[j-1].GetPoint(0)
+				Expect(actual.Eq(&expected)).To(BeTrue())
+			}
+		}
+	})
+
+	Specify("commitments for shares should be computed correctly (RNG)", func() {
 		var index secp256k1.Secp256k1N
 		var bs [32]byte
 
@@ -105,7 +131,7 @@ var _ = Describe("RNG computation helper functions", func() {
 				}
 			}
 
-			output := ShareCommitment(index, coms)
+			output := ShareCommitment(index, coms, false)
 
 			expected := curve.New()
 			for j := 0; j < output.Len(); j++ {
@@ -120,7 +146,7 @@ var _ = Describe("RNG computation helper functions", func() {
 		}
 	})
 
-	Specify("shares of shares should be computed correctly", func() {
+	Specify("shares of shares should be computed correctly (RNG)", func() {
 		var to, from secp256k1.Secp256k1N
 
 		values := make([]secp256k1.Secp256k1N, k)
@@ -143,7 +169,7 @@ var _ = Describe("RNG computation helper functions", func() {
 				)
 			}
 
-			output := ShareOfShare(to, vshares)
+			output := ShareOfShare(to, vshares, false)
 
 			// The value of the share should be correct.
 			share := output.Share()

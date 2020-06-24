@@ -130,9 +130,9 @@ var _ = Describe("Rng", func() {
 
 				Specify("Supply valid BRNG shares/commitments when k = 1", func() {
 					k = 1
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.RNGsReconstructed))
 					Expect(rnger.State()).To(Equal(rng.Done))
@@ -216,7 +216,7 @@ var _ = Describe("Rng", func() {
 					j := rand.Intn(b)
 					wrongBatch := setsOfCommitments
 					wrongBatch = append(wrongBatch[:j], wrongBatch[j+1:]...)
-					Expect(func() { rnger.TransitionShares(setsOfShares, wrongBatch) }).To(Panic())
+					Expect(func() { rnger.TransitionShares(setsOfShares, wrongBatch, isZero) }).To(Panic())
 					Expect(func() {
 						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongBatch, isZero)
 					}).To(Panic())
@@ -225,7 +225,7 @@ var _ = Describe("Rng", func() {
 					j = rand.Intn(k)
 					wrongK := setsOfCommitments
 					wrongK[0] = append(wrongK[0][:j], wrongK[0][j+1:]...)
-					Expect(func() { rnger.TransitionShares(setsOfShares, wrongK) }).To(Panic())
+					Expect(func() { rnger.TransitionShares(setsOfShares, wrongK, isZero) }).To(Panic())
 					Expect(func() {
 						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongK, isZero)
 					}).To(Panic())
