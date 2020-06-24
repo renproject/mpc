@@ -36,7 +36,7 @@ func (s State) String() string {
 	case Done:
 		return "Done"
 	default:
-		return fmt.Sprintf("Unknown state (%v)", uint8(s))
+		return fmt.Sprintf("Unknown(%v)", uint8(s))
 	}
 }
 
