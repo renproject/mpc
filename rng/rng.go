@@ -325,7 +325,7 @@ func (rnger *RNGer) TransitionShares(
 		rnger.commitments[i] = compute.OutputCommitment(setOfCommitments)
 
 		// compute the accumulator commitment and add it to the local set of commitments
-		accCommitment := compute.AccumulatorCommitment(rnger.index, setOfCommitments)
+		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments)
 		locallyComputedCommitments[i].Set(accCommitment)
 	}
 

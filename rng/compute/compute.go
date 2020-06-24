@@ -18,37 +18,34 @@ func OutputCommitment(coms []shamir.Commitment) shamir.Commitment {
 	return commitment
 }
 
-// AccumulatorCommitment accepts the set of commitments and computes a weighted
-// linear combination of those commitments.
-// This accumulated value also represents the commitment for this machine's
-// player for its share of the final unbiased random number
-func AccumulatorCommitment(
-	toIndex open.Fn,
-	setOfCommitments []shamir.Commitment,
+// ShareCommitment accepts the set of commitments and computes a weighted
+// linear combination of those commitments. This accumulated value represents
+// the commitment for the share of the final unbiased random number for the
+// given index.
+func ShareCommitment(
+	index open.Fn,
+	coms []shamir.Commitment,
 ) shamir.Commitment {
-	// Initialise the accumulators with the first values
+	// Initialise the accumulators with the first values.
 	var multiplier open.Fn
-	var accCommitment shamir.Commitment
+	var acc, term shamir.Commitment
 
 	multiplier = secp256k1.OneSecp256k1N()
-	accCommitment.Set(setOfCommitments[0])
+	acc.Set(coms[0])
+	term = shamir.NewCommitmentWithCapacity(acc.Len())
 
-	// For all other shares and commitments
-	for l := 1; l < len(setOfCommitments); l++ {
-		// Scale the multiplier
-		multiplier.Mul(&multiplier, &toIndex)
+	// For all other shares and commitments,
+	for l := 1; l < len(coms); l++ {
+		// set the multiplier to index^l,
+		multiplier.Mul(&multiplier, &index)
 		multiplier.Normalize()
 
-		// Initialise
-		// Scale by the multiplier
-		// Add to the accumulator
-		var commitment shamir.Commitment
-		commitment.Set(setOfCommitments[l])
-		commitment.Scale(&commitment, &multiplier)
-		accCommitment.Add(&accCommitment, &commitment)
+		// scale by the multiplier and add to the accumulator.
+		term.Scale(&coms[l], &multiplier)
+		acc.Add(&acc, &term)
 	}
 
-	return accCommitment
+	return acc
 }
 
 // AccumulatorShare accepts the set of verifiable shares and computes a weighted
