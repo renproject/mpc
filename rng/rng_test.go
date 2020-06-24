@@ -198,9 +198,24 @@ var _ = Describe("Rng", func() {
 					// about the correctness of the sets of commitments
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+
+					// Inccorect batch length.
 					j := rand.Intn(b)
-					setsOfCommitments = append(setsOfCommitments[:j], setsOfCommitments[j+1:]...)
-					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments) }).To(Panic())
+					wrongBatch := setsOfCommitments
+					wrongBatch = append(wrongBatch[:j], wrongBatch[j+1:]...)
+					Expect(func() { rnger.TransitionShares(setsOfShares, wrongBatch) }).To(Panic())
+					Expect(func() {
+						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongBatch)
+					}).To(Panic())
+
+					// Inccorect threshold.
+					j = rand.Intn(k)
+					wrongK := setsOfCommitments
+					wrongK[0] = append(wrongK[0][:j], wrongK[0][j+1:]...)
+					Expect(func() { rnger.TransitionShares(setsOfShares, wrongK) }).To(Panic())
+					Expect(func() {
+						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongK)
+					}).To(Panic())
 
 					Expect(rnger.State()).To(Equal(rng.Init))
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
@@ -722,7 +737,7 @@ var _ = Describe("Rng", func() {
 				}
 
 				hasEmptyShares[mpcutil.ID(j)] = true
-				idleCount += 1
+				idleCount++
 			}
 
 			// Append machines to the network
