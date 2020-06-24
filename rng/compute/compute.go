@@ -6,17 +6,13 @@ import (
 	"github.com/renproject/shamir"
 )
 
-// Commitment accepts the set of commitments for batch of BRNG outputs
-// and returns a valid commitment for the final random number
-func Commitment(
-	setOfCommitments []shamir.Commitment,
-	k uint32,
-) shamir.Commitment {
-	commitment := shamir.NewCommitmentWithCapacity(int(k))
+// OutputCommitment returns the commitment that corresponds to the output
+// shares of RNG, given the input commitments from BRNG.
+func OutputCommitment(coms []shamir.Commitment) shamir.Commitment {
+	commitment := shamir.NewCommitmentWithCapacity(len(coms))
 
-	for _, c := range setOfCommitments {
-		p := c.GetPoint(0)
-		commitment.AppendPoint(p)
+	for _, c := range coms {
+		commitment.AppendPoint(c.GetPoint(0))
 	}
 
 	return commitment
