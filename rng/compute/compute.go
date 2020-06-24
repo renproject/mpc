@@ -34,7 +34,7 @@ func ShareCommitment(
 	acc.Set(coms[0])
 	term = shamir.NewCommitmentWithCapacity(acc.Len())
 
-	// For all other shares and commitments,
+	// For all other commitments,
 	for l := 1; l < len(coms); l++ {
 		// set the multiplier to index^l,
 		multiplier.Mul(&multiplier, &index)
@@ -48,34 +48,31 @@ func ShareCommitment(
 	return acc
 }
 
-// AccumulatorShare accepts the set of verifiable shares and computes a weighted
-// linear combination of those shares.
-// This accumulated value also represents the directed openings from this machine's
-// player to the player at index `toIndex`
-func AccumulatorShare(
-	toIndex open.Fn,
-	setOfShares shamir.VerifiableShares,
+// ShareOfShare accepts the set of verifiable shares and computes a weighted
+// linear combination of those shares. Assuming that the input shares' secrets
+// are coefficients of a polynomial, the output share is a share of this
+// polynomial evaluated at the given index.
+func ShareOfShare(
+	index open.Fn,
+	vshares shamir.VerifiableShares,
 ) shamir.VerifiableShare {
-	// Initialise the accumulators with the first values
+	// Initialise the accumulators with the first values.
 	var multiplier open.Fn
-	var accShare shamir.VerifiableShare
+	var acc, term shamir.VerifiableShare
 
 	multiplier = secp256k1.OneSecp256k1N()
-	accShare = setOfShares[0]
+	acc = vshares[0]
 
-	// For all other shares and commitments
-	for l := 1; l < len(setOfShares); l++ {
-		// Scale the multiplier
-		multiplier.Mul(&multiplier, &toIndex)
+	// For all other shares,
+	for l := 1; l < len(vshares); l++ {
+		// scale the multiplier,
+		multiplier.Mul(&multiplier, &index)
 		multiplier.Normalize()
 
-		// Initialise
-		// Scale by the multiplier
-		// Add to the accumulator
-		var share = setOfShares[l]
-		share.Scale(&share, &multiplier)
-		accShare.Add(&accShare, &share)
+		// scale by the multiplier and add to the accumulator.
+		term.Scale(&vshares[l], &multiplier)
+		acc.Add(&acc, &term)
 	}
 
-	return accShare
+	return acc
 }

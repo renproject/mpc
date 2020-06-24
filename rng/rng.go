@@ -338,7 +338,7 @@ func (rnger *RNGer) TransitionShares(
 			for _, setOfShares := range setsOfShares {
 				// If the sets of shares are valid, compute the accumulator share
 				// and append to the directed openings map
-				accShare := compute.AccumulatorShare(j, setOfShares)
+				accShare := compute.ShareOfShare(j, setOfShares)
 				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
 			}
 		}
