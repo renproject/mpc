@@ -206,7 +206,9 @@ func (rnger RNGer) Threshold() uint32 {
 // numbers.
 func (rnger RNGer) Commitments() []shamir.Commitment {
 	commitmentsCopy := make([]shamir.Commitment, len(rnger.commitments))
-	copy(commitmentsCopy, rnger.commitments)
+	for i := range rnger.commitments {
+		commitmentsCopy[i].Set(rnger.commitments[i])
+	}
 	return commitmentsCopy
 }
 
