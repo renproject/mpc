@@ -66,6 +66,6 @@ func (e TransitionEvent) String() string {
 	case Reset:
 		return "Reset"
 	default:
-		return fmt.Sprintf("Unknown transition event (%v)", uint8(e))
+		return fmt.Sprintf("Unknown(%v)", uint8(e))
 	}
 }
