@@ -77,6 +77,16 @@ var _ = Describe("RNG computation helper functions", func() {
 			coms[i] = shamir.NewCommitmentWithCapacity(k)
 		}
 
+		// The idea for this test is to compute the output in two ways. The
+		// first way is simply using the function that we are testing. The
+		// second way is to compute the result for the scalar type (rather than
+		// the elliptice curve point type), and then exponentiate this result
+		// to obtain the corresponding curve point. In other words, we are
+		// checking that evaluating the polynomial in the exponent (i.e.
+		// computing on the commitments) is the same as evaluating the
+		// polynomial, and then obtaining the corresponding curve point (i.e.
+		// the result in the exponent).
+
 		for i := 0; i < trials; i++ {
 			index = secp256k1.RandomSecp256k1N()
 
