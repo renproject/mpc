@@ -126,6 +126,17 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 				})
 
+				Specify("Supply valid BRNG shares/commitments when k = 1", func() {
+					k = 1
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
+
+					Expect(event).To(Equal(rng.RNGsReconstructed))
+					Expect(rnger.State()).To(Equal(rng.Done))
+					Expect(rnger.HasConstructedShares()).To(BeTrue())
+				})
+
 				Specify("Supply empty sets of shares, or sets of shares of length not equal to the batch size", func() {
 					// If an RNG machine is supplied with BRNG output commitments, but empty shares,
 					// those shares are simply ignored. The machine still proceeds computing the
