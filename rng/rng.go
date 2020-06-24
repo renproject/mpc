@@ -437,11 +437,11 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 //
 // - Returns
 //   - TransitionEvent
-//     - OpeningsIgnored when the openings were invalid in form or consistency
-//		 - OpeningsAdded when the openings were valid are were added to the opener
-//		 - RNGsReconstructed when the set of openings was the kth valid set and
-//		 	hence the RNGer could reconstruct its shares for the unbiased
-//		 	random numbers
+// 		- OpeningsIgnored when the openings were invalid in form or consistency
+// 		- OpeningsAdded when the openings were valid are were added to the opener
+// 		- RNGsReconstructed when the set of openings was the kth valid set and
+// 			hence the RNGer could reconstruct its shares for the unbiased
+// 			random numbers
 func (rnger *RNGer) TransitionOpen(
 	fromIndex open.Fn,
 	openings shamir.VerifiableShares,
