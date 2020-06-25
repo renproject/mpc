@@ -10,7 +10,7 @@
 This is an implementation of a threshold ECDSA scheme, that is for use in RenVM. For a network of `n` parties, this scheme is robustly secure against `t` malicious adversaries, such that `n >= 3t + 1`. During both ECDSA key generation and signing, up to `t` parties can go offline at the beginning, middle, or end of a round, and the protocols will complete successfully without the need to go back repeat from a prior round.
 
 ## Overview
-**MPC Primitives** are the building blocks for threshold ECDSA, namely [BRNG](brng/), [RNG](rng/) and [RKPG](rkpg/), are implemented in their own packages. We make use of Pedersen's [Commitment Scheme](https://link.springer.com/chapter/10.1007/3-540-46766-1_9) to augment Shamir's [Secret Sharing Scheme](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing) to a Verifiable Secret Sharing Scheme, which is implemented as a separate package.
+**MPC Primitives** are the building blocks for threshold ECDSA, namely [Open](/open), [BRNG](brng/), [RNG/RZG](rng/) and [RKPG](rkpg/), are implemented in their own packages. We make use of Pedersen's [Commitment Scheme](https://link.springer.com/chapter/10.1007/3-540-46766-1_9) to augment Shamir's [Secret Sharing Scheme](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing) to a Verifiable Secret Sharing Scheme, which is implemented as a [separate package](https://github.com/renproject/shamir).
 
 #### Finite State Machine
 MPC primitives are implemented as [finite-state machines](https://en.wikipedia.org/wiki/Finite-state_machine). A general state transitional behaviour is described below.
