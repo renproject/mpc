@@ -148,6 +148,8 @@ github.com/renproject/shamir v0.0.0-20200529014414-c32827b5d47d h1:1MRMFFQJpTOiJ
 github.com/renproject/shamir v0.0.0-20200529014414-c32827b5d47d/go.mod h1:4Kt4FvSiXvqPHjMnLbqMzC/pHgZM6flUiuvFh9hBkvM=
 github.com/renproject/shamir v0.0.0-20200616085801-16d1bf944708 h1:L1FG+9tjPbc/m79cJsjMzaoSIGa2HWdxC9P65z1CqZc=
 github.com/renproject/shamir v0.0.0-20200616085801-16d1bf944708/go.mod h1:4Kt4FvSiXvqPHjMnLbqMzC/pHgZM6flUiuvFh9hBkvM=
+github.com/renproject/shamir v0.0.0-20200624072757-82b97bc0332c h1:ISlFnkuFmLk8G2JK6l88rHHmoKHJG6dePKg8C6oNVAM=
+github.com/renproject/shamir v0.0.0-20200624072757-82b97bc0332c/go.mod h1:4Kt4FvSiXvqPHjMnLbqMzC/pHgZM6flUiuvFh9hBkvM=
 github.com/renproject/surge v1.1.2 h1:Yy3pTlRyaMJGLfn64JHgCnWs3cWbRJjE+aFxZXRGfWU=
 github.com/renproject/surge v1.1.2/go.mod h1:UnnFYpLSD0T9MzCcyHjbNdmxiQsDVyBDCuqcbhcaLCY=
 github.com/renproject/surge v1.1.4 h1:vSwmZU/K43HAVFW/Jx4VJ56ieZRALLN72oxDgR09Uro=
