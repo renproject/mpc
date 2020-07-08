@@ -20,7 +20,7 @@ import (
 	"github.com/renproject/mpc/rng/rngutil"
 )
 
-var _ = Describe("Rng", func() {
+var _ = Describe("RNG", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	Describe("RNG Properties", func() {
@@ -50,15 +50,15 @@ var _ = Describe("Rng", func() {
 			// This is a randomly chosen index from indices
 			index := indices[rand.Intn(len(indices))]
 
-			// b is the total number of random numbers to be generated
-			// in one execution of RNG protocol, i.e. the batch number
+			// b is the total number of random numbers to be generated in one
+			// execution of RNG protocol, i.e. the batch number
 			b := 3 + rand.Intn(3)
 
-			// k is the threshold for random number generation, or the
-			// minimum number of shares required to reconstruct the secret
-			// in the secret sharing scheme. Based on our BRNG to RNG scheme,
-			// k is also the number of times BRNG needs to be run before
-			// using their outputs to generate an unbiased random number
+			// k is the threshold for random number generation, or the minimum
+			// number of shares required to reconstruct the secret in the
+			// secret sharing scheme. Based on our BRNG to RNG scheme, k is
+			// also the number of times BRNG needs to be run before using their
+			// outputs to generate an unbiased random number
 			k := 3 + rand.Intn(n-3)
 
 			// h is the elliptic curve point, used as the Pedersen Commitment
@@ -84,15 +84,14 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 
 				for _, index := range indices {
-					directedOpeningShares := rnger.DirectedOpenings(index)
-					Expect(directedOpeningShares).To(BeNil())
+					Expect(rnger.DirectedOpenings(index)).To(BeNil())
 				}
 			})
 
 			Context("When in Init state", func() {
 				Specify("Reset", func() {
-					// If an RNG machine in the Init state is reset, it continues to be
-					// in the init state
+					// If an RNG machine in the Init state is reset, it
+					// continues to be in the init state
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					event := rnger.Reset()
@@ -105,19 +104,18 @@ var _ = Describe("Rng", func() {
 					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 
 					for _, index := range indices {
-						directedOpeningShares := rnger.DirectedOpenings(index)
-						Expect(directedOpeningShares).To(BeNil())
+						Expect(rnger.DirectedOpenings(index)).To(BeNil())
 					}
 				})
 
 				Specify("Supply valid BRNG shares/commitments", func() {
 					// If an RNG machine in the Init state is supplied with
-					// valid sets of shares and commitments from its own BRNG outputs
-					// it transitions to the WaitingOpen state
+					// valid sets of shares and commitments from its own BRNG
+					// outputs it transitions to the WaitingOpen state
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 
-					// Once we have `b` sets of shares and commitments
-					// we are ready to transition the RNG machine
+					// Once we have `b` sets of shares and commitments we are
+					// ready to transition the RNG machine
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
 
@@ -138,11 +136,13 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply empty sets of shares, or sets of shares of length not equal to the batch size", func() {
-					// If an RNG machine is supplied with BRNG output commitments, but empty shares,
-					// those shares are simply ignored. The machine still proceeds computing the
-					// commitments and moves to the WaitingOpen state while returning the
-					// CommitmentsConstructed event. Sets of shares of length not equal to the
-					// batch size of the RNG machine are also ignored, simply proceeding to
+					// If an RNG machine is supplied with BRNG output
+					// commitments, but empty shares, those shares are simply
+					// ignored. The machine still proceeds computing the
+					// commitments and moves to the WaitingOpen state while
+					// returning the CommitmentsConstructed event. Sets of
+					// shares of length not equal to the batch size of the RNG
+					// machine are also ignored, simply proceeding to
 					// processing the commitments
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 
@@ -167,8 +167,8 @@ var _ = Describe("Rng", func() {
 					Expect(rnger3.State()).To(Equal(rng.WaitingOpen))
 					Expect(rnger3.HasConstructedShares()).To(BeTrue())
 
-					// verify that the constructed shares are simply empty for rnger
-					// while they are non-empty for rnger2
+					// verify that the constructed shares are simply empty for
+					// rnger while they are non-empty for rnger2
 					for _, j := range indices {
 						shares := rnger.DirectedOpenings(j)
 						shares2 := rnger2.DirectedOpenings(j)
@@ -183,17 +183,18 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply single invalid set of shares (not of threshold size)", func() {
-					// If an RNG machine is supplied with BRNG output shares that match the
-					// RNG machine's batch size, but with one or more of the set of shares
-					// not of length equal to the reconstruction threshold, then it refutes
-					// our assumption about the correctness of sets of shares in case they
-					// are of appropriate batch size. The RNG machine hence panics, and continues
-					// to be in its initial state
+					// If an RNG machine is supplied with BRNG output shares
+					// that match the RNG machine's batch size, but with one or
+					// more of the set of shares not of length equal to the
+					// reconstruction threshold, then it refutes our assumption
+					// about the correctness of sets of shares in case they are
+					// of appropriate batch size. The RNG machine hence panics,
+					// and continues to be in its initial state
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-					// fool around with one of the set of shares
-					// so as to not let its length match the threshold
+					// fool around with one of the set of shares so as to not
+					// let its length match the threshold
 					setsOfShares[0] = setsOfShares[0][1:]
 
 					Expect(func() { rnger.TransitionShares(setsOfShares, setsOfCommitments) }).To(Panic())
@@ -203,14 +204,15 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply invalid sets of commitments", func() {
-					// If an RNG machine is supplied with BRNG outputs that have different
-					// lengths (batch size) for shares and commitment, whereby the commitments
-					// are of incorrect size, we panic because it refutes our assumption
-					// about the correctness of the sets of commitments
+					// If an RNG machine is supplied with BRNG outputs that
+					// have different lengths (batch size) for shares and
+					// commitment, whereby the commitments are of incorrect
+					// size, we panic because it refutes our assumption about
+					// the correctness of the sets of commitments
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-					// Inccorect batch length.
+					// Incorrect batch length.
 					j := rand.Intn(b)
 					wrongBatch := setsOfCommitments
 					wrongBatch = append(wrongBatch[:j], wrongBatch[j+1:]...)
@@ -219,7 +221,7 @@ var _ = Describe("Rng", func() {
 						rnger.TransitionShares([]shamir.VerifiableShares{}, wrongBatch)
 					}).To(Panic())
 
-					// Inccorect threshold.
+					// Incorrect threshold.
 					j = rand.Intn(k)
 					wrongK := setsOfCommitments
 					wrongK[0] = append(wrongK[0][:j], wrongK[0][j+1:]...)
@@ -233,10 +235,11 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply directed opening", func() {
-					// If an RNG machine in the Init state is supplied with a valid directed opening
-					// it does not react to that and simply ignores it
-					// Only after having constructed its own shares, and being in the WaitingOpen
-					// state, it will handle the directed openings
+					// If an RNG machine in the Init state is supplied with a
+					// valid directed opening it does not react to that and
+					// simply ignores it.  Only after having constructed its
+					// own shares, and being in the WaitingOpen state, it will
+					// handle the directed openings
 
 					// get a `from` index that is different than own index
 					from := indices[rand.Intn(len(indices))]
@@ -265,8 +268,8 @@ var _ = Describe("Rng", func() {
 				var ownSetsOfShares []shamir.VerifiableShares
 				var ownSetsOfCommitments [][]shamir.Commitment
 
-				// TransitionToWaitingOpen generates a new instance of RNG machine
-				// and transitions it to the `WaitingOpen` state
+				// TransitionToWaitingOpen generates a new instance of RNG
+				// machine and transitions it to the `WaitingOpen` state
 				TransitionToWaitingOpen := func(
 					index open.Fn,
 					indices []open.Fn,
@@ -275,7 +278,8 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments =
+						rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 					Expect(event).To(Equal(rng.SharesConstructed))
@@ -286,8 +290,9 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Reset", func() {
-					// When an RNG machine in the WaitingOpen state is reset, it transitions
-					// to the Init state having forgotten its constructed shares
+					// When an RNG machine in the WaitingOpen state is reset,
+					// it transitions to the Init state having forgotten its
+					// constructed shares
 					event := rnger.Reset()
 
 					Expect(event).To(Equal(rng.Reset))
@@ -296,8 +301,9 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply BRNG shares", func() {
-					// When an RNG machine in the WaitingOpen state is supplied BRNG shares
-					// it simply ignores them and continues to be in the same state
+					// When an RNG machine in the WaitingOpen state is supplied
+					// BRNG shares it simply ignores them and continues to be
+					// in the same state
 					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 					event := rnger.TransitionShares(setsOfShares, setsOfCommitments)
 
@@ -306,11 +312,13 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply invalid directed opening", func() {
-					// When the RNG machine receives an invalid set of directed openings from another player
-					// in any form (mismatching length, invalid index of player, etc), it
-					// simply ignores those openings and continues to be in the same state
+					// When the RNG machine receives an invalid set of directed
+					// openings from another player in any form (mismatching
+					// length, invalid index of player, etc), it simply ignores
+					// those openings and continues to be in the same state
 					//
-					// get a random player who is not the current RNG machine's player
+					// get a random player who is not the current RNG machine's
+					// player
 					from := indices[rand.Intn(len(indices))]
 					for from.Eq(&index) {
 						from = indices[rand.Intn(len(indices))]
@@ -321,17 +329,20 @@ var _ = Describe("Rng", func() {
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 
-					// Sender index is randomly chosen, so does not exist in the initial player indices
+					// Sender index is randomly chosen, so does not exist in
+					// the initial player indices
 					event = rnger.TransitionOpen(secp256k1.RandomSecp256k1N(), openingsByPlayer[from])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
 
 				Specify("Supply directed opening", func() {
-					// When the RNG machine receives a valid set of directed openings from another player
-					// it adds those to its opener and continues to be in the WaitingOpen state.
+					// When the RNG machine receives a valid set of directed
+					// openings from another player it adds those to its opener
+					// and continues to be in the WaitingOpen state.
 					//
-					// get a random player who is not the current RNG machine's player
+					// get a random player who is not the current RNG machine's
+					// player
 					from := indices[rand.Intn(len(indices))]
 					for from.Eq(&index) {
 						from = indices[rand.Intn(len(indices))]
@@ -344,9 +355,10 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply directed opening when k-1 openings are already ready", func() {
-					// When the RNG machine receives a valid set of directed openings from another player
-					// and if this is the kth set (including its own), then the RNG machine is ready
-					// to reconstruct the b unbiased random numbers
+					// When the RNG machine receives a valid set of directed
+					// openings from another player and if this is the kth set
+					// (including its own), then the RNG machine is ready to
+					// reconstruct the b unbiased random numbers
 					//
 					// The own player's openings have already been processed
 					count := 1
@@ -391,9 +403,9 @@ var _ = Describe("Rng", func() {
 				var ownSetsOfCommitments [][]shamir.Commitment
 
 				// TransitionToDone generates a new instance of RNG machine and
-				// transitions it to the `Done` state by providing own BRNG outputs
-				// as well as other players' directed openings to reconstruct
-				// all the unbiased random numbers
+				// transitions it to the `Done` state by providing own BRNG
+				// outputs as well as other players' directed openings to
+				// reconstruct all the unbiased random numbers
 				TransitionToDone := func(
 					index open.Fn,
 					indices []open.Fn,
@@ -402,7 +414,8 @@ var _ = Describe("Rng", func() {
 				) {
 					_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments =
+						rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 					_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
@@ -424,8 +437,9 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply BRNG shares", func() {
-					// When an RNG machine in the Done state is supplied own shares
-					// it simply ignores them, and continues to be in the same state
+					// When an RNG machine in the Done state is supplied own
+					// shares it simply ignores them, and continues to be in
+					// the same state
 					event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
@@ -433,9 +447,9 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Supply directed opening", func() {
-					// When an RNG machine in the Done state is supplied with valid
-					// directed openings, it simply ignores them and continues
-					// to be in the same state
+					// When an RNG machine in the Done state is supplied with
+					// valid directed openings, it simply ignores them and
+					// continues to be in the same state
 					from := indices[rand.Intn(len(indices))]
 					for from.Eq(&index) {
 						from = indices[rand.Intn(len(indices))]
@@ -448,9 +462,9 @@ var _ = Describe("Rng", func() {
 				})
 
 				Specify("Reset", func() {
-					// When an RNG machine in the Done state is supplied with a Reset
-					// instruction, it transitions to the Init state, and forgets
-					// its secrets and shares.
+					// When an RNG machine in the Done state is supplied with a
+					// Reset instruction, it transitions to the Init state, and
+					// forgets its secrets and shares.
 					event := rnger.Reset()
 
 					Expect(event).To(Equal(rng.Reset))
@@ -465,11 +479,13 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes own shares and commitments", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments :=
+					rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
-				// fetch the directed openings computed for the state machine itself
+				// fetch the directed openings computed for the state machine
+				// itself
 				selfOpenings := rnger.DirectedOpenings(index)
 
 				// The directed openings from the RNG machine should be equal
@@ -482,7 +498,8 @@ var _ = Describe("Rng", func() {
 			It("Correctly computes share of unbiased random number, for the entire batch", func() {
 				_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments :=
+					rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 
@@ -498,8 +515,9 @@ var _ = Describe("Rng", func() {
 				Expect(rnger.State()).To(Equal(rng.Done))
 				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
 
-				// the reconstructed verifiable shares of the batch of unbiased random numbers
-				// should be valid against the commitments for those unbiased random numbers
+				// the reconstructed verifiable shares of the batch of unbiased
+				// random numbers should be valid against the commitments for
+				// those unbiased random numbers
 				vssChecker := shamir.NewVSSChecker(h)
 				commitments := rnger.Commitments()
 				vshares := rnger.ReconstructedShares()
@@ -517,7 +535,8 @@ var _ = Describe("Rng", func() {
 
 			JustBeforeEach(func() {
 				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
+				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments =
+					rngutil.GetAllDirectedOpenings(indices, index, b, k, h)
 
 				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
 			})
@@ -623,7 +642,8 @@ var _ = Describe("Rng", func() {
 			machines := make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer :=
+				rngutil.GetAllSharesAndCommitments(indices, b, k, h)
 
 			// Append machines to the network
 			for i, index := range indices {
@@ -656,7 +676,8 @@ var _ = Describe("Rng", func() {
 			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
 			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
 
-			// checker to check validity of verifiable shares against commitments
+			// checker to check validity of verifiable shares against
+			// commitments
 			vssChecker := shamir.NewVSSChecker(h)
 
 			for j := i + 1; j < len(machines); j++ {
@@ -668,22 +689,23 @@ var _ = Describe("Rng", func() {
 				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
-				// Every player has computed the same commitments for the batch of
-				// unbiased random numbers
+				// Every player has computed the same commitments for the batch
+				// of unbiased random numbers
 				comms := machines[j].(*rngutil.RngMachine).Commitments()
 				for l, c := range comms {
 					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
 				}
 
-				// Verify that each machine's share of the unbiased random number (for all batches)
-				// are valid with respect to the reference commitments
+				// Verify that each machine's share of the unbiased random
+				// number (for all batches) are valid with respect to the
+				// reference commitments
 				for l, vshare := range rnShares {
 					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
 				}
 			}
 
-			// Form the indices for machines that were online
-			// and a reconstructor for those indices
+			// Form the indices for machines that were online and a
+			// reconstructor for those indices
 			onlineIndices := make([]open.Fn, 0, len(machines))
 			for j := 0; j < len(machines); j++ {
 				if isOffline[machines[j].ID()] {
@@ -727,7 +749,8 @@ var _ = Describe("Rng", func() {
 			machines := make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer :=
+				rngutil.GetAllSharesAndCommitments(indices, b, k, h)
 
 			// Append machine IDs and get offline machines
 			hasEmptyShares := make(map[mpcutil.ID]bool)
@@ -739,9 +762,8 @@ var _ = Describe("Rng", func() {
 			nOffline := rand.Intn(n - k + 1)
 			shuffleMsgs, isOffline := mpcutil.MessageShufflerDropper(ids, nOffline)
 
-			// Mark some machines as being idle
-			// specifically, at the most k+1 should not be idle
-			// so (n - nOffline) - k - 1 should be idle
+			// Mark some machines as being idle specifically, at the most k+1
+			// should not be idle so (n - nOffline) - k - 1 should be idle
 			// because only (n - nOffline) machines are online
 			idleCount := 0
 			for j := range indices {
@@ -785,7 +807,8 @@ var _ = Describe("Rng", func() {
 			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
 			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
 
-			// checker to check validity of verifiable shares against commitments
+			// checker to check validity of verifiable shares against
+			// commitments
 			vssChecker := shamir.NewVSSChecker(h)
 
 			for j := i + 1; j < len(machines); j++ {
@@ -797,22 +820,23 @@ var _ = Describe("Rng", func() {
 				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
-				// Every player has computed the same commitments for the batch of
-				// unbiased random numbers
+				// Every player has computed the same commitments for the batch
+				// of unbiased random numbers
 				comms := machines[j].(*rngutil.RngMachine).Commitments()
 				for l, c := range comms {
 					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
 				}
 
-				// Verify that each machine's share of the unbiased random number (for all batches)
-				// are valid with respect to the reference commitments
+				// Verify that each machine's share of the unbiased random
+				// number (for all batches) are valid with respect to the
+				// reference commitments
 				for l, vshare := range rnShares {
 					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
 				}
 			}
 
-			// Form the indices for machines that were online
-			// and a reconstructor for those indices
+			// Form the indices for machines that were online and a
+			// reconstructor for those indices
 			onlineIndices := make([]open.Fn, 0, len(machines))
 			for j := 0; j < len(machines); j++ {
 				if isOffline[machines[j].ID()] {
