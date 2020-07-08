@@ -247,8 +247,8 @@ var _ = Describe("RNG", func() {
 				Specify("Supply directed opening", func() {
 					// If an RNG machine in the Init state is supplied with a
 					// valid directed opening it does not react to that and
-					// simply ignores it.  Only after having constructed its
-					// own shares, and being in the WaitingOpen state, it will
+					// simply ignores it. Only after having constructed its own
+					// shares, and being in the WaitingOpen state, it will
 					// handle the directed openings
 
 					// get a `from` index that is different than own index
@@ -431,11 +431,15 @@ var _ = Describe("RNG", func() {
 
 					count := 1
 					for _, from := range indices {
+						if from.Eq(&index) {
+							continue
+						}
 						if count == k {
 							break
 						}
 
 						_ = rnger.TransitionOpen(from, openingsByPlayer[from])
+						count++
 					}
 
 					Expect(rnger.State()).To(Equal(rng.Done))
