@@ -1,4 +1,4 @@
-package testutil
+package mpcutil
 
 import (
 	"os"
@@ -27,7 +27,6 @@ func NewDebugger(filename string, messageType, machineType interface{}) Debugger
 	if err != nil {
 		panic(err)
 	}
-
 
 	// Unmarshal machines.
 	sl := reflect.New(reflect.SliceOf(reflect.TypeOf(machineType)))

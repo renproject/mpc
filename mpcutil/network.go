@@ -1,4 +1,4 @@
-package testutil
+package mpcutil
 
 import (
 	"bytes"
@@ -243,15 +243,17 @@ func (net Network) Dump(filename string) {
 // messages to or from these machines will be dropped. The message order will
 // also be shuffled each round.
 func MessageShufflerDropper(ids []ID, offline int) (func([]Message), map[ID]bool) {
-	rand.Shuffle(len(ids), func(i, j int) {
-		ids[i], ids[j] = ids[j], ids[i]
+	shufIDs := make([]ID, len(ids))
+	copy(shufIDs, ids)
+	rand.Shuffle(len(shufIDs), func(i, j int) {
+		shufIDs[i], shufIDs[j] = shufIDs[j], shufIDs[i]
 	})
 	isOffline := make(map[ID]bool)
 	for i := 0; i < offline; i++ {
-		isOffline[ids[i]] = true
+		isOffline[shufIDs[i]] = true
 	}
-	for i := offline; i < len(ids); i++ {
-		isOffline[ids[i]] = false
+	for i := offline; i < len(shufIDs); i++ {
+		isOffline[shufIDs[i]] = false
 	}
 
 	shuffleMsgs := func(msgs []Message) {
