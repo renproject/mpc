@@ -122,6 +122,13 @@ var _ = Describe("RNG", func() {
 					Expect(event).To(Equal(rng.SharesConstructed))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
+
+					for _, j := range indices {
+						shares := rnger.DirectedOpenings(j)
+						for _, share := range shares {
+							Expect(share).ToNot(Equal(shamir.VerifiableShares{}))
+						}
+					}
 				})
 
 				Specify("Supply valid BRNG shares/commitments when k = 1", func() {
@@ -135,49 +142,52 @@ var _ = Describe("RNG", func() {
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 				})
 
-				Specify("Supply empty sets of shares, or sets of shares of length not equal to the batch size", func() {
+				Specify("Supply empty sets of shares", func() {
 					// If an RNG machine is supplied with BRNG output
 					// commitments, but empty shares, those shares are simply
 					// ignored. The machine still proceeds computing the
 					// commitments and moves to the WaitingOpen state while
-					// returning the CommitmentsConstructed event. Sets of
-					// shares of length not equal to the batch size of the RNG
-					// machine are also ignored, simply proceeding to
-					// processing the commitments
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+					// returning the CommitmentsConstructed event.
+					_, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
 
 					// Initialise three RNG replicas
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-					_, rnger2 := rng.New(index, indices, uint32(b), uint32(k), h)
-					_, rnger3 := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					event := rnger.TransitionShares([]shamir.VerifiableShares{}, setsOfCommitments)
-					event2 := rnger2.TransitionShares(setsOfShares[1:], setsOfCommitments)
-					event3 := rnger3.TransitionShares(setsOfShares, setsOfCommitments)
 
 					Expect(event).To(Equal(rng.CommitmentsConstructed))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 
-					Expect(event2).To(Equal(rng.CommitmentsConstructed))
-					Expect(rnger2.State()).To(Equal(rng.WaitingOpen))
-					Expect(rnger2.HasConstructedShares()).To(BeTrue())
-
-					Expect(event3).To(Equal(rng.SharesConstructed))
-					Expect(rnger3.State()).To(Equal(rng.WaitingOpen))
-					Expect(rnger3.HasConstructedShares()).To(BeTrue())
-
-					// verify that the constructed shares are simply empty for
-					// rnger while they are non-empty for rnger2
+					// verify that the constructed shares are simply empty
 					for _, j := range indices {
 						shares := rnger.DirectedOpenings(j)
-						shares2 := rnger2.DirectedOpenings(j)
-						shares3 := rnger3.DirectedOpenings(j)
-
-						for i, share := range shares {
+						for _, share := range shares {
 							Expect(share).To(Equal(shamir.VerifiableShares{}))
-							Expect(shares2[i]).To(Equal(shamir.VerifiableShares{}))
-							Expect(shares3[i]).ToNot(Equal(shamir.VerifiableShares{}))
+						}
+					}
+				})
+
+				Specify("Supply sets of shares of length not equal to the batch size", func() {
+					// Sets of shares of length not equal to the batch size of
+					// the RNG machine are ignored, simply proceeding to
+					// processing the commitments
+					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h)
+
+					// Initialise three RNG replicas
+					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
+
+					event := rnger.TransitionShares(setsOfShares[1:], setsOfCommitments)
+
+					Expect(event).To(Equal(rng.CommitmentsConstructed))
+					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
+					Expect(rnger.HasConstructedShares()).To(BeTrue())
+
+					// verify that the constructed shares are simply empty
+					for _, j := range indices {
+						shares := rnger.DirectedOpenings(j)
+						for _, share := range shares {
+							Expect(share).To(Equal(shamir.VerifiableShares{}))
 						}
 					}
 				})
