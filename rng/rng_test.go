@@ -519,11 +519,15 @@ var _ = Describe("RNG", func() {
 
 				count := 1
 				for _, from := range indices {
+					if from.Eq(&index) {
+						continue
+					}
 					if count == k {
 						break
 					}
 
 					_ = rnger.TransitionOpen(from, openingsByPlayer[from])
+					count++
 				}
 
 				Expect(rnger.State()).To(Equal(rng.Done))
