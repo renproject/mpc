@@ -154,7 +154,7 @@ func (machine RngMachine) InitialMessages() []mpcutil.Message {
 func (machine *RngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	switch msg := msg.(type) {
 	case *RngMessage:
-		machine.rnger.TransitionOpen(msg.fromIndex, msg.openings)
+		machine.rnger.TransitionOpen(msg.openings)
 		return nil
 
 	default:

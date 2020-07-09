@@ -259,7 +259,7 @@ var _ = Describe("RNG", func() {
 
 					// initialise player's RNG machine and supply openings
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-					event := rnger.TransitionOpen(open.Fn{}, shamir.VerifiableShares{})
+					event := rnger.TransitionOpen(shamir.VerifiableShares{})
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.Init))
@@ -330,13 +330,14 @@ var _ = Describe("RNG", func() {
 					}
 
 					// Openings length not equal to batch size
-					event := rnger.TransitionOpen(from, openingsByPlayer[from][1:])
+					event := rnger.TransitionOpen(openingsByPlayer[from][1:])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 
 					// Sender index is randomly chosen, so does not exist in
 					// the initial player indices
-					event = rnger.TransitionOpen(secp256k1.RandomSecp256k1N(), openingsByPlayer[from])
+					shamirutil.PerturbIndex(&openingsByPlayer[from][rand.Intn(b)])
+					event = rnger.TransitionOpen(openingsByPlayer[from])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
@@ -353,7 +354,7 @@ var _ = Describe("RNG", func() {
 						from = indices[rand.Intn(len(indices))]
 					}
 
-					event := rnger.TransitionOpen(from, openingsByPlayer[from])
+					event := rnger.TransitionOpen(openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsAdded))
 					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -375,7 +376,7 @@ var _ = Describe("RNG", func() {
 						}
 
 						if count == k-1 {
-							event := rnger.TransitionOpen(from, openingsByPlayer[from])
+							event := rnger.TransitionOpen(openingsByPlayer[from])
 
 							Expect(event).To(Equal(rng.RNGsReconstructed))
 							Expect(rnger.State()).To(Equal(rng.Done))
@@ -385,7 +386,7 @@ var _ = Describe("RNG", func() {
 						}
 
 						if count < k-1 {
-							event := rnger.TransitionOpen(from, openingsByPlayer[from])
+							event := rnger.TransitionOpen(openingsByPlayer[from])
 
 							Expect(event).To(Equal(rng.OpeningsAdded))
 							Expect(rnger.State()).To(Equal(rng.WaitingOpen))
@@ -433,7 +434,7 @@ var _ = Describe("RNG", func() {
 							break
 						}
 
-						_ = rnger.TransitionOpen(from, openingsByPlayer[from])
+						_ = rnger.TransitionOpen(openingsByPlayer[from])
 						count++
 					}
 
@@ -464,7 +465,7 @@ var _ = Describe("RNG", func() {
 						from = indices[rand.Intn(len(indices))]
 					}
 
-					event := rnger.TransitionOpen(from, openingsByPlayer[from])
+					event := rnger.TransitionOpen(openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rnger.State()).To(Equal(rng.Done))
@@ -521,7 +522,7 @@ var _ = Describe("RNG", func() {
 						break
 					}
 
-					_ = rnger.TransitionOpen(from, openingsByPlayer[from])
+					_ = rnger.TransitionOpen(openingsByPlayer[from])
 					count++
 				}
 
@@ -587,7 +588,7 @@ var _ = Describe("RNG", func() {
 						break
 					}
 
-					_ = rnger.TransitionOpen(from, openingsByPlayer[from])
+					_ = rnger.TransitionOpen(openingsByPlayer[from])
 				}
 				Expect(rnger.State()).To(Equal(rng.Done))
 				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
