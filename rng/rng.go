@@ -425,9 +425,6 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 // `r_j` for the `b` random numbers.
 //
 // - Inputs
-//   - fromIndex is the index of the RNG machine from which we are receiving directed openings
-//	   - MUST be a part of the set of indices in RNG machine
-//	   - Will be ignored if valid openings are already supplied by this index
 //   - openings are the directed openings
 //	   - MUST be of length b (batch size)
 //	   - Will be ignored if they're not consistent with their respective commitments
