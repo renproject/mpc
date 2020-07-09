@@ -251,12 +251,6 @@ var _ = Describe("RNG", func() {
 					// shares, and being in the WaitingOpen state, it will
 					// handle the directed openings
 
-					// get a `from` index that is different than own index
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
-
 					// initialise player's RNG machine and supply openings
 					_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 					event := rnger.TransitionOpen(shamir.VerifiableShares{})
@@ -324,10 +318,7 @@ var _ = Describe("RNG", func() {
 					//
 					// get a random player who is not the current RNG machine's
 					// player
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
+					from := rngutil.RandomOtherIndex(indices, &index)
 
 					// Openings length not equal to batch size
 					event := rnger.TransitionOpen(openingsByPlayer[from][1:])
@@ -349,10 +340,7 @@ var _ = Describe("RNG", func() {
 					//
 					// get a random player who is not the current RNG machine's
 					// player
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
+					from := rngutil.RandomOtherIndex(indices, &index)
 
 					event := rnger.TransitionOpen(openingsByPlayer[from])
 
@@ -460,10 +448,7 @@ var _ = Describe("RNG", func() {
 					// When an RNG machine in the Done state is supplied with
 					// valid directed openings, it simply ignores them and
 					// continues to be in the same state
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
+					from := rngutil.RandomOtherIndex(indices, &index)
 
 					event := rnger.TransitionOpen(openingsByPlayer[from])
 

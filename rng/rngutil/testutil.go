@@ -1,6 +1,8 @@
 package rngutil
 
 import (
+	"math/rand"
+
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
@@ -23,6 +25,16 @@ func Min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// RandomOtherIndex returns a random index from the list of given indices that
+// is not equal to the given index.
+func RandomOtherIndex(indices []open.Fn, avoid *open.Fn) open.Fn {
+	index := indices[rand.Intn(len(indices))]
+	for index.Eq(avoid) {
+		index = indices[rand.Intn(len(indices))]
+	}
+	return index
 }
 
 // BRNGOutputBatch creates a random output for one player from BRNG, with the
