@@ -1,14 +1,13 @@
 package rngutil
 
 import (
+	"math/rand"
+
+	"github.com/renproject/mpc/open"
+	"github.com/renproject/mpc/rng/compute"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-
-	"github.com/renproject/mpc/brng"
-	"github.com/renproject/mpc/brng/brngutil"
-	"github.com/renproject/mpc/brng/table"
-	"github.com/renproject/mpc/open"
 )
 
 // Max returns the maximum of the two arguments
@@ -27,237 +26,202 @@ func Min(a, b int) int {
 	return b
 }
 
-// GetAllSharesAndCommitments computes BRNG shares and commitments for
-// all players participating in the RNG protocol
-func GetAllSharesAndCommitments(
-	indices []open.Fn,
-	b, k int,
-	h curve.Point,
-	isZero bool,
-) (
-	map[open.Fn][]shamir.VerifiableShares,
-	map[open.Fn][][]shamir.Commitment,
-) {
-	setsOfSharesByPlayer := make(map[open.Fn][]shamir.VerifiableShares)
-	setsOfCommitmentsByPlayer := make(map[open.Fn][][]shamir.Commitment)
-	for _, index := range indices {
-		setsOfSharesByPlayer[index] = make([]shamir.VerifiableShares, b)
-		setsOfCommitmentsByPlayer[index] = make([][]shamir.Commitment, b)
+// RandomOtherIndex returns a random index from the list of given indices that
+// is not equal to the given index.
+func RandomOtherIndex(indices []open.Fn, avoid *open.Fn) open.Fn {
+	index := indices[rand.Intn(len(indices))]
+	for index.Eq(avoid) {
+		index = indices[rand.Intn(len(indices))]
 	}
-
-	brnger := brng.New(indices, h)
-	for i := 0; i < b; i++ {
-		var table table.Table
-		if isZero {
-			table = brngutil.RandomValidTable(indices, h, k, k-1, len(indices))
-		} else {
-			table = brngutil.RandomValidTable(indices, h, k, k, len(indices))
-		}
-
-		for _, index := range indices {
-			slice := table.TakeSlice(index, indices)
-
-			brnger.Reset()
-
-			if isZero {
-				brnger.TransitionStart(k, k-1)
-			} else {
-				brnger.TransitionStart(k, k)
-			}
-
-			shares, commitments, _ := brnger.TransitionSlice(slice)
-
-			// Assign them to the `from` player
-			setsOfSharesByPlayer[index][i] = shares
-			setsOfCommitmentsByPlayer[index][i] = commitments
-		}
-	}
-
-	return setsOfSharesByPlayer, setsOfCommitmentsByPlayer
+	return index
 }
 
-// GetAllDirectedOpenings computes directed openings from all players
-// to the single player in consideration
-func GetAllDirectedOpenings(
-	indices []open.Fn,
-	to open.Fn,
-	b, k int,
-	h curve.Point,
-	isZero bool,
-) (
-	map[open.Fn]shamir.VerifiableShares,
-	map[open.Fn][]shamir.Commitment,
+// BRNGOutputBatch creates a random output for one player from BRNG, with the
+// given batch number.
+func BRNGOutputBatch(index open.Fn, b, k int, h curve.Point) (
 	[]shamir.VerifiableShares,
 	[][]shamir.Commitment,
 ) {
-	openingsByPlayer := make(map[open.Fn]shamir.VerifiableShares)
-	commitmentsByPlayer := make(map[open.Fn][]shamir.Commitment)
+	shares := make([]shamir.VerifiableShares, b)
+	coms := make([][]shamir.Commitment, b)
 
-	// Allocate memory for local variable
-	setsOfSharesByPlayer := make(map[open.Fn][]shamir.VerifiableShares)
-	setsOfCommitmentsByPlayer := make(map[open.Fn][][]shamir.Commitment)
-	for _, from := range indices {
-		openingsByPlayer[from] = make(shamir.VerifiableShares, b)
-		commitmentsByPlayer[from] = make([]shamir.Commitment, b)
-		setsOfSharesByPlayer[from] = make([]shamir.VerifiableShares, b)
-		setsOfCommitmentsByPlayer[from] = make([][]shamir.Commitment, b)
-	}
-
-	// Generate random table and distribute appropriately
-	brnger := brng.New(indices, h)
 	for i := 0; i < b; i++ {
-		var table table.Table
-		if isZero {
-			table = brngutil.RandomValidTable(indices, h, k, k-1, len(indices))
-		} else {
-			table = brngutil.RandomValidTable(indices, h, k, k, len(indices))
-		}
-
-		for _, from := range indices {
-			// Take the appropriate slice from table
-			slice := table.TakeSlice(from, indices)
-
-			// Reset the dummy BRNG machine and extract shares/commitments
-			brnger.Reset()
-			if isZero {
-				brnger.TransitionStart(k, k-1)
-			} else {
-				brnger.TransitionStart(k, k)
-			}
-			shares, commitments, _ := brnger.TransitionSlice(slice)
-
-			// Assign them to the `from` player
-			setsOfSharesByPlayer[from][i] = shares
-			setsOfCommitmentsByPlayer[from][i] = commitments
-		}
+		shares[i], coms[i] = BRNGOutput(index, k, h)
 	}
 
-	// Compute directed openings for each player
-	for _, from := range indices {
-		openings, commitments := GetDirectedOpenings(
-			setsOfSharesByPlayer[from],
-			setsOfCommitmentsByPlayer[from],
-			to, isZero,
-		)
-
-		openingsByPlayer[from] = openings
-		commitmentsByPlayer[from] = commitments
-	}
-
-	return openingsByPlayer,
-		commitmentsByPlayer,
-		setsOfSharesByPlayer[to],
-		setsOfCommitmentsByPlayer[to]
+	return shares, coms
 }
 
-// GetBrngOutputs uses a temporary BRNG engine to generate random
-// sets of shares and commitments
-func GetBrngOutputs(
+// BRNGOutput creates a random output for one player from BRNG.
+func BRNGOutput(index open.Fn, k int, h curve.Point) (
+	shamir.VerifiableShares,
+	[]shamir.Commitment,
+) {
+	shares := make(shamir.VerifiableShares, k)
+	coms := make([]shamir.Commitment, k)
+
+	var bs [32]byte
+	gPow := curve.New()
+	hPow := curve.New()
+	sCoeffs := make([]open.Fn, k)
+	rCoeffs := make([]open.Fn, k)
+	for i := 0; i < k; i++ {
+		for j := 0; j < k; j++ {
+			sCoeffs[j] = secp256k1.RandomSecp256k1N()
+			rCoeffs[j] = secp256k1.RandomSecp256k1N()
+
+			sCoeffs[j].GetB32(bs[:])
+			gPow.BaseExp(bs)
+			rCoeffs[j].GetB32(bs[:])
+			hPow.Scale(&h, bs)
+			gPow.Add(&gPow, &hPow)
+			coms[i].AppendPoint(gPow)
+		}
+
+		shares[i] = shamir.NewVerifiableShare(shamir.NewShare(index, sCoeffs[k-1]), rCoeffs[k-1])
+		for j := k - 2; j >= 0; j-- {
+			share := shamir.NewVerifiableShare(shamir.NewShare(index, sCoeffs[j]), rCoeffs[j])
+			shares[i].Scale(&shares[i], &index)
+			shares[i].Add(&shares[i], &share)
+		}
+	}
+
+	return shares, coms
+}
+
+// BRNGOutputFullBatch creates a random output of BRNG for all players with the
+// given batch size. The returned map of shares is indexed by the index of the
+// player, and the returned commitments are the same for all players.
+func BRNGOutputFullBatch(
+	indices []open.Fn,
+	b, c, k int,
+	h curve.Point,
+) (
+	map[open.Fn][]shamir.VerifiableShares,
+	[][]shamir.Commitment,
+) {
+	n := len(indices)
+
+	shares := make(map[open.Fn][]shamir.VerifiableShares, n)
+	coms := make([][]shamir.Commitment, b)
+
+	var shareBatch []shamir.VerifiableShares
+	for i := 0; i < b; i++ {
+		shareBatch, coms[i] = BRNGOutputFull(indices, c, k, h)
+
+		for j, ind := range indices {
+			shares[ind] = append(shares[ind], shareBatch[j])
+		}
+	}
+
+	return shares, coms
+}
+
+// BRNGOutputFull creates a random output of BRNG for all players.
+func BRNGOutputFull(
+	indices []open.Fn,
+	c, k int,
+	h curve.Point,
+) (
+	[]shamir.VerifiableShares,
+	[]shamir.Commitment,
+) {
+	n := len(indices)
+
+	sharer := shamir.NewVSSharer(indices, h)
+	coefShares := make([]shamir.VerifiableShares, c)
+	coefComms := make([]shamir.Commitment, c)
+
+	for i := range coefShares {
+		coefShares[i] = make(shamir.VerifiableShares, n)
+		coefComms[i] = shamir.NewCommitmentWithCapacity(k)
+		sharer.Share(&coefShares[i], &coefComms[i], secp256k1.RandomSecp256k1N(), k)
+	}
+
+	coefSharesTrans := make([]shamir.VerifiableShares, n)
+	for i := range coefSharesTrans {
+		coefSharesTrans[i] = make(shamir.VerifiableShares, c)
+	}
+
+	for i, sharing := range coefShares {
+		for j, share := range sharing {
+			coefSharesTrans[j][i] = share
+		}
+	}
+
+	return coefSharesTrans, coefComms
+}
+
+// RNGSharesBatch creates random valid inputs for the RNG state machine for the
+// given batch size. The first two return values are the outputs from BRNG, and
+// the last two return values are the shares from the other players that the
+// player corresponding to `index` is expecting.
+func RNGSharesBatch(
 	indices []open.Fn,
 	index open.Fn,
 	b, k int,
 	h curve.Point,
 	isZero bool,
-) ([]shamir.VerifiableShares, [][]shamir.Commitment) {
-	// We will need a BRNG engine
-	brnger := brng.New(indices, h)
-
-	// since we generate b unbiased random numbers together
-	// and we need k BRNG calls for every random number generation
-	setsOfShares := make([]shamir.VerifiableShares, b)
-	setsOfCommitments := make([][]shamir.Commitment, b)
-	for i := 0; i < b; i++ {
-		// reset the BRNG engine
-		brnger.Reset()
-
-		if isZero {
-			_ = brnger.TransitionStart(k, k-1)
-		} else {
-			_ = brnger.TransitionStart(k, k)
-		}
-
-		// generate a valid table. Each table represents `k` BRNG runs
-		// which also means, a batch size of `k` for the BRNG call
-		var table table.Table
-		if isZero {
-			table = brngutil.RandomValidTable(
-				indices,      // indices of players
-				h,            // pedersen commitment parameter
-				k,            // reconstruction threshold
-				k-1,          // batch size of each BRNG call
-				len(indices), // height of the table
-			)
-		} else {
-			table = brngutil.RandomValidTable(
-				indices,      // indices of players
-				h,            // pedersen commitment parameter
-				k,            // reconstruction threshold
-				k,            // batch size of each BRNG call
-				len(indices), // height of the table
-			)
-		}
-
-		// get slice of this table for the player of our interest
-		slice := table.TakeSlice(index, indices)
-
-		// process slice to get shares and commitments
-		shares, commitments, _ := brnger.TransitionSlice(slice)
-		setsOfShares[i] = shares
-		setsOfCommitments[i] = commitments
+) (
+	[]shamir.VerifiableShares,
+	[][]shamir.Commitment,
+	map[open.Fn]shamir.VerifiableShares,
+	[]shamir.Commitment,
+) {
+	n := len(indices)
+	brngComs := make([][]shamir.Commitment, b)
+	brngShares := make([]shamir.VerifiableShares, b)
+	coms := make([]shamir.Commitment, b)
+	shares := make(map[open.Fn]shamir.VerifiableShares, n)
+	for _, ind := range indices {
+		shares[ind] = make(shamir.VerifiableShares, b)
 	}
 
-	return setsOfShares, setsOfCommitments
+	var rngShares shamir.VerifiableShares
+	for i := 0; i < b; i++ {
+		brngShares[i], brngComs[i], rngShares, coms[i] = RNGShares(indices, index, k, h, isZero)
+
+		for j, share := range rngShares {
+			shares[indices[j]][i] = share
+		}
+	}
+
+	return brngShares, brngComs, shares, coms
 }
 
-// GetDirectedOpenings computes and returns openings and their
-// respective commitments from a player for another player
-// using the from player's sets of shares and commitments
-func GetDirectedOpenings(
-	setsOfShares []shamir.VerifiableShares,
-	setsOfCommitments [][]shamir.Commitment,
-	to open.Fn, isZero bool,
-) (shamir.VerifiableShares, []shamir.Commitment) {
-	computedShares := make(shamir.VerifiableShares, len(setsOfShares))
-	computedCommitments := make([]shamir.Commitment, len(setsOfShares))
-
-	for i, setOfShares := range setsOfShares {
-		// Initialise the accumulators with the first values
-		var multiplier open.Fn
-		var accShare shamir.VerifiableShare
-		var accCommitment shamir.Commitment
-
-		if isZero {
-			multiplier.Set(&to)
-			accCommitment = shamir.NewCommitmentWithCapacity(setsOfCommitments[i][0].Len())
-			accCommitment.Scale(&setsOfCommitments[i][0], &multiplier)
-			accShare.Scale(&setsOfShares[i][0], &multiplier)
-		} else {
-			multiplier = secp256k1.OneSecp256k1N()
-			accCommitment.Set(setsOfCommitments[i][0])
-			accShare = setsOfShares[i][0]
-		}
-
-		// For all other shares and commitments
-		for l := 1; l < len(setOfShares); l++ {
-			multiplier.Mul(&multiplier, &to)
-			multiplier.Normalize()
-
-			var share = setOfShares[l]
-			var commitment shamir.Commitment
-			commitment.Set(setsOfCommitments[i][l])
-
-			// Scale it by the multiplier
-			share.Scale(&share, &multiplier)
-			commitment.Scale(&commitment, &multiplier)
-
-			// Add it to the accumulators
-			accShare.Add(&accShare, &share)
-			accCommitment.Add(&accCommitment, &commitment)
-		}
-
-		computedShares[i] = accShare
-		computedCommitments[i].Set(accCommitment)
+// RNGShares creates random valid inputs for the RNG state machine. The first
+// two return values are the outputs from BRNG, and the last two return values
+// are the shares from the other players that the player corresponding to
+// `index` is expecting.
+func RNGShares(
+	indices []open.Fn,
+	index open.Fn,
+	k int,
+	h curve.Point,
+	isZero bool,
+) (shamir.VerifiableShares, []shamir.Commitment, shamir.VerifiableShares, shamir.Commitment) {
+	n := len(indices)
+	var coefSharesTrans []shamir.VerifiableShares
+	var coefComms []shamir.Commitment
+	if isZero {
+		coefSharesTrans, coefComms = BRNGOutputFull(indices, k-1, k, h)
+	} else {
+		coefSharesTrans, coefComms = BRNGOutputFull(indices, k, k, h)
 	}
 
-	return computedShares, computedCommitments
+	com := compute.ShareCommitment(index, coefComms, isZero)
+
+	shares := make(shamir.VerifiableShares, n)
+	for i := range shares {
+		shares[i] = compute.ShareOfShare(index, coefSharesTrans[i], isZero)
+	}
+
+	var ind int
+	for i := range indices {
+		if indices[i].Eq(&index) {
+			ind = i
+		}
+	}
+
+	return coefSharesTrans[ind], coefComms, shares, com
 }

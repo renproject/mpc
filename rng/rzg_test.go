@@ -114,7 +114,7 @@ var _ = Describe("Rzg", func() {
 					// If an RZG machine in the Init state is supplied with
 					// valid sets of shares and commitments from its own BRNG outputs
 					// it transitions to the WaitingOpen state
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k-1, h)
 
 					// Once we have `b` sets of shares and commitments
 					// we are ready to transition the RZG machine
@@ -131,7 +131,7 @@ var _ = Describe("Rzg", func() {
 					// RZG machine's batch size, those shares are simply ignored. But the machine
 					// still proceeds computing the commitments and moves to the WaitingOpen state
 					// while returning the CommitmentsConstructed event
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k-1, h)
 
 					// Initialise two RZG replicas
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
@@ -177,7 +177,7 @@ var _ = Describe("Rzg", func() {
 					// our assumption about the correctness of sets of shares in case they
 					// are of appropriate batch size. The RZG machine hence panics, and continues
 					// to be in its initial state
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k-1, h)
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 
 					// fool around with one of the set of shares
@@ -195,7 +195,7 @@ var _ = Describe("Rzg", func() {
 					// lengths (batch size) for shares and commitment, whereby the commitments
 					// are of incorrect size, we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k-1, h)
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
 					setsOfCommitments = append(setsOfCommitments[:j], setsOfCommitments[j+1:]...)
@@ -209,7 +209,7 @@ var _ = Describe("Rzg", func() {
 					// If an RZG machine is supplied with BRNG outputs that have at least one commitment,
 					// not of appropriate capacity (k-1) we panic because it refutes our assumption
 					// about the correctness of the sets of commitments
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k-1, h)
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 					j := rand.Intn(b)
 					ii := rand.Intn(k - 1)
@@ -223,20 +223,9 @@ var _ = Describe("Rzg", func() {
 					// Only after having constructed its own shares, and being in the WaitingOpen
 					// state, it will handle the directed openings
 
-					// get a `from` index that is different than own index
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
-
-					// get this `from` index's sets of shares and commitments
-					// also compute its openings for the player
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
-					openings, _ := rngutil.GetDirectedOpenings(setsOfShares, setsOfCommitments, index, isZero)
-
 					// initialise player's RZG machine and supply openings
 					_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
-					event := rzger.TransitionOpen(from, openings)
+					event := rzger.TransitionOpen(shamir.VerifiableShares{})
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rzger.State()).To(Equal(rng.Init))
@@ -260,7 +249,8 @@ var _ = Describe("Rzg", func() {
 				) {
 					_, rzger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+					ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ =
+						rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
 
 					event := rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 					Expect(event).To(Equal(rng.SharesConstructed))
@@ -283,7 +273,7 @@ var _ = Describe("Rzg", func() {
 				Specify("Supply BRNG shares", func() {
 					// When an RZG machine in the WaitingOpen state is supplied BRNG shares
 					// it simply ignores them and continues to be in the same state
-					setsOfShares, setsOfCommitments := rngutil.GetBrngOutputs(indices, index, b, k, h, isZero)
+					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k-1, h)
 					event := rzger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesIgnored))
@@ -296,18 +286,16 @@ var _ = Describe("Rzg", func() {
 					// simply ignores those openings and continues to be in the same state
 					//
 					// get a random player who is not the current RZG machine's player
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
+					from := rngutil.RandomOtherIndex(indices, &index)
 
 					// Openings length not equal to batch size
-					event := rzger.TransitionOpen(from, openingsByPlayer[from][1:])
+					event := rzger.TransitionOpen(openingsByPlayer[from][1:])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rzger.State()).To(Equal(rng.WaitingOpen))
 
 					// Sender index is randomly chosen, so does not exist in the initial player indices
-					event = rzger.TransitionOpen(secp256k1.RandomSecp256k1N(), openingsByPlayer[from])
+					shamirutil.PerturbIndex(&openingsByPlayer[from][rand.Intn(b)])
+					event = rzger.TransitionOpen(openingsByPlayer[from])
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rzger.State()).To(Equal(rng.WaitingOpen))
 				})
@@ -317,12 +305,9 @@ var _ = Describe("Rzg", func() {
 					// it adds those to its opener and continues to be in the WaitingOpen state.
 					//
 					// get a random player who is not the current RZG machine's player
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
+					from := rngutil.RandomOtherIndex(indices, &index)
 
-					event := rzger.TransitionOpen(from, openingsByPlayer[from])
+					event := rzger.TransitionOpen(openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsAdded))
 					Expect(rzger.State()).To(Equal(rng.WaitingOpen))
@@ -343,7 +328,7 @@ var _ = Describe("Rzg", func() {
 						}
 
 						if count == k-1 {
-							event := rzger.TransitionOpen(from, openingsByPlayer[from])
+							event := rzger.TransitionOpen(openingsByPlayer[from])
 
 							Expect(event).To(Equal(rng.RNGsReconstructed))
 							Expect(rzger.State()).To(Equal(rng.Done))
@@ -353,7 +338,7 @@ var _ = Describe("Rzg", func() {
 						}
 
 						if count < k-1 {
-							event := rzger.TransitionOpen(from, openingsByPlayer[from])
+							event := rzger.TransitionOpen(openingsByPlayer[from])
 
 							Expect(event).To(Equal(rng.OpeningsAdded))
 							Expect(rzger.State()).To(Equal(rng.WaitingOpen))
@@ -381,7 +366,8 @@ var _ = Describe("Rzg", func() {
 				) {
 					_, rzger = rng.New(index, indices, uint32(b), uint32(k), h)
 
-					openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments = rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+					ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ =
+						rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
 
 					_ = rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -391,7 +377,7 @@ var _ = Describe("Rzg", func() {
 							break
 						}
 
-						_ = rzger.TransitionOpen(from, openingsByPlayer[from])
+						_ = rzger.TransitionOpen(openingsByPlayer[from])
 					}
 
 					Expect(rzger.State()).To(Equal(rng.Done))
@@ -415,12 +401,9 @@ var _ = Describe("Rzg", func() {
 					// When an RZG machine in the Done state is supplied with valid
 					// directed openings, it simply ignores them and continues
 					// to be in the same state
-					from := indices[rand.Intn(len(indices))]
-					for from.Eq(&index) {
-						from = indices[rand.Intn(len(indices))]
-					}
+					from := rngutil.RandomOtherIndex(indices, &index)
 
-					event := rzger.TransitionOpen(from, openingsByPlayer[from])
+					event := rzger.TransitionOpen(openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
 					Expect(rzger.State()).To(Equal(rng.Done))
@@ -444,7 +427,8 @@ var _ = Describe("Rzg", func() {
 			It("Correctly computes own shares and commitments", func() {
 				_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
+					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
 
 				rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -461,7 +445,8 @@ var _ = Describe("Rzg", func() {
 			It("Correctly computes share of unbiased random number, for the entire batch", func() {
 				_, rzger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-				openingsByPlayer, _, ownSetsOfShares, ownSetsOfCommitments := rngutil.GetAllDirectedOpenings(indices, index, b, k, h, isZero)
+				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
+					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
 
 				_ = rzger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
@@ -471,7 +456,7 @@ var _ = Describe("Rzg", func() {
 						break
 					}
 
-					_ = rzger.TransitionOpen(from, openingsByPlayer[from])
+					_ = rzger.TransitionOpen(openingsByPlayer[from])
 				}
 
 				Expect(rzger.State()).To(Equal(rng.Done))
@@ -513,7 +498,7 @@ var _ = Describe("Rzg", func() {
 			machines = make([]mpcutil.Machine, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.GetAllSharesAndCommitments(indices, b, k, h, isZero)
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer := rngutil.BRNGOutputFullBatch(indices, b, k-1, k, h)
 
 			// Append machines to the network
 			for i, index := range indices {
@@ -521,7 +506,7 @@ var _ = Describe("Rzg", func() {
 				rngMachine := rngutil.NewRngMachine(
 					id, index, indices, b, k, h, isZero,
 					setsOfSharesByPlayer[index],
-					setsOfCommitmentsByPlayer[index],
+					setsOfCommitmentsByPlayer,
 					false,
 				)
 				machines[i] = &rngMachine

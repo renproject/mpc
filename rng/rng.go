@@ -435,9 +435,6 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 // `r_j` for the `b` random numbers.
 //
 // - Inputs
-//   - fromIndex is the index of the RNG machine from which we are receiving directed openings
-//	   - MUST be a part of the set of indices in RNG machine
-//	   - Will be ignored if valid openings are already supplied by this index
 //   - openings are the directed openings
 //	   - MUST be of length b (batch size)
 //	   - Will be ignored if they're not consistent with their respective commitments
@@ -449,31 +446,10 @@ func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
 // 		- RNGsReconstructed when the set of openings was the kth valid set and
 // 			hence the RNGer could reconstruct its shares for the unbiased
 // 			random numbers
-func (rnger *RNGer) TransitionOpen(
-	fromIndex open.Fn,
-	openings shamir.VerifiableShares,
-) TransitionEvent {
+func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `WaitingOpen`
 	// state.
 	if rnger.state != WaitingOpen {
-		return OpeningsIgnored
-	}
-
-	// Ignore if the number of openings supplied is not equal to the RNG
-	// machine's batch size.
-	if len(openings) != int(rnger.batchSize) {
-		return OpeningsIgnored
-	}
-
-	// If the fromIndex cannot be found in the set of valid machine indices
-	// ignore the openings.
-	validIndex := false
-	for _, index := range rnger.indices {
-		if index.Eq(&fromIndex) {
-			validIndex = true
-		}
-	}
-	if validIndex == false {
 		return OpeningsIgnored
 	}
 
@@ -481,19 +457,15 @@ func (rnger *RNGer) TransitionOpen(
 	// received valid commitments from BRNG outputs.
 	event := rnger.opener.TransitionShares(openings)
 
-	// If the opener has received enough shares to be able to reconstruct the
-	// secrets.
-	if event == open.Done {
+	switch event {
+	case open.Done:
 		rnger.state = Done
 		return RNGsReconstructed
-	}
-
-	// If the opener has added the shares correctly (they are valid).
-	if event == open.SharesAdded {
+	case open.SharesAdded:
 		return OpeningsAdded
+	default:
+		return OpeningsIgnored
 	}
-
-	return OpeningsIgnored
 }
 
 // ReconstructedShares returns the `b` verifiable shares for the `b` random
