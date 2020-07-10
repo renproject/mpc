@@ -336,14 +336,16 @@ func (rnger *RNGer) TransitionShares(
 	// Shares validity
 	//
 
-	// Each set of shares in the batch should have the correct length.
-	for _, shares := range setsOfShares {
-		if !ignoreShares && len(shares) != requiredBrngBatchSize {
-			panic("invalid set of shares")
+	if !ignoreShares {
+		// Each set of shares in the batch should have the correct length.
+		for _, shares := range setsOfShares {
+			if len(shares) != requiredBrngBatchSize {
+				panic("invalid set of shares")
+			}
 		}
 	}
 
-	// Declare variable to hold commitments to initialize the opener
+	// Declare variable to hold commitments to initialize the opener.
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
 
 	// Construct the commitments for the batch of unbiased random numbers.
@@ -371,12 +373,8 @@ func (rnger *RNGer) TransitionShares(
 	// If the sets of shares are valid, we must construct the directed openings
 	// to other players in the network.
 	if !ignoreShares {
-		// For every player in the network,
 		for _, j := range rnger.indices {
-			// for every set of commitments in the batch (sets of commitments),
 			for _, setOfShares := range setsOfShares {
-				// if the sets of shares are valid, compute the share of the
-				// share and append to the directed openings map.
 				accShare := compute.ShareOfShare(j, setOfShares)
 				if isZero {
 					accShare.Scale(&accShare, &j)
