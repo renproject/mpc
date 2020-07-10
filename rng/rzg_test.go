@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
@@ -23,6 +22,7 @@ var _ = Describe("RZG", func() {
 	Describe("Network Simulation", func() {
 		var ids []mpcutil.ID
 		var machines []mpcutil.Machine
+		var indices []open.Fn
 		var network mpcutil.Network
 		var shuffleMsgs func([]mpcutil.Message)
 		var isOffline map[mpcutil.ID]bool
@@ -32,7 +32,7 @@ var _ = Describe("RZG", func() {
 		JustBeforeEach(func() {
 			// Randomise RZG network scenario
 			n := 5 + rand.Intn(6)
-			indices := shamirutil.RandomIndices(n)
+			indices = shamirutil.RandomIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
 			h = curve.Random()
@@ -90,22 +90,22 @@ var _ = Describe("RZG", func() {
 				rnCommitments := machines[j].(*rngutil.RngMachine).Commitments()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
+				// Every player has computed the same commitments
 				for l, c := range rnCommitments {
 					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
 				}
 
-				// Verify that each machine's share of the unbiased random
-				// number (all zeroes) are valid with respect to the reference
-				// commitments
-				for l, c := range rnCommitments {
-					Expect(vssChecker.IsValid(&c, &rnShares[l])).To(BeTrue())
+				// Verify that each machine's share is valid with respect to
+				// the reference commitments
+				for l, vshare := range rnShares {
+					Expect(vssChecker.IsValid(&rnCommitments[l], &vshare)).To(BeTrue())
 				}
 			}
 
 			// For every batch in batch size, the shares that every player has
 			// should be consistent
+			reconstructor := shamir.NewReconstructor(indices)
 			for i := 0; i < b; i++ {
-				indices := make([]open.Fn, 0, len(machines))
 				shares := make(shamir.Shares, 0, len(machines))
 
 				for j := 0; j < len(machines); j++ {
@@ -113,21 +113,16 @@ var _ = Describe("RZG", func() {
 						continue
 					}
 
-					evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
 					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
-
-					indices = append(indices, evaluationPoint)
 					shares = append(shares, vshare.Share())
 				}
 
-				reconstructor := shamir.NewReconstructor(indices)
 				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
 				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
 
-				expectedSecret := secp256k1.ZeroSecp256k1N()
 				secret, err := reconstructor.Open(shares)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(secret.Eq(&expectedSecret)).To(BeTrue())
+				Expect(secret.IsZero()).To(BeTrue())
 			}
 		})
 	})

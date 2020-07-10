@@ -245,37 +245,24 @@ var _ = Describe("RNG", func() {
 				}
 
 				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
+				rnCommitments := machines[j].(*rngutil.RngMachine).Commitments()
 				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
 
-				// Every player has computed the same commitments for the batch
-				// of unbiased random numbers
-				comms := machines[j].(*rngutil.RngMachine).Commitments()
-				for l, c := range comms {
+				// Every player has computed the same commitments
+				for l, c := range rnCommitments {
 					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
 				}
 
-				// Verify that each machine's share of the unbiased random
-				// number (for all batches) are valid with respect to the
-				// reference commitments
+				// Verify that each machine's share is valid with respect to
+				// the reference commitments
 				for l, vshare := range rnShares {
-					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
+					Expect(vssChecker.IsValid(&rnCommitments[l], &vshare)).To(BeTrue())
 				}
 			}
-
-			// Form the indices for machines that were online and a
-			// reconstructor for those indices
-			onlineIndices := make([]open.Fn, 0, len(machines))
-			for j := 0; j < len(machines); j++ {
-				if isOffline[machines[j].ID()] {
-					continue
-				}
-				evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
-				onlineIndices = append(onlineIndices, evaluationPoint)
-			}
-			reconstructor := shamir.NewReconstructor(onlineIndices)
 
 			// For every batch in batch size, the shares that every player has
 			// should be consistent
+			reconstructor := shamir.NewReconstructor(indices)
 			for i := 0; i < b; i++ {
 				shares := make(shamir.Shares, 0, len(machines))
 
@@ -285,7 +272,6 @@ var _ = Describe("RNG", func() {
 					}
 
 					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
-
 					shares = append(shares, vshare.Share())
 				}
 
