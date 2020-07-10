@@ -209,11 +209,17 @@ func RNGShares(
 		coefSharesTrans, coefComms = BRNGOutputFull(indices, k, k, h)
 	}
 
-	com := compute.ShareCommitment(index, coefComms, isZero)
+	com := compute.ShareCommitment(index, coefComms)
+	if isZero {
+		com.Scale(&com, &index)
+	}
 
 	shares := make(shamir.VerifiableShares, n)
 	for i := range shares {
-		shares[i] = compute.ShareOfShare(index, coefSharesTrans[i], isZero)
+		shares[i] = compute.ShareOfShare(index, coefSharesTrans[i])
+		if isZero {
+			shares[i].Scale(&shares[i], &index)
+		}
 	}
 
 	var ind int

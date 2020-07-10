@@ -348,11 +348,23 @@ func (rnger *RNGer) TransitionShares(
 
 	// Construct the commitments for the batch of unbiased random numbers.
 	for i, setOfCommitments := range setsOfCommitments {
-		rnger.commitments[i] = compute.OutputCommitment(setOfCommitments, isZero)
+		// Compute the output commitment.
+		rnger.commitments[i] = shamir.NewCommitmentWithCapacity(int(rnger.threshold))
+		if isZero {
+			rnger.commitments[i].AppendPoint(curve.Infinity())
+		}
+
+		for _, c := range setOfCommitments {
+			rnger.commitments[i].AppendPoint(c.GetPoint(0))
+		}
 
 		// Compute the share commitment and add it to the local set of
 		// commitments.
-		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments, isZero)
+		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments)
+		if isZero {
+			accCommitment.Scale(&accCommitment, &rnger.index)
+		}
+
 		locallyComputedCommitments[i].Set(accCommitment)
 	}
 
@@ -365,7 +377,10 @@ func (rnger *RNGer) TransitionShares(
 			for _, setOfShares := range setsOfShares {
 				// if the sets of shares are valid, compute the share of the
 				// share and append to the directed openings map.
-				accShare := compute.ShareOfShare(j, setOfShares, isZero)
+				accShare := compute.ShareOfShare(j, setOfShares)
+				if isZero {
+					accShare.Scale(&accShare, &j)
+				}
 				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
 			}
 		}
