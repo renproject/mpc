@@ -209,247 +209,168 @@ var _ = Describe("RNG", func() {
 	})
 
 	Describe("Network Simulation", func() {
-		Specify("RNG machines should reconstruct the consistent shares for random numbers", func() {
+		var n, b, k, nOffline int
+		var indices []open.Fn
+		var h curve.Point
+		var isZero bool
+		var ids []mpcutil.ID
+		var setsOfSharesByPlayer map[open.Fn][]shamir.VerifiableShares
+		var setsOfCommitmentsByPlayer [][]shamir.Commitment
+		var shuffleMsgs func([]mpcutil.Message)
+		var isOffline map[mpcutil.ID]bool
+		var machines []mpcutil.Machine
+
+		CheckMachines := func(
+			machines []mpcutil.Machine,
+			isOffline map[mpcutil.ID]bool,
+			b, k int,
+			h curve.Point,
+		) {
+			// ID of the first online machine
+			i := 0
+			for isOffline[machines[i].ID()] {
+				i = i + 1
+			}
+
+			// Get the unbiased random numbers calculated by that RNG machine
+			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
+			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
+
+			vssChecker := shamir.NewVSSChecker(h)
+
+			for j := i + 1; j < len(machines); j++ {
+				// Ignore if that machine is offline
+				if isOffline[machines[j].ID()] {
+					continue
+				}
+
+				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
+				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
+
+				// Every player has computed the same commitments for the batch
+				// of unbiased random numbers
+				comms := machines[j].(*rngutil.RngMachine).Commitments()
+				for l, c := range comms {
+					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+				}
+
+				// Verify that each machine's share of the unbiased random
+				// number (for all batches) are valid with respect to the
+				// reference commitments
+				for l, vshare := range rnShares {
+					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
+				}
+			}
+
+			// Form the indices for machines that were online and a
+			// reconstructor for those indices
+			onlineIndices := make([]open.Fn, 0, len(machines))
+			for j := 0; j < len(machines); j++ {
+				if isOffline[machines[j].ID()] {
+					continue
+				}
+				evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
+				onlineIndices = append(onlineIndices, evaluationPoint)
+			}
+			reconstructor := shamir.NewReconstructor(onlineIndices)
+
+			// For every batch in batch size, the shares that every player has
+			// should be consistent
+			for i := 0; i < b; i++ {
+				shares := make(shamir.Shares, 0, len(machines))
+
+				for j := 0; j < len(machines); j++ {
+					if isOffline[machines[j].ID()] {
+						continue
+					}
+
+					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
+
+					shares = append(shares, vshare.Share())
+				}
+
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+			}
+		}
+
+		Setup := func() {
 			// Randomise RNG network scenario
-			n := 5 + rand.Intn(6)
-			indices := shamirutil.SequentialIndices(n)
-			b := 3 + rand.Intn(3)
-			k := 3 + rand.Intn(n-3)
-			h := curve.Random()
-			isZero := false
+			n = 15 + rand.Intn(6)
+			indices = shamirutil.SequentialIndices(n)
+			b = 3 + rand.Intn(3)
+			k = rngutil.Min(3+rand.Intn(n-3), 7)
+			h = curve.Random()
+			isZero = false
 
 			// Machines (players) participating in the RNG protocol
-			ids := make([]mpcutil.ID, n)
-			machines := make([]mpcutil.Machine, n)
+			ids = make([]mpcutil.ID, n)
 
 			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer :=
+			setsOfSharesByPlayer, setsOfCommitmentsByPlayer =
 				rngutil.BRNGOutputFullBatch(indices, b, k, k, h)
 
-			// Append machines to the network
-			for i, index := range indices {
+			// Append machine IDs and get offline machines
+			for i := range indices {
 				id := mpcutil.ID(i)
+				ids[i] = id
+			}
+			nOffline = rand.Intn(n - k + 1)
+			shuffleMsgs, isOffline = mpcutil.MessageShufflerDropper(ids, nOffline)
+		}
+
+		MakeMachines := func() {
+			machines = make([]mpcutil.Machine, n)
+			for i, index := range indices {
 				rngMachine := rngutil.NewRngMachine(
-					id, index, indices, b, k, h, isZero,
+					mpcutil.ID(i), index, indices, b, k, h, isZero,
 					setsOfSharesByPlayer[index],
 					setsOfCommitmentsByPlayer,
 				)
 				machines[i] = &rngMachine
-				ids[i] = id
 			}
+		}
 
-			nOffline := rand.Intn(n - k + 1)
-			shuffleMsgs, isOffline := mpcutil.MessageShufflerDropper(ids, nOffline)
+		BeforeEach(func() {
+			Setup()
+		})
+
+		Specify("RNG machines should reconstruct the consistent shares for random numbers", func() {
+			MakeMachines()
 			network := mpcutil.NewNetwork(machines, shuffleMsgs)
 			network.SetCaptureHist(true)
 
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
 
-			// ID of the first online machine
-			i := 0
-			for isOffline[machines[i].ID()] {
-				i = i + 1
-			}
-
-			// Get the unbiased random numbers calculated by that RNG machine
-			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
-			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
-
-			vssChecker := shamir.NewVSSChecker(h)
-
-			for j := i + 1; j < len(machines); j++ {
-				// Ignore if that machine is offline
-				if isOffline[machines[j].ID()] {
-					continue
-				}
-
-				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
-				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
-
-				// Every player has computed the same commitments for the batch
-				// of unbiased random numbers
-				comms := machines[j].(*rngutil.RngMachine).Commitments()
-				for l, c := range comms {
-					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
-				}
-
-				// Verify that each machine's share of the unbiased random
-				// number (for all batches) are valid with respect to the
-				// reference commitments
-				for l, vshare := range rnShares {
-					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
-				}
-			}
-
-			// Form the indices for machines that were online and a
-			// reconstructor for those indices
-			onlineIndices := make([]open.Fn, 0, len(machines))
-			for j := 0; j < len(machines); j++ {
-				if isOffline[machines[j].ID()] {
-					continue
-				}
-				evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
-				onlineIndices = append(onlineIndices, evaluationPoint)
-			}
-			reconstructor := shamir.NewReconstructor(onlineIndices)
-
-			// For every batch in batch size, the shares that every player has
-			// should be consistent
-			for i := 0; i < b; i++ {
-				shares := make(shamir.Shares, 0, len(machines))
-
-				for j := 0; j < len(machines); j++ {
-					if isOffline[machines[j].ID()] {
-						continue
-					}
-
-					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
-
-					shares = append(shares, vshare.Share())
-				}
-
-				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
-				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
-			}
+			CheckMachines(machines, isOffline, b, k, h)
 		})
 
 		Specify("With not all RNG machines contributing their BRNG shares", func() {
-			// Randomise RNG network scenario
-			n := 15 + rand.Intn(6)
-			indices := shamirutil.SequentialIndices(n)
-			b := 3 + rand.Intn(3)
-			k := rngutil.Min(3+rand.Intn(n-3), 7)
-			h := curve.Random()
-			isZero := false
-
-			// Machines (players) participating in the RNG protocol
-			ids := make([]mpcutil.ID, n)
-			machines := make([]mpcutil.Machine, n)
-
-			// Get BRNG outputs for all players
-			setsOfSharesByPlayer, setsOfCommitmentsByPlayer :=
-				rngutil.BRNGOutputFullBatch(indices, b, k, k, h)
-
-			// Append machine IDs and get offline machines
-			hasEmptyShares := make(map[mpcutil.ID]bool)
-			for i := range indices {
-				id := mpcutil.ID(i)
-				ids[i] = id
-				hasEmptyShares[id] = false
-			}
-			nOffline := rand.Intn(n - k + 1)
-			shuffleMsgs, isOffline := mpcutil.MessageShufflerDropper(ids, nOffline)
-
 			// Mark some machines as being idle specifically, at the most k+1
 			// should not be idle so (n - nOffline) - k - 1 should be idle
 			// because only (n - nOffline) machines are online
 			idleCount := 0
-			for j := range indices {
+			for j, index := range indices {
 				if isOffline[mpcutil.ID(j)] {
 					continue
 				}
-
 				if idleCount == rngutil.Max(0, (n-nOffline)-k-1) {
 					break
 				}
 
-				hasEmptyShares[mpcutil.ID(j)] = true
+				setsOfSharesByPlayer[index] = []shamir.VerifiableShares{}
 				idleCount++
 			}
 
-			// Append machines to the network
-			var shares []shamir.VerifiableShares
-			for i, index := range indices {
-				id := mpcutil.ID(i)
-				if hasEmptyShares[id] {
-					shares = []shamir.VerifiableShares{}
-				} else {
-					shares = setsOfSharesByPlayer[index]
-				}
-
-				rngMachine := rngutil.NewRngMachine(
-					id, index, indices, b, k, h, isZero,
-					shares,
-					setsOfCommitmentsByPlayer,
-				)
-				machines[i] = &rngMachine
-			}
-
+			MakeMachines()
 			network := mpcutil.NewNetwork(machines, shuffleMsgs)
 			network.SetCaptureHist(true)
 
 			err := network.Run()
 			Expect(err).ToNot(HaveOccurred())
 
-			// ID of the first online machine
-			i := 0
-			for isOffline[machines[i].ID()] {
-				i = i + 1
-			}
-
-			// Get the unbiased random numbers calculated by that RNG machine
-			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
-			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
-
-			// checker to check validity of verifiable shares against
-			// commitments
-			vssChecker := shamir.NewVSSChecker(h)
-
-			for j := i + 1; j < len(machines); j++ {
-				// Ignore if that machine is offline
-				if isOffline[machines[j].ID()] {
-					continue
-				}
-
-				rnShares := machines[j].(*rngutil.RngMachine).RandomNumbersShares()
-				Expect(len(referenceRNShares)).To(Equal(len(rnShares)))
-
-				// Every player has computed the same commitments for the batch
-				// of unbiased random numbers
-				comms := machines[j].(*rngutil.RngMachine).Commitments()
-				for l, c := range comms {
-					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
-				}
-
-				// Verify that each machine's share of the unbiased random
-				// number (for all batches) are valid with respect to the
-				// reference commitments
-				for l, vshare := range rnShares {
-					Expect(vssChecker.IsValid(&comms[l], &vshare)).To(BeTrue())
-				}
-			}
-
-			// Form the indices for machines that were online and a
-			// reconstructor for those indices
-			onlineIndices := make([]open.Fn, 0, len(machines))
-			for j := 0; j < len(machines); j++ {
-				if isOffline[machines[j].ID()] {
-					continue
-				}
-				evaluationPoint := machines[j].(*rngutil.RngMachine).Index()
-				onlineIndices = append(onlineIndices, evaluationPoint)
-			}
-			reconstructor := shamir.NewReconstructor(onlineIndices)
-
-			// For every batch in batch size, the shares that every player has
-			// should be consistent
-			for i := 0; i < b; i++ {
-				shares := make(shamir.Shares, 0, len(machines))
-
-				for j := 0; j < len(machines); j++ {
-					if isOffline[machines[j].ID()] {
-						continue
-					}
-
-					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
-
-					shares = append(shares, vshare.Share())
-				}
-
-				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
-				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
-			}
+			CheckMachines(machines, isOffline, b, k, h)
 		})
 	})
 })
