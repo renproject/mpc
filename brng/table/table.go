@@ -49,11 +49,8 @@ package table
 // a list of Cols.
 
 import (
-	"io"
-
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
 
@@ -65,28 +62,13 @@ type Table []Row
 func (t Table) SizeHint() int { return surge.SizeHint([]Row(t)) }
 
 // Marshal implements the surge.Marshaler interface.
-func (t Table) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, []Row(t), m)
+func (t Table) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Marshal([]Row(t), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	*t = (*t)[:0]
-	for i := uint32(0); i < l; i++ {
-		*t = append(*t, Row{})
-		m, err = (*t)[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
+func (t *Table) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Unmarshal((*[]Row)(t), buf, rem)
 }
 
 // TakeSlice returns the Slice for the given index in the table.

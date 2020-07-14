@@ -2,7 +2,6 @@ package brngutil
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/mpcutil"
@@ -35,31 +34,31 @@ func (pm PlayerMessage) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (pm PlayerMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := pm.from.Marshal(w, m)
+func (pm PlayerMessage) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := pm.from.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.to.Marshal(w, m)
+	buf, rem, err = pm.to.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.row.Marshal(w, m)
-	return m, err
+	buf, rem, err = pm.row.Marshal(buf, rem)
+	return buf, rem, err
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (pm *PlayerMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := pm.from.Unmarshal(r, m)
+func (pm *PlayerMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := pm.from.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.to.Unmarshal(r, m)
+	buf, rem, err = pm.to.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.row.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = pm.row.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 // ConsensusMessage represents the message that the consensus trusted party
@@ -86,31 +85,31 @@ func (cm ConsensusMessage) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (cm ConsensusMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := cm.from.Marshal(w, m)
+func (cm ConsensusMessage) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := cm.from.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = cm.to.Marshal(w, m)
+	buf, rem, err = cm.to.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = cm.slice.Marshal(w, m)
-	return m, err
+	buf, rem, err = cm.slice.Marshal(buf, rem)
+	return buf, rem, err
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (cm *ConsensusMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := cm.from.Unmarshal(r, m)
+func (cm *ConsensusMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := cm.from.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = cm.to.Unmarshal(r, m)
+	buf, rem, err = cm.to.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = cm.slice.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = cm.slice.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 // BrngMessage is a wrapper for any of the messages that can be sent during an
@@ -135,7 +134,7 @@ func (bm BrngMessage) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (bm BrngMessage) Marshal(w io.Writer, m int) (int, error) {
+func (bm BrngMessage) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	var ty TypeID
 	switch bm.msg.(type) {
 	case *PlayerMessage:
@@ -146,20 +145,20 @@ func (bm BrngMessage) Marshal(w io.Writer, m int) (int, error) {
 		panic(fmt.Sprintf("unexpected message type %T", bm.msg))
 	}
 
-	m, err := ty.Marshal(w, m)
+	buf, rem, err := ty.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling ty: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling ty: %v", err)
 	}
 
-	return bm.msg.Marshal(w, m)
+	return bm.msg.Marshal(buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (bm *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
+func (bm *BrngMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	var ty TypeID
-	m, err := ty.Unmarshal(r, m)
+	buf, rem, err := ty.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
 
 	switch ty {
@@ -168,8 +167,8 @@ func (bm *BrngMessage) Unmarshal(r io.Reader, m int) (int, error) {
 	case BrngTypeConsensus:
 		bm.msg = new(ConsensusMessage)
 	default:
-		return m, fmt.Errorf("invalid message type %v", ty)
+		return buf, rem, fmt.Errorf("invalid message type %v", ty)
 	}
 
-	return bm.msg.Unmarshal(r, m)
+	return bm.msg.Unmarshal(buf, rem)
 }

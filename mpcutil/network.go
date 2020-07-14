@@ -1,10 +1,7 @@
 package mpcutil
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 
@@ -18,38 +15,20 @@ type ID int32
 func (id ID) SizeHint() int { return 4 }
 
 // Marshal implements the surge.Marshaler interface.
-func (id ID) Marshal(w io.Writer, m int) (int, error) {
-	if m < 4 {
-		return m, surge.ErrMaxBytesExceeded
-	}
-	var bs [4]byte
-	binary.BigEndian.PutUint32(bs[:], uint32(id))
-	n, err := w.Write(bs[:])
-	m -= n
-	return m, err
+func (id ID) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.MarshalI32(int32(id), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (id *ID) Unmarshal(r io.Reader, m int) (int, error) {
-	if m < 4 {
-		return m, surge.ErrMaxBytesExceeded
-	}
-	var bs [4]byte
-	n, err := io.ReadFull(r, bs[:])
-	m -= n
-	if err != nil {
-		return m, err
-	}
-	v := binary.BigEndian.Uint32(bs[:])
-	*id = ID(v)
-	return m, nil
+func (id *ID) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.UnmarshalI32((*int32)(id), buf, rem)
 }
 
 // The Message interface represents a message that can be sent during a network
 // run. Messages must be able to give the IDs for the sender and receiver of
 // the message.
 type Message interface {
-	surge.Surger
+	surge.MarshalUnmarshaler
 
 	From() ID
 	To() ID
@@ -59,7 +38,7 @@ type Message interface {
 // network. Every machine must have a unique ID, and be able to handle incoming
 // messages.
 type Machine interface {
-	surge.Surger
+	surge.MarshalUnmarshaler
 
 	ID() ID
 
@@ -83,7 +62,7 @@ type Network struct {
 
 	captureHist   bool
 	msgHist       []Message
-	initialStates bytes.Buffer
+	initialStates []byte
 }
 
 // NewNetwork creates a new Network object from the given machines and message
@@ -103,8 +82,7 @@ func NewNetwork(machines []Machine, processMsgs func([]Message)) Network {
 	}
 
 	// Save initial machine state.
-	var buf bytes.Buffer
-	_, err := surge.Marshal(&buf, machines, surge.SizeHint(machines))
+	buf, err := surge.ToBinary(machines)
 	if err != nil {
 		panic(err)
 	}
@@ -226,12 +204,16 @@ func (net Network) Dump(filename string) {
 	fmt.Printf("dumping debug state to file %s\n", filename)
 
 	// Write machine initial states.
-	_, err = file.Write(net.initialStates.Bytes())
+	_, err = file.Write(net.initialStates)
 	if err != nil {
 		fmt.Printf("unable to write initial states to file: %v", err)
 	}
 
-	_, err = surge.Marshal(file, net.msgHist, surge.SizeHint(net.msgHist))
+	buf, err := surge.ToBinary(net.msgHist)
+	if err != nil {
+		fmt.Printf("unable to marshal message history: %v", err)
+	}
+	_, err = file.Write(buf)
 	if err != nil {
 		fmt.Printf("unable to write message history to file: %v", err)
 	}

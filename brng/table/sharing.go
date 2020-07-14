@@ -3,7 +3,6 @@ package table
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
@@ -27,29 +26,29 @@ func (sharing Sharing) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (sharing Sharing) Marshal(w io.Writer, m int) (int, error) {
-	m, err := sharing.shares.Marshal(w, m)
+func (sharing Sharing) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := sharing.shares.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling shares: %v", err)
+		return buf, rem, fmt.Errorf("marshaling shares: %v", err)
 	}
-	m, err = sharing.commitment.Marshal(w, m)
+	buf, rem, err = sharing.commitment.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("marshaling commitment: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (sharing *Sharing) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := sharing.shares.Unmarshal(r, m)
+func (sharing *Sharing) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := sharing.shares.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling shares: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling shares: %v", err)
 	}
-	m, err = sharing.commitment.Unmarshal(r, m)
+	buf, rem, err = sharing.commitment.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Shares returns the underlying shares of the sharing.

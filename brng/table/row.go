@@ -1,10 +1,7 @@
 package table
 
 import (
-	"io"
-
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
 
@@ -17,28 +14,13 @@ func (row Row) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (row Row) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, []Sharing(row), m)
+func (row Row) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Marshal([]Sharing(row), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	*row = (*row)[:0]
-	for i := uint32(0); i < l; i++ {
-		*row = append(*row, Sharing{})
-		m, err = (*row)[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
+func (row *Row) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Unmarshal((*[]Sharing)(row), buf, rem)
 }
 
 // MakeRow allocates and returns a new empty row.

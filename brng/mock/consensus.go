@@ -2,7 +2,6 @@ package mock
 
 import (
 	"fmt"
-	"io"
 	"math/rand"
 
 	"github.com/renproject/secp256k1"
@@ -34,61 +33,61 @@ func (pc PullConsensus) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (pc PullConsensus) Marshal(w io.Writer, m int) (int, error) {
-	m, err := surge.Marshal(w, pc.done, m)
+func (pc PullConsensus) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.MarshalBool(pc.done, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling done: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling done: %v", err)
 	}
-	m, err = surge.Marshal(w, pc.indices, m)
+	buf, rem, err = surge.Marshal(pc.indices, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling indices: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling indices: %v", err)
 	}
-	m, err = surge.Marshal(w, pc.honestSubset, m)
+	buf, rem, err = surge.Marshal(pc.honestSubset, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling honestSubset: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling honestSubset: %v", err)
 	}
-	m, err = surge.Marshal(w, pc.threshold, m)
+	buf, rem, err = surge.MarshalI32(pc.threshold, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling threshold: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling threshold: %v", err)
 	}
-	m, err = pc.table.Marshal(w, m)
+	buf, rem, err = pc.table.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling table: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling table: %v", err)
 	}
-	m, err = pc.checker.Marshal(w, m)
+	buf, rem, err = pc.checker.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling checker: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := surge.Unmarshal(r, &pc.done, m)
+func (pc PullConsensus) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.UnmarshalBool(&pc.done, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error unmarshaling done: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling done: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &pc.indices, m)
+	buf, rem, err = surge.Unmarshal(&pc.indices, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error unmarshaling indices: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling indices: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &pc.honestSubset, m)
+	buf, rem, err = surge.Unmarshal(&pc.honestSubset, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error unmarshaling honestSubset: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling honestSubset: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &pc.threshold, m)
+	buf, rem, err = surge.UnmarshalI32(&pc.threshold, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error unmarshaling threshold: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling threshold: %v", err)
 	}
-	m, err = pc.table.Unmarshal(r, m)
+	buf, rem, err = pc.table.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error unmarshaling table: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling table: %v", err)
 	}
-	m, err = pc.checker.Unmarshal(r, m)
+	buf, rem, err = pc.checker.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error unmarshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling checker: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // NewPullConsensus constructs a new mock consensus object. The honest indices
