@@ -364,7 +364,7 @@ func (rnger *RNGer) TransitionShares(
 		// commitments.
 		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments)
 		if isZero {
-			accCommitment.Scale(&accCommitment, &rnger.index)
+			accCommitment.Scale(accCommitment, &rnger.index)
 		}
 
 		locallyComputedCommitments[i].Set(accCommitment)

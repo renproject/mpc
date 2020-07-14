@@ -209,7 +209,7 @@ func RNGShares(
 
 	com := compute.ShareCommitment(index, coefComms)
 	if isZero {
-		com.Scale(&com, &index)
+		com.Scale(com, &index)
 	}
 
 	shares := make(shamir.VerifiableShares, n)

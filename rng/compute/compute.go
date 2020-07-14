@@ -17,8 +17,8 @@ func ShareCommitment(index secp256k1.Fn, coms []shamir.Commitment) shamir.Commit
 
 	acc.Set(coms[len(coms)-1])
 	for l := len(coms) - 2; l >= 0; l-- {
-		acc.Scale(&acc, &index)
-		acc.Add(&acc, &coms[l])
+		acc.Scale(acc, &index)
+		acc.Add(acc, coms[l])
 	}
 
 	return acc

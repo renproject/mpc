@@ -55,7 +55,7 @@ func (col Col) Sum() (shamir.VerifiableShare, shamir.Commitment) {
 
 	for i := 1; i < len(col); i++ {
 		share.Add(&share, &col[i].share)
-		commitment.Add(&commitment, &col[i].commitment)
+		commitment.Add(commitment, col[i].commitment)
 	}
 
 	return share, commitment

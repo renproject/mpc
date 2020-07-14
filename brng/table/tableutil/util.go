@@ -35,7 +35,7 @@ func RandomValidCol(
 
 		col[i] = element
 		sumShares.Add(&sumShares, &share)
-		sumCommitments.Add(&sumCommitments, &commitment)
+		sumCommitments.Add(sumCommitments, commitment)
 	}
 
 	return col, sumShares, sumCommitments
