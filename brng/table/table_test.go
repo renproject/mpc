@@ -52,8 +52,8 @@ var _ = Describe("Table", func() {
 	Context("Element", func() {
 		It("Marshals and Unmarshals correctly", func() {
 			for t := 0; t < LoopTests; t++ {
-				to := secp256k1.RandomSecp256k1N()
-				from := secp256k1.RandomSecp256k1N()
+				to := secp256k1.RandomFn()
+				from := secp256k1.RandomFn()
 				h := secp256k1.RandomPoint()
 
 				element, _, _ := tableutil.RandomValidElement(to, from, h)
@@ -120,7 +120,7 @@ var _ = Describe("Table", func() {
 			for t := 0; t < LoopTests; t++ {
 				n := 10 + rand.Intn(40)
 				h := secp256k1.RandomPoint()
-				to := secp256k1.RandomSecp256k1N()
+				to := secp256k1.RandomFn()
 				indices := shamirutil.RandomIndices(n)
 
 				col, expectedSumShares, expectedSumCommitments := tableutil.RandomValidCol(to, indices, h)
@@ -137,7 +137,7 @@ var _ = Describe("Table", func() {
 				for t := 0; t < LoopTests; t++ {
 					n := 5 + rand.Intn(40)
 					h := secp256k1.RandomPoint()
-					to := secp256k1.RandomSecp256k1N()
+					to := secp256k1.RandomFn()
 					indices := shamirutil.RandomIndices(n)
 
 					col, _, _ := tableutil.RandomValidCol(to, indices, h)

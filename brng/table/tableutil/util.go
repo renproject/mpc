@@ -14,7 +14,7 @@ func RandomValidElement(
 	shares := make(shamir.VerifiableShares, 1)
 	commitment := shamir.NewCommitmentWithCapacity(1)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), 1)
 
 	var c shamir.Commitment
 	c.Set(commitment)

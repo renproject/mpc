@@ -320,7 +320,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 				Specify("directed opens should be nil for invalid indices", func() {
 					// The chance that a random index is valid is negligible.
-					invalidIndex := secp256k1.RandomSecp256k1N()
+					invalidIndex := secp256k1.RandomFn()
 					Expect(rnger.DirectedOpenings(invalidIndex)).To(BeNil())
 				})
 			})

@@ -61,7 +61,7 @@ var _ = Describe("Opener", func() {
 			indices := shamirutil.SequentialIndices(n)
 			secrets := make([]secp256k1.Fn, b)
 			for i := 0; i < b; i++ {
-				secrets[i] = secp256k1.RandomSecp256k1N()
+				secrets[i] = secp256k1.RandomFn()
 			}
 
 			sharer := shamir.NewVSSharer(indices, h)
@@ -506,7 +506,7 @@ var _ = Describe("Opener", func() {
 		for i := 0; i < b; i++ {
 			setsOfShares[i] = make(shamir.VerifiableShares, n)
 			commitments[i] = shamir.NewCommitmentWithCapacity(k)
-			secrets[i] = secp256k1.RandomSecp256k1N()
+			secrets[i] = secp256k1.RandomFn()
 			sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
 		}
 

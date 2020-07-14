@@ -17,7 +17,7 @@ func RandomValidSharing(indices []secp256k1.Fn, k int, h secp256k1.Point) table.
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), k)
 
 	return table.NewSharing(shares, commitment)
 }
@@ -33,7 +33,7 @@ func RandomInvalidSharing(
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), k)
 
 	// Perturb the bad indice.
 	perturbShare(&shares[badIndex])

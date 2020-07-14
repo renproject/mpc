@@ -55,11 +55,11 @@ var _ = Describe("RNG computation helper functions", func() {
 		// the result in the exponent).
 
 		for i := 0; i < trials; i++ {
-			index = secp256k1.RandomSecp256k1N()
+			index = secp256k1.RandomFn()
 
 			for j := range coeffs {
 				for l := range coeffs[j] {
-					coeffs[j][l] = secp256k1.RandomSecp256k1N()
+					coeffs[j][l] = secp256k1.RandomFn()
 					coeffs[j][l].GetB32(bs[:])
 					points[j][l].BaseExp(bs)
 				}
@@ -95,12 +95,12 @@ var _ = Describe("RNG computation helper functions", func() {
 		vshares := make(shamir.VerifiableShares, k)
 
 		for i := 0; i < trials; i++ {
-			to = secp256k1.RandomSecp256k1N()
-			from = secp256k1.RandomSecp256k1N()
+			to = secp256k1.RandomFn()
+			from = secp256k1.RandomFn()
 
 			for j := 0; j < k; j++ {
-				values[j] = secp256k1.RandomSecp256k1N()
-				decoms[j] = secp256k1.RandomSecp256k1N()
+				values[j] = secp256k1.RandomFn()
+				decoms[j] = secp256k1.RandomFn()
 			}
 
 			for j := range vshares {

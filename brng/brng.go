@@ -188,7 +188,7 @@ func (brnger *BRNGer) TransitionStart(k, b int) table.Row {
 
 	row := table.MakeRow(brnger.sharer.N(), k, b)
 	for i := range row {
-		r := secp256k1.RandomSecp256k1N()
+		r := secp256k1.RandomFn()
 		pointerToShares := row[i].BorrowShares()
 		pointerToCommitment := row[i].BorrowCommitment()
 		brnger.sharer.Share(pointerToShares, pointerToCommitment, r, k)
