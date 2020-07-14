@@ -6,7 +6,7 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
@@ -525,7 +525,7 @@ func (rnger *RNGer) Reset() TransitionEvent {
 
 func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -544,7 +544,7 @@ func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
 
 func (rnger *RNGer) unmarshalCommitments(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -563,7 +563,7 @@ func (rnger *RNGer) unmarshalCommitments(r io.Reader, m int) (int, error) {
 
 func (rnger *RNGer) unmarshalOpeningsMap(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}

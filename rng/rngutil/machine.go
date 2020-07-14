@@ -6,7 +6,7 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/mpcutil"
@@ -161,7 +161,7 @@ func (machine *RngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 // Private methods
 func (machine *RngMachine) unmarshalIndices(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}

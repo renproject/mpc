@@ -53,7 +53,7 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
 
@@ -72,7 +72,7 @@ func (t Table) Marshal(w io.Writer, m int) (int, error) {
 // Unmarshal implements the surge.Unmarshaler interface.
 func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}

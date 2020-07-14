@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
 
@@ -24,7 +24,7 @@ func (row Row) Marshal(w io.Writer, m int) (int, error) {
 // Unmarshal implements the surge.Unmarshaler interface.
 func (row *Row) Unmarshal(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}

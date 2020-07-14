@@ -6,7 +6,7 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	util "github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
 
@@ -516,7 +516,7 @@ func decommitmentShare(vshare shamir.VerifiableShare) shamir.Share {
 
 func (opener *Opener) unmarshalCommitments(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -535,7 +535,7 @@ func (opener *Opener) unmarshalCommitments(r io.Reader, m int) (int, error) {
 
 func (opener *Opener) unmarshalShareBuffers(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -554,7 +554,7 @@ func (opener *Opener) unmarshalShareBuffers(r io.Reader, m int) (int, error) {
 
 func (opener *Opener) unmarshalDecomBuffers(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -573,7 +573,7 @@ func (opener *Opener) unmarshalDecomBuffers(r io.Reader, m int) (int, error) {
 
 func (opener *Opener) unmarshalSecrets(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
@@ -592,7 +592,7 @@ func (opener *Opener) unmarshalSecrets(r io.Reader, m int) (int, error) {
 
 func (opener *Opener) unmarshalDecommitments(r io.Reader, m int) (int, error) {
 	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
+	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
 	if err != nil {
 		return m, err
 	}
