@@ -3,12 +3,11 @@ package rngutil
 import (
 	"math/rand"
 
+	"github.com/renproject/mpc/open"
+	"github.com/renproject/mpc/rng/compute"
 	"github.com/renproject/secp256k1-go"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
-
-	"github.com/renproject/mpc/open"
-	"github.com/renproject/mpc/rng/compute"
 )
 
 // Max returns the maximum of the two arguments
@@ -95,7 +94,7 @@ func BRNGOutput(index open.Fn, k int, h curve.Point) (
 // player, and the returned commitments are the same for all players.
 func BRNGOutputFullBatch(
 	indices []open.Fn,
-	b, k int,
+	b, c, k int,
 	h curve.Point,
 ) (
 	map[open.Fn][]shamir.VerifiableShares,
@@ -108,7 +107,7 @@ func BRNGOutputFullBatch(
 
 	var shareBatch []shamir.VerifiableShares
 	for i := 0; i < b; i++ {
-		shareBatch, coms[i] = BRNGOutputFull(indices, k, h)
+		shareBatch, coms[i] = BRNGOutputFull(indices, c, k, h)
 
 		for j, ind := range indices {
 			shares[ind] = append(shares[ind], shareBatch[j])
@@ -121,7 +120,7 @@ func BRNGOutputFullBatch(
 // BRNGOutputFull creates a random output of BRNG for all players.
 func BRNGOutputFull(
 	indices []open.Fn,
-	k int,
+	c, k int,
 	h curve.Point,
 ) (
 	[]shamir.VerifiableShares,
@@ -130,8 +129,8 @@ func BRNGOutputFull(
 	n := len(indices)
 
 	sharer := shamir.NewVSSharer(indices, h)
-	coefShares := make([]shamir.VerifiableShares, k)
-	coefComms := make([]shamir.Commitment, k)
+	coefShares := make([]shamir.VerifiableShares, c)
+	coefComms := make([]shamir.Commitment, c)
 
 	for i := range coefShares {
 		coefShares[i] = make(shamir.VerifiableShares, n)
@@ -141,7 +140,7 @@ func BRNGOutputFull(
 
 	coefSharesTrans := make([]shamir.VerifiableShares, n)
 	for i := range coefSharesTrans {
-		coefSharesTrans[i] = make(shamir.VerifiableShares, k)
+		coefSharesTrans[i] = make(shamir.VerifiableShares, c)
 	}
 
 	for i, sharing := range coefShares {
@@ -162,6 +161,7 @@ func RNGSharesBatch(
 	index open.Fn,
 	b, k int,
 	h curve.Point,
+	isZero bool,
 ) (
 	[]shamir.VerifiableShares,
 	[][]shamir.Commitment,
@@ -179,7 +179,7 @@ func RNGSharesBatch(
 
 	var rngShares shamir.VerifiableShares
 	for i := 0; i < b; i++ {
-		brngShares[i], brngComs[i], rngShares, coms[i] = RNGShares(indices, index, k, h)
+		brngShares[i], brngComs[i], rngShares, coms[i] = RNGShares(indices, index, k, h, isZero)
 
 		for j, share := range rngShares {
 			shares[indices[j]][i] = share
@@ -198,15 +198,28 @@ func RNGShares(
 	index open.Fn,
 	k int,
 	h curve.Point,
+	isZero bool,
 ) (shamir.VerifiableShares, []shamir.Commitment, shamir.VerifiableShares, shamir.Commitment) {
 	n := len(indices)
-	coefSharesTrans, coefComms := BRNGOutputFull(indices, k, h)
+	var coefSharesTrans []shamir.VerifiableShares
+	var coefComms []shamir.Commitment
+	if isZero {
+		coefSharesTrans, coefComms = BRNGOutputFull(indices, k-1, k, h)
+	} else {
+		coefSharesTrans, coefComms = BRNGOutputFull(indices, k, k, h)
+	}
 
 	com := compute.ShareCommitment(index, coefComms)
+	if isZero {
+		com.Scale(&com, &index)
+	}
 
 	shares := make(shamir.VerifiableShares, n)
 	for i := range shares {
 		shares[i] = compute.ShareOfShare(index, coefSharesTrans[i])
+		if isZero {
+			shares[i].Scale(&shares[i], &index)
+		}
 	}
 
 	var ind int

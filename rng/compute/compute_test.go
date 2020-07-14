@@ -14,16 +14,6 @@ var _ = Describe("RNG computation helper functions", func() {
 	trials := 50
 	k := 5
 
-	randomiseCommitment := func(com *shamir.Commitment) {
-		// This effectively sets the length of the commitment to 0, so that the
-		// next append will add an element at index 0.
-		com.Set(shamir.Commitment{})
-
-		for i := 0; i < k; i++ {
-			com.AppendPoint(curve.Random())
-		}
-	}
-
 	polyEval := func(x secp256k1.Secp256k1N, coeffs []secp256k1.Secp256k1N) secp256k1.Secp256k1N {
 		acc := coeffs[len(coeffs)-1]
 
@@ -35,28 +25,6 @@ var _ = Describe("RNG computation helper functions", func() {
 
 		return acc
 	}
-
-	Specify("output commitments should be computed correctly", func() {
-		coms := make([]shamir.Commitment, k)
-
-		for i := range coms {
-			coms[i] = shamir.NewCommitmentWithCapacity(k)
-		}
-
-		for i := 0; i < trials; i++ {
-			for j := range coms {
-				randomiseCommitment(&coms[j])
-			}
-
-			output := OutputCommitment(coms)
-
-			for j := 0; j < output.Len(); j++ {
-				actual := output.GetPoint(j)
-				expected := coms[j].GetPoint(0)
-				Expect(actual.Eq(&expected)).To(BeTrue())
-			}
-		}
-	})
 
 	Specify("commitments for shares should be computed correctly", func() {
 		var index secp256k1.Secp256k1N

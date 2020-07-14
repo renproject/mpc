@@ -280,6 +280,7 @@ func New(
 //  	 - In case the sets of shares are invalid, we simply proceed with
 //  	 	locally computing the Open commitments, since we assume the
 //  	 	supplied sets of commitments are correct
+//	 - isZero is a boolean indicating whether this is a Random Zero Generator or not
 //
 // - Returns
 //   - TransitionEvent
@@ -291,10 +292,19 @@ func New(
 func (rnger *RNGer) TransitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
+	isZero bool,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `Init` state.
 	if rnger.state != Init {
 		return SharesIgnored
+	}
+
+	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
+	var requiredBrngBatchSize int
+	if isZero {
+		requiredBrngBatchSize = int(rnger.threshold - 1)
+	} else {
+		requiredBrngBatchSize = int(rnger.threshold)
 	}
 
 	//
@@ -306,7 +316,7 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	for _, coms := range setsOfCommitments {
-		if len(coms) != int(rnger.threshold) {
+		if len(coms) != requiredBrngBatchSize {
 			panic("invalid sets of commitments")
 		}
 	}
@@ -326,36 +336,49 @@ func (rnger *RNGer) TransitionShares(
 	// Shares validity
 	//
 
-	// Each set of shares in the batch should have the correct length.
-	for _, shares := range setsOfShares {
-		if !ignoreShares && len(shares) != int(rnger.threshold) {
-			panic("invalid set of shares")
+	if !ignoreShares {
+		// Each set of shares in the batch should have the correct length.
+		for _, shares := range setsOfShares {
+			if len(shares) != requiredBrngBatchSize {
+				panic("invalid set of shares")
+			}
 		}
 	}
 
-	// Declare variable to hold field element for N.
+	// Declare variable to hold commitments to initialize the opener.
 	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
 
 	// Construct the commitments for the batch of unbiased random numbers.
 	for i, setOfCommitments := range setsOfCommitments {
-		rnger.commitments[i] = compute.OutputCommitment(setOfCommitments)
+		// Compute the output commitment.
+		rnger.commitments[i] = shamir.NewCommitmentWithCapacity(int(rnger.threshold))
+		if isZero {
+			rnger.commitments[i].AppendPoint(curve.Infinity())
+		}
+
+		for _, c := range setOfCommitments {
+			rnger.commitments[i].AppendPoint(c.GetPoint(0))
+		}
 
 		// Compute the share commitment and add it to the local set of
 		// commitments.
 		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments)
+		if isZero {
+			accCommitment.Scale(&accCommitment, &rnger.index)
+		}
+
 		locallyComputedCommitments[i].Set(accCommitment)
 	}
 
 	// If the sets of shares are valid, we must construct the directed openings
 	// to other players in the network.
 	if !ignoreShares {
-		// For every player in the network,
 		for _, j := range rnger.indices {
-			// for every set of commitments in the batch (sets of commitments),
 			for _, setOfShares := range setsOfShares {
-				// if the sets of shares are valid, compute the share of the
-				// share and append to the directed openings map.
 				accShare := compute.ShareOfShare(j, setOfShares)
+				if isZero {
+					accShare.Scale(&accShare, &j)
+				}
 				rnger.openingsMap[j] = append(rnger.openingsMap[j], accShare)
 			}
 		}

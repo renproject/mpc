@@ -32,17 +32,13 @@ func NewRngMachine(
 	indices []open.Fn,
 	b, k int,
 	h curve.Point,
+	isZero bool,
 	ownSetsOfShares []shamir.VerifiableShares,
 	ownSetsOfCommitments [][]shamir.Commitment,
-	hasEmptyShares bool,
 ) RngMachine {
 	_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
 
-	if hasEmptyShares {
-		_ = rnger.TransitionShares([]shamir.VerifiableShares{}, ownSetsOfCommitments)
-	} else {
-		_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments)
-	}
+	_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 	return RngMachine{
 		id:      id,

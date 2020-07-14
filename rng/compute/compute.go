@@ -5,18 +5,6 @@ import (
 	"github.com/renproject/shamir"
 )
 
-// OutputCommitment returns the commitment that corresponds to the output
-// shares of RNG, given the input commitments from BRNG.
-func OutputCommitment(coms []shamir.Commitment) shamir.Commitment {
-	commitment := shamir.NewCommitmentWithCapacity(len(coms))
-
-	for _, c := range coms {
-		commitment.AppendPoint(c.GetPoint(0))
-	}
-
-	return commitment
-}
-
 // ShareCommitment accepts the set of commitments and computes a weighted
 // linear combination of those commitments. This accumulated value represents
 // the commitment for the share of the final unbiased random number for the
