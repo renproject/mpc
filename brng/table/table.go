@@ -90,7 +90,7 @@ func (t *Table) Unmarshal(r io.Reader, m int) (int, error) {
 }
 
 // TakeSlice returns the Slice for the given index in the table.
-func (t Table) TakeSlice(index secp256k1.Secp256k1N, fromIndices []secp256k1.Secp256k1N) Slice {
+func (t Table) TakeSlice(index secp256k1.Fn, fromIndices []secp256k1.Fn) Slice {
 	// NOTE: Assumes that the table is well formed.
 	slice := make(Slice, t.BatchSize())
 	for i := range slice {
