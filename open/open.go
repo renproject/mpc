@@ -10,9 +10,6 @@ import (
 	"github.com/renproject/surge"
 )
 
-// Fn is a convenience type alias.
-type Fn = secp256k1.Secp256k1N
-
 // ShareEvent represents the different outcomes that can occur when the state
 // machine processes a share.
 type ShareEvent uint8
@@ -184,8 +181,8 @@ type Opener struct {
 	// the commitment alone.
 
 	// Other members
-	secrets       []Fn
-	decommitments []Fn
+	secrets       []secp256k1.Fn
+	decommitments []secp256k1.Fn
 	checker       shamir.VSSChecker
 	reconstructor shamir.Reconstructor
 }
@@ -323,7 +320,7 @@ func (opener Opener) I() int {
 // but only if the state is Done. Otherwise, it will return the secrets for the
 // last sharing instance that made it to state Done. If the state machine has
 // never been in the state Done, then the zero shares are returned.
-func (opener Opener) Secrets() []Fn {
+func (opener Opener) Secrets() []secp256k1.Fn {
 	return opener.secrets
 }
 
@@ -331,14 +328,14 @@ func (opener Opener) Secrets() []Fn {
 // but only if the state is Done. Otherwise it will return the decommitments for
 // the last sharing instance that made it to state Done. If the state machine has never
 // been in the state Done, then the zero shares are returned.
-func (opener Opener) Decommitments() []Fn {
+func (opener Opener) Decommitments() []secp256k1.Fn {
 	return opener.decommitments
 }
 
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
-func New(b uint32, indices []Fn, h secp256k1.Point) Opener {
+func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	shareBuffers := make([]shamir.Shares, b)
 	decomBuffers := make([]shamir.Shares, b)
 	for i := 0; i < int(b); i++ {
@@ -348,8 +345,8 @@ func New(b uint32, indices []Fn, h secp256k1.Point) Opener {
 
 	commitments := make([]shamir.Commitment, b)
 
-	secrets := make([]Fn, b)
-	decommitments := make([]Fn, b)
+	secrets := make([]secp256k1.Fn, b)
+	decommitments := make([]secp256k1.Fn, b)
 
 	return Opener{
 		batchSize:     b,
@@ -410,7 +407,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// We already have checked that every share in the provided set of shares
 	// has the same index.
 	// So checking this constraint for just the first share buffer suffices
-	var ind Fn
+	var ind secp256k1.Fn
 	innerShare := shares[0].Share()
 	for _, s := range opener.shareBuffers[0] {
 		ind = s.Index()
@@ -580,7 +577,7 @@ func (opener *Opener) unmarshalSecrets(r io.Reader, m int) (int, error) {
 
 	opener.secrets = (opener.secrets)[:0]
 	for i := uint32(0); i < l; i++ {
-		opener.secrets = append(opener.secrets, Fn{})
+		opener.secrets = append(opener.secrets, secp256k1.Fn{})
 		m, err = opener.secrets[i].Unmarshal(r, m)
 		if err != nil {
 			return m, err
@@ -599,7 +596,7 @@ func (opener *Opener) unmarshalDecommitments(r io.Reader, m int) (int, error) {
 
 	opener.decommitments = (opener.decommitments)[:0]
 	for i := uint32(0); i < l; i++ {
-		opener.decommitments = append(opener.decommitments, Fn{})
+		opener.decommitments = append(opener.decommitments, secp256k1.Fn{})
 		m, err = opener.decommitments[i].Unmarshal(r, m)
 		if err != nil {
 			return m, err

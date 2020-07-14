@@ -165,10 +165,10 @@ func (brnger BRNGer) BatchSize() uint32 {
 
 // New creates a new BRNG state machine for the given indices and pedersen
 // parameter h.
-func New(indices []secp256k1.Secp256k1N, h secp256k1.Point) BRNGer {
+func New(indices []secp256k1.Fn, h secp256k1.Point) BRNGer {
 	state := Init
 
-	indicesCopy := make([]secp256k1.Secp256k1N, len(indices))
+	indicesCopy := make([]secp256k1.Fn, len(indices))
 	copy(indicesCopy, indices)
 
 	sharer := shamir.NewVSSharer(indicesCopy, h)

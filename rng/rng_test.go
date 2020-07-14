@@ -14,7 +14,6 @@ import (
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
 	"github.com/renproject/mpc/rng/rngutil"
 )
@@ -24,15 +23,15 @@ var _ = Describe("RNG", func() {
 
 	Describe("RNG Properties", func() {
 		var b, k int
-		var indices []open.Fn
-		var index open.Fn
+		var indices []secp256k1.Fn
+		var index secp256k1.Fn
 		var h secp256k1.Point
 		var isZero bool
 
 		// Setup is run before every test. It randomises the test parameters
 		Setup := func() (
-			[]open.Fn,
-			open.Fn,
+			[]secp256k1.Fn,
+			secp256k1.Fn,
 			int,
 			int,
 			secp256k1.Point,
@@ -109,7 +108,7 @@ var _ = Describe("RNG", func() {
 
 		Context("Marshaling and Unmarshaling", func() {
 			var rnger rng.RNGer
-			var openingsByPlayer map[open.Fn]shamir.VerifiableShares
+			var openingsByPlayer map[secp256k1.Fn]shamir.VerifiableShares
 			var ownSetsOfShares []shamir.VerifiableShares
 			var ownSetsOfCommitments [][]shamir.Commitment
 
@@ -210,11 +209,11 @@ var _ = Describe("RNG", func() {
 
 	Describe("Network Simulation", func() {
 		var n, b, k, nOffline int
-		var indices []open.Fn
+		var indices []secp256k1.Fn
 		var h secp256k1.Point
 		var isZero bool
 		var ids []mpcutil.ID
-		var setsOfSharesByPlayer map[open.Fn][]shamir.VerifiableShares
+		var setsOfSharesByPlayer map[secp256k1.Fn][]shamir.VerifiableShares
 		var setsOfCommitmentsByPlayer [][]shamir.Commitment
 		var shuffleMsgs func([]mpcutil.Message)
 		var isOffline map[mpcutil.ID]bool

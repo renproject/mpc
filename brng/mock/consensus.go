@@ -16,8 +16,8 @@ import (
 // table of shares to be used during the BRNG protocol.
 type PullConsensus struct {
 	done         bool
-	indices      []secp256k1.Secp256k1N
-	honestSubset []secp256k1.Secp256k1N
+	indices      []secp256k1.Fn
+	honestSubset []secp256k1.Fn
 	threshold    int32
 	table        table.Table
 	checker      shamir.VSSChecker
@@ -95,18 +95,18 @@ func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
 // represent the indices of the honest players and the adversary count
 // represents the maximum number of adversaries that there will be. `h`
 // represents the Pedersen commitment parameter.
-func NewPullConsensus(inds, honestIndices []secp256k1.Secp256k1N, advCount int, h secp256k1.Point) PullConsensus {
+func NewPullConsensus(inds, honestIndices []secp256k1.Fn, advCount int, h secp256k1.Point) PullConsensus {
 	var table table.Table
 
 	done := false
 	threshold := int32(advCount) + 1
 	checker := shamir.NewVSSChecker(h)
-	indices := make([]secp256k1.Secp256k1N, len(inds))
+	indices := make([]secp256k1.Fn, len(inds))
 	copy(indices, inds)
 
 	// Pick a random subset of honest parties that we will require to agree in
 	// consensus.
-	honestSubset := make([]secp256k1.Secp256k1N, len(honestIndices))
+	honestSubset := make([]secp256k1.Fn, len(honestIndices))
 	copy(honestSubset, honestIndices)
 	rand.Shuffle(len(honestSubset), func(i, j int) {
 		honestSubset[i], honestSubset[j] = honestSubset[j], honestSubset[i]
@@ -137,7 +137,7 @@ func (pc PullConsensus) Done() bool {
 
 // TakeSlice returns the appropriate slice of the assembled table, at
 // index
-func (pc PullConsensus) TakeSlice(index secp256k1.Secp256k1N) table.Slice {
+func (pc PullConsensus) TakeSlice(index secp256k1.Fn) table.Slice {
 	return pc.table.TakeSlice(index, pc.indices)
 }
 

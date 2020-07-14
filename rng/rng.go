@@ -63,11 +63,11 @@ type RNGer struct {
 	state State
 
 	// index signifies the given RNG state machine's index.
-	index open.Fn
+	index secp256k1.Fn
 
 	// indices signifies the list of all such RNG state machines participating
 	// in the RNG protocol.
-	indices []open.Fn
+	indices []secp256k1.Fn
 
 	// batchSize signifies the number of unbiased random numbers that will be
 	// generated on successful execution of the RNG protocol.
@@ -89,7 +89,7 @@ type RNGer struct {
 	commitments []shamir.Commitment
 
 	// openingsMap holds a map of directed openings towards a player.
-	openingsMap map[open.Fn]shamir.VerifiableShares
+	openingsMap map[secp256k1.Fn]shamir.VerifiableShares
 }
 
 // SizeHint implements the surge.SizeHinter interface.
@@ -224,8 +224,8 @@ func (rnger RNGer) Commitments() []shamir.Commitment {
 //	 - TransitionEvent is the `Initialised` event emitted on creation
 //	 - RNGer the newly created RNGer instance
 func New(
-	ownIndex open.Fn,
-	indices []open.Fn,
+	ownIndex secp256k1.Fn,
+	indices []secp256k1.Fn,
 	b, k uint32,
 	h secp256k1.Point,
 ) (TransitionEvent, RNGer) {
@@ -234,7 +234,7 @@ func New(
 	// Declare variable to hold RNG machine's computed shares and commitments
 	// and allocate necessary memory.
 	commitments := make([]shamir.Commitment, b)
-	openingsMap := make(map[open.Fn]shamir.VerifiableShares)
+	openingsMap := make(map[secp256k1.Fn]shamir.VerifiableShares)
 	for _, index := range indices {
 		openingsMap[index] = make(shamir.VerifiableShares, 0, b)
 	}
@@ -417,7 +417,7 @@ func (rnger RNGer) HasConstructedShares() bool {
 
 // DirectedOpenings returns the openings from the RNG state machine to other
 // RNG state machines.
-func (rnger RNGer) DirectedOpenings(to open.Fn) shamir.VerifiableShares {
+func (rnger RNGer) DirectedOpenings(to secp256k1.Fn) shamir.VerifiableShares {
 	if rnger.state == Init {
 		return nil
 	}
@@ -532,7 +532,7 @@ func (rnger *RNGer) unmarshalIndices(r io.Reader, m int) (int, error) {
 
 	rnger.indices = (rnger.indices)[:0]
 	for i := uint32(0); i < l; i++ {
-		rnger.indices = append(rnger.indices, open.Fn{})
+		rnger.indices = append(rnger.indices, secp256k1.Fn{})
 		m, err = rnger.indices[i].Unmarshal(r, m)
 		if err != nil {
 			return m, err
@@ -568,9 +568,9 @@ func (rnger *RNGer) unmarshalOpeningsMap(r io.Reader, m int) (int, error) {
 		return m, err
 	}
 
-	rnger.openingsMap = make(map[open.Fn]shamir.VerifiableShares, l)
+	rnger.openingsMap = make(map[secp256k1.Fn]shamir.VerifiableShares, l)
 	for i := uint32(0); i < l; i++ {
-		var key open.Fn
+		var key secp256k1.Fn
 		m, err = key.Unmarshal(r, m)
 		if err != nil {
 			return m, err

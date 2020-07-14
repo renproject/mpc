@@ -43,12 +43,12 @@ var _ = Describe("BRNG", func() {
 
 	var (
 		brnger  BRNGer
-		indices []secp256k1.Secp256k1N
+		indices []secp256k1.Fn
 		b, t    int
-		to      secp256k1.Secp256k1N
+		to      secp256k1.Fn
 	)
 
-	Setup := func() (BRNGer, int, int, secp256k1.Secp256k1N, []secp256k1.Secp256k1N) {
+	Setup := func() (BRNGer, int, int, secp256k1.Fn, []secp256k1.Fn) {
 		b := 5
 		t := k - 1
 		indices := shamirutil.RandomIndices(n)
@@ -64,8 +64,8 @@ var _ = Describe("BRNG", func() {
 
 	TransitionToOk := func(
 		brnger *BRNGer,
-		to secp256k1.Secp256k1N,
-		indices []secp256k1.Secp256k1N,
+		to secp256k1.Fn,
+		indices []secp256k1.Fn,
 		k, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
@@ -75,8 +75,8 @@ var _ = Describe("BRNG", func() {
 
 	TransitionToError := func(
 		brnger *BRNGer,
-		to secp256k1.Secp256k1N,
-		indices []secp256k1.Secp256k1N,
+		to secp256k1.Fn,
+		indices []secp256k1.Fn,
 		k, t, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
@@ -312,7 +312,7 @@ var _ = Describe("BRNG", func() {
 			shuffleMsgs, isOffline := MessageShufflerDropper(playerIDs, rand.Intn(k))
 
 			machines := make([]Machine, 0, len(indices)+1)
-			honestIndices := make([]secp256k1.Secp256k1N, 0, len(isOffline))
+			honestIndices := make([]secp256k1.Fn, 0, len(isOffline))
 			for i, id := range playerIDs {
 				machine := brngutil.NewMachine(brngutil.BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
 				machines = append(machines, &machine)

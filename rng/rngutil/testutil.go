@@ -3,7 +3,6 @@ package rngutil
 import (
 	"math/rand"
 
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng/compute"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
@@ -27,7 +26,7 @@ func Min(a, b int) int {
 
 // RandomOtherIndex returns a random index from the list of given indices that
 // is not equal to the given index.
-func RandomOtherIndex(indices []open.Fn, avoid *open.Fn) open.Fn {
+func RandomOtherIndex(indices []secp256k1.Fn, avoid *secp256k1.Fn) secp256k1.Fn {
 	index := indices[rand.Intn(len(indices))]
 	for index.Eq(avoid) {
 		index = indices[rand.Intn(len(indices))]
@@ -37,7 +36,7 @@ func RandomOtherIndex(indices []open.Fn, avoid *open.Fn) open.Fn {
 
 // BRNGOutputBatch creates a random output for one player from BRNG, with the
 // given batch number.
-func BRNGOutputBatch(index open.Fn, b, k int, h secp256k1.Point) (
+func BRNGOutputBatch(index secp256k1.Fn, b, k int, h secp256k1.Point) (
 	[]shamir.VerifiableShares,
 	[][]shamir.Commitment,
 ) {
@@ -52,7 +51,7 @@ func BRNGOutputBatch(index open.Fn, b, k int, h secp256k1.Point) (
 }
 
 // BRNGOutput creates a random output for one player from BRNG.
-func BRNGOutput(index open.Fn, k int, h secp256k1.Point) (
+func BRNGOutput(index secp256k1.Fn, k int, h secp256k1.Point) (
 	shamir.VerifiableShares,
 	[]shamir.Commitment,
 ) {
@@ -62,8 +61,8 @@ func BRNGOutput(index open.Fn, k int, h secp256k1.Point) (
 	var bs [32]byte
 	gPow := secp256k1.NewPoint()
 	hPow := secp256k1.NewPoint()
-	sCoeffs := make([]open.Fn, k)
-	rCoeffs := make([]open.Fn, k)
+	sCoeffs := make([]secp256k1.Fn, k)
+	rCoeffs := make([]secp256k1.Fn, k)
 	for i := 0; i < k; i++ {
 		for j := 0; j < k; j++ {
 			sCoeffs[j] = secp256k1.RandomSecp256k1N()
@@ -92,16 +91,16 @@ func BRNGOutput(index open.Fn, k int, h secp256k1.Point) (
 // given batch size. The returned map of shares is indexed by the index of the
 // player, and the returned commitments are the same for all players.
 func BRNGOutputFullBatch(
-	indices []open.Fn,
+	indices []secp256k1.Fn,
 	b, c, k int,
 	h secp256k1.Point,
 ) (
-	map[open.Fn][]shamir.VerifiableShares,
+	map[secp256k1.Fn][]shamir.VerifiableShares,
 	[][]shamir.Commitment,
 ) {
 	n := len(indices)
 
-	shares := make(map[open.Fn][]shamir.VerifiableShares, n)
+	shares := make(map[secp256k1.Fn][]shamir.VerifiableShares, n)
 	coms := make([][]shamir.Commitment, b)
 
 	var shareBatch []shamir.VerifiableShares
@@ -118,7 +117,7 @@ func BRNGOutputFullBatch(
 
 // BRNGOutputFull creates a random output of BRNG for all players.
 func BRNGOutputFull(
-	indices []open.Fn,
+	indices []secp256k1.Fn,
 	c, k int,
 	h secp256k1.Point,
 ) (
@@ -156,22 +155,22 @@ func BRNGOutputFull(
 // the last two return values are the shares from the other players that the
 // player corresponding to `index` is expecting.
 func RNGSharesBatch(
-	indices []open.Fn,
-	index open.Fn,
+	indices []secp256k1.Fn,
+	index secp256k1.Fn,
 	b, k int,
 	h secp256k1.Point,
 	isZero bool,
 ) (
 	[]shamir.VerifiableShares,
 	[][]shamir.Commitment,
-	map[open.Fn]shamir.VerifiableShares,
+	map[secp256k1.Fn]shamir.VerifiableShares,
 	[]shamir.Commitment,
 ) {
 	n := len(indices)
 	brngComs := make([][]shamir.Commitment, b)
 	brngShares := make([]shamir.VerifiableShares, b)
 	coms := make([]shamir.Commitment, b)
-	shares := make(map[open.Fn]shamir.VerifiableShares, n)
+	shares := make(map[secp256k1.Fn]shamir.VerifiableShares, n)
 	for _, ind := range indices {
 		shares[ind] = make(shamir.VerifiableShares, b)
 	}
@@ -193,8 +192,8 @@ func RNGSharesBatch(
 // are the shares from the other players that the player corresponding to
 // `index` is expecting.
 func RNGShares(
-	indices []open.Fn,
-	index open.Fn,
+	indices []secp256k1.Fn,
+	index secp256k1.Fn,
 	k int,
 	h secp256k1.Point,
 	isZero bool,

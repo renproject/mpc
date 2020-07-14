@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/open"
 )
 
 // RngMessage type represents the message structure in the RNG protocol
 type RngMessage struct {
 	from, to  mpcutil.ID
-	fromIndex open.Fn
+	fromIndex secp256k1.Fn
 	openings  shamir.VerifiableShares
 }
 

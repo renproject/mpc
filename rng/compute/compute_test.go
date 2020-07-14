@@ -13,7 +13,7 @@ var _ = Describe("RNG computation helper functions", func() {
 	trials := 50
 	k := 5
 
-	polyEval := func(x secp256k1.Secp256k1N, coeffs []secp256k1.Secp256k1N) secp256k1.Secp256k1N {
+	polyEval := func(x secp256k1.Fn, coeffs []secp256k1.Fn) secp256k1.Fn {
 		acc := coeffs[len(coeffs)-1]
 
 		for i := len(coeffs) - 2; i >= 0; i-- {
@@ -26,12 +26,12 @@ var _ = Describe("RNG computation helper functions", func() {
 	}
 
 	Specify("commitments for shares should be computed correctly", func() {
-		var index secp256k1.Secp256k1N
+		var index secp256k1.Fn
 		var bs [32]byte
 
-		coeffs := make([][]secp256k1.Secp256k1N, k)
+		coeffs := make([][]secp256k1.Fn, k)
 		for i := range coeffs {
-			coeffs[i] = make([]secp256k1.Secp256k1N, k)
+			coeffs[i] = make([]secp256k1.Fn, k)
 		}
 
 		points := make([][]secp256k1.Point, k)
@@ -88,10 +88,10 @@ var _ = Describe("RNG computation helper functions", func() {
 	})
 
 	Specify("shares of shares should be computed correctly", func() {
-		var to, from secp256k1.Secp256k1N
+		var to, from secp256k1.Fn
 
-		values := make([]secp256k1.Secp256k1N, k)
-		decoms := make([]secp256k1.Secp256k1N, k)
+		values := make([]secp256k1.Fn, k)
+		decoms := make([]secp256k1.Fn, k)
 		vshares := make(shamir.VerifiableShares, k)
 
 		for i := 0; i < trials; i++ {

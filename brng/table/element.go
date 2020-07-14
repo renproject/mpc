@@ -12,14 +12,14 @@ import (
 // share, it contains the index of the player that created the sharing, and the
 // assocaited Pedersen commitment.
 type Element struct {
-	from       secp256k1.Secp256k1N
+	from       secp256k1.Fn
 	share      shamir.VerifiableShare
 	commitment shamir.Commitment
 }
 
 // NewElement constructs a new Element from the given arguments.
 func NewElement(
-	from secp256k1.Secp256k1N,
+	from secp256k1.Fn,
 	share shamir.VerifiableShare,
 	commitment shamir.Commitment,
 ) Element {
@@ -27,7 +27,7 @@ func NewElement(
 }
 
 // From returns the index of the player that created the element
-func (e Element) From() secp256k1.Secp256k1N {
+func (e Element) From() secp256k1.Fn {
 	return e.from
 }
 

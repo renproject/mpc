@@ -11,7 +11,6 @@ import (
 
 	"github.com/renproject/mpc/mpcutil"
 
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
 )
 
@@ -19,8 +18,8 @@ import (
 // in the execution of the RNG protocol
 type RngMachine struct {
 	id      mpcutil.ID
-	index   open.Fn
-	indices []open.Fn
+	index   secp256k1.Fn
+	indices []secp256k1.Fn
 	rnger   rng.RNGer
 }
 
@@ -28,8 +27,8 @@ type RngMachine struct {
 // and transitions it to the WaitingOpen state by supplying its own shares
 func NewRngMachine(
 	id mpcutil.ID,
-	index open.Fn,
-	indices []open.Fn,
+	index secp256k1.Fn,
+	indices []secp256k1.Fn,
 	b, k int,
 	h secp256k1.Point,
 	isZero bool,
@@ -54,7 +53,7 @@ func (machine RngMachine) ID() mpcutil.ID {
 }
 
 // Index returns the index assigned to the machine in the network of RNG machines
-func (machine RngMachine) Index() open.Fn {
+func (machine RngMachine) Index() secp256k1.Fn {
 	return machine.index
 }
 
@@ -168,7 +167,7 @@ func (machine *RngMachine) unmarshalIndices(r io.Reader, m int) (int, error) {
 
 	machine.indices = (machine.indices)[:0]
 	for i := uint32(0); i < l; i++ {
-		machine.indices = append(machine.indices, open.Fn{})
+		machine.indices = append(machine.indices, secp256k1.Fn{})
 		m, err = machine.indices[i].Unmarshal(r, m)
 		if err != nil {
 			return m, err

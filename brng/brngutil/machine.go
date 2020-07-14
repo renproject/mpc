@@ -117,7 +117,7 @@ func (pm PlayerMachine) Commitments() []shamir.Commitment {
 type ConsensusMachine struct {
 	id        mpcutil.ID
 	playerIDs []mpcutil.ID
-	indices   []secp256k1.Secp256k1N
+	indices   []secp256k1.Fn
 	engine    mock.PullConsensus
 }
 
@@ -236,7 +236,7 @@ func NewMachine(
 	machineType TypeID,
 	id, consID mpcutil.ID,
 	playerIDs []mpcutil.ID,
-	indices, honestIndices []secp256k1.Secp256k1N,
+	indices, honestIndices []secp256k1.Fn,
 	h secp256k1.Point,
 	k, b int,
 ) BrngMachine {

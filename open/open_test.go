@@ -42,24 +42,24 @@ var _ = Describe("Opener", func() {
 		k := 7
 
 		var (
-			indices      []open.Fn
+			indices      []secp256k1.Fn
 			opener       open.Opener
-			secrets      []open.Fn
+			secrets      []secp256k1.Fn
 			setsOfShares []shamir.VerifiableShares
 			commitments  []shamir.Commitment
 			sharer       shamir.VSSharer
 		)
 
 		Setup := func() (
-			[]open.Fn,
+			[]secp256k1.Fn,
 			open.Opener,
-			[]open.Fn,
+			[]secp256k1.Fn,
 			[]shamir.VerifiableShares,
 			[]shamir.Commitment,
 			shamir.VSSharer,
 		) {
 			indices := shamirutil.SequentialIndices(n)
-			secrets := make([]open.Fn, b)
+			secrets := make([]secp256k1.Fn, b)
 			for i := 0; i < b; i++ {
 				secrets[i] = secp256k1.RandomSecp256k1N()
 			}
@@ -502,7 +502,7 @@ var _ = Describe("Opener", func() {
 		commitments := make([]shamir.Commitment, b)
 		machines := make([]Machine, n)
 		sharer := shamir.NewVSSharer(indices, h)
-		secrets := make([]open.Fn, b)
+		secrets := make([]secp256k1.Fn, b)
 		for i := 0; i < b; i++ {
 			setsOfShares[i] = make(shamir.VerifiableShares, n)
 			commitments[i] = shamir.NewCommitmentWithCapacity(k)
@@ -672,11 +672,11 @@ func newMachine(
 	return openMachine{id, n, shares, commitments, opener, lastE}
 }
 
-func (om openMachine) Secrets() []open.Fn {
+func (om openMachine) Secrets() []secp256k1.Fn {
 	return om.opener.Secrets()
 }
 
-func (om openMachine) Decommitments() []open.Fn {
+func (om openMachine) Decommitments() []secp256k1.Fn {
 	return om.opener.Decommitments()
 }
 

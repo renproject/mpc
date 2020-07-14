@@ -12,7 +12,6 @@ import (
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng/rngutil"
 )
 
@@ -22,7 +21,7 @@ var _ = Describe("RZG", func() {
 	Describe("Network Simulation", func() {
 		var ids []mpcutil.ID
 		var machines []mpcutil.Machine
-		var indices []open.Fn
+		var indices []secp256k1.Fn
 		var network mpcutil.Network
 		var shuffleMsgs func([]mpcutil.Message)
 		var isOffline map[mpcutil.ID]bool
