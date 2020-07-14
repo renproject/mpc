@@ -73,7 +73,7 @@ func BRNGOutput(index secp256k1.Fn, k int, h secp256k1.Point) (
 			rCoeffs[j].GetB32(bs[:])
 			hPow.Scale(&h, bs)
 			gPow.Add(&gPow, &hPow)
-			coms[i].AppendPoint(gPow)
+			coms[i].Append(gPow)
 		}
 
 		shares[i] = shamir.NewVerifiableShare(shamir.NewShare(index, sCoeffs[k-1]), rCoeffs[k-1])

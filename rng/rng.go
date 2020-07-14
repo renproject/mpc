@@ -351,11 +351,11 @@ func (rnger *RNGer) TransitionShares(
 		// Compute the output commitment.
 		rnger.commitments[i] = shamir.NewCommitmentWithCapacity(int(rnger.threshold))
 		if isZero {
-			rnger.commitments[i].AppendPoint(secp256k1.NewPointInfinity())
+			rnger.commitments[i].Append(secp256k1.NewPointInfinity())
 		}
 
 		for _, c := range setOfCommitments {
-			rnger.commitments[i].AppendPoint(c.GetPoint(0))
+			rnger.commitments[i].Append(c[0])
 		}
 
 		// Compute the share commitment and add it to the local set of

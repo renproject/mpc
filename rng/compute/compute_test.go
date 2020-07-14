@@ -68,7 +68,7 @@ var _ = Describe("RNG computation helper functions", func() {
 			for j := range coms {
 				coms[j].Set(shamir.Commitment{})
 				for l := range points[j] {
-					coms[j].AppendPoint(points[l][j])
+					coms[j].Append(points[l][j])
 				}
 			}
 
@@ -79,7 +79,7 @@ var _ = Describe("RNG computation helper functions", func() {
 				y := polyEval(index, coeffs[j])
 				y.GetB32(bs[:])
 
-				actual := output.GetPoint(j)
+				actual := output[j]
 				expected.BaseExp(bs)
 
 				Expect(actual.Eq(&expected)).To(BeTrue())
