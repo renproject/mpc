@@ -15,7 +15,6 @@ import (
 	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 )
 
@@ -37,7 +36,7 @@ var _ = Describe("BRNG", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	// Pedersem paramter.
-	h := curve.Random()
+	h := secp256k1.RandomPoint()
 
 	n := 20
 	k := 7

@@ -10,7 +10,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/brng/brngutil"
@@ -30,7 +29,7 @@ var _ = Describe("Table", func() {
 			for t := 0; t < LoopTests; t++ {
 				n := 10 + rand.Intn(40)
 				k := 2 + rand.Intn(n-2)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				indices := shamirutil.RandomIndices(n)
 
 				sharing := brngutil.RandomValidSharing(indices, k, h)
@@ -55,7 +54,7 @@ var _ = Describe("Table", func() {
 			for t := 0; t < LoopTests; t++ {
 				to := secp256k1.RandomSecp256k1N()
 				from := secp256k1.RandomSecp256k1N()
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 
 				element, _, _ := tableutil.RandomValidElement(to, from, h)
 
@@ -95,7 +94,7 @@ var _ = Describe("Table", func() {
 					n := 5 + rand.Intn(40)
 					k := 2 + rand.Intn(n-2)
 					b := 5 + rand.Intn(45)
-					h := curve.Random()
+					h := secp256k1.RandomPoint()
 					indices := shamirutil.RandomIndices(n)
 
 					row := brngutil.RandomValidRow(indices, k, b, h)
@@ -120,7 +119,7 @@ var _ = Describe("Table", func() {
 		Specify("Sum correctly adds shares and commitments", func() {
 			for t := 0; t < LoopTests; t++ {
 				n := 10 + rand.Intn(40)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				to := secp256k1.RandomSecp256k1N()
 				indices := shamirutil.RandomIndices(n)
 
@@ -137,7 +136,7 @@ var _ = Describe("Table", func() {
 			It("Marshals and Unmarshals correctly", func() {
 				for t := 0; t < LoopTests; t++ {
 					n := 5 + rand.Intn(40)
-					h := curve.Random()
+					h := secp256k1.RandomPoint()
 					to := secp256k1.RandomSecp256k1N()
 					indices := shamirutil.RandomIndices(n)
 
@@ -170,7 +169,7 @@ var _ = Describe("Table", func() {
 			It("correctly notices invalid form (mismatching col lengths)", func() {
 				for t := 0; t < LoopTests; t++ {
 					n := 10 + rand.Intn(40)
-					h := curve.Random()
+					h := secp256k1.RandomPoint()
 					indices := shamirutil.SequentialIndices(n)
 
 					slice := make(Slice, n)
@@ -192,7 +191,7 @@ var _ = Describe("Table", func() {
 					k := 2 + rand.Intn(n-2)
 					b := 5 + rand.Intn(35)
 					t := 1 + rand.Intn(k-1)
-					h := curve.Random()
+					h := secp256k1.RandomPoint()
 					indices := shamirutil.RandomIndices(n)
 					to_id := rand.Intn(n)
 					to := indices[to_id]
@@ -211,7 +210,7 @@ var _ = Describe("Table", func() {
 					k := 2 + rand.Intn(n-2)
 					b := 5 + rand.Intn(35)
 					t := 1 + rand.Intn(k-1)
-					h := curve.Random()
+					h := secp256k1.RandomPoint()
 					indices := shamirutil.RandomIndices(n)
 					to_id := rand.Intn(n)
 					to := indices[to_id]
@@ -238,7 +237,7 @@ var _ = Describe("Table", func() {
 			k := 2 + rand.Intn(n-2)
 			b := 5 + rand.Intn(35)
 			t := 1 + rand.Intn(k-1)
-			h := curve.Random()
+			h := secp256k1.RandomPoint()
 			indices := shamirutil.RandomIndices(n)
 			to_id := rand.Intn(n)
 			to := indices[to_id]
@@ -260,7 +259,7 @@ var _ = Describe("Table", func() {
 					k := 2 + rand.Intn(n-2)
 					b := 5 + rand.Intn(35)
 					t := 1 + rand.Intn(k-1)
-					h := curve.Random()
+					h := secp256k1.RandomPoint()
 					indices := shamirutil.RandomIndices(n)
 
 					table := brngutil.RandomValidTable(indices, h, k, b, t)
@@ -291,7 +290,7 @@ var _ = Describe("Table", func() {
 				n := 5 + rand.Intn(40)
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(45)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				indices := shamirutil.RandomIndices(n)
 
 				validRow := brngutil.RandomValidRow(indices, k, b, h)
@@ -305,7 +304,7 @@ var _ = Describe("Table", func() {
 				n := 5 + rand.Intn(40)
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(45)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				indices := shamirutil.RandomIndices(n)
 
 				validRow1 := brngutil.RandomValidRow(indices, k, b, h)
@@ -320,7 +319,7 @@ var _ = Describe("Table", func() {
 				n := 5 + rand.Intn(40)
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(45)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				indices1 := shamirutil.RandomIndices(n)
 				indices2 := shamirutil.RandomIndices(n + 1)
 
@@ -337,7 +336,7 @@ var _ = Describe("Table", func() {
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(35)
 				t := 1 + rand.Intn(k-1)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				indices := shamirutil.RandomIndices(n)
 
 				table := brngutil.RandomValidTable(indices, h, k, b, t)
@@ -351,7 +350,7 @@ var _ = Describe("Table", func() {
 				n := 5 + rand.Intn(25)
 				k := 2 + rand.Intn(n-2)
 				b := 5 + rand.Intn(15)
-				h := curve.Random()
+				h := secp256k1.RandomPoint()
 				indices := shamirutil.SequentialIndices(n)
 
 				table := brngutil.RandomValidTable(indices, h, k, b, n)

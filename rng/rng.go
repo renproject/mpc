@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
@@ -227,7 +227,7 @@ func New(
 	ownIndex open.Fn,
 	indices []open.Fn,
 	b, k uint32,
-	h curve.Point,
+	h secp256k1.Point,
 ) (TransitionEvent, RNGer) {
 	state := Init
 
@@ -353,7 +353,7 @@ func (rnger *RNGer) TransitionShares(
 		// Compute the output commitment.
 		rnger.commitments[i] = shamir.NewCommitmentWithCapacity(int(rnger.threshold))
 		if isZero {
-			rnger.commitments[i].AppendPoint(curve.Infinity())
+			rnger.commitments[i].AppendPoint(secp256k1.NewPointInfinity())
 		}
 
 		for _, c := range setOfCommitments {

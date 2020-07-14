@@ -6,7 +6,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	util "github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
@@ -339,7 +338,7 @@ func (opener Opener) Decommitments() []Fn {
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
-func New(b uint32, indices []Fn, h curve.Point) Opener {
+func New(b uint32, indices []Fn, h secp256k1.Point) Opener {
 	shareBuffers := make([]shamir.Shares, b)
 	decomBuffers := make([]shamir.Shares, b)
 	for i := 0; i < int(b); i++ {

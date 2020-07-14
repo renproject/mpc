@@ -7,7 +7,6 @@ import (
 	"github.com/renproject/secp256k1"
 
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 )
 
 var _ = Describe("RNG computation helper functions", func() {
@@ -35,9 +34,9 @@ var _ = Describe("RNG computation helper functions", func() {
 			coeffs[i] = make([]secp256k1.Secp256k1N, k)
 		}
 
-		points := make([][]curve.Point, k)
+		points := make([][]secp256k1.Point, k)
 		for i := range points {
-			points[i] = make([]curve.Point, k)
+			points[i] = make([]secp256k1.Point, k)
 		}
 
 		coms := make([]shamir.Commitment, k)
@@ -75,7 +74,7 @@ var _ = Describe("RNG computation helper functions", func() {
 
 			output := ShareCommitment(index, coms)
 
-			expected := curve.New()
+			expected := secp256k1.NewPoint()
 			for j := 0; j < output.Len(); j++ {
 				y := polyEval(index, coeffs[j])
 				y.GetB32(bs[:])

@@ -7,7 +7,6 @@ import (
 	"github.com/renproject/mpc/rng/compute"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 )
 
 // Max returns the maximum of the two arguments
@@ -38,7 +37,7 @@ func RandomOtherIndex(indices []open.Fn, avoid *open.Fn) open.Fn {
 
 // BRNGOutputBatch creates a random output for one player from BRNG, with the
 // given batch number.
-func BRNGOutputBatch(index open.Fn, b, k int, h curve.Point) (
+func BRNGOutputBatch(index open.Fn, b, k int, h secp256k1.Point) (
 	[]shamir.VerifiableShares,
 	[][]shamir.Commitment,
 ) {
@@ -53,7 +52,7 @@ func BRNGOutputBatch(index open.Fn, b, k int, h curve.Point) (
 }
 
 // BRNGOutput creates a random output for one player from BRNG.
-func BRNGOutput(index open.Fn, k int, h curve.Point) (
+func BRNGOutput(index open.Fn, k int, h secp256k1.Point) (
 	shamir.VerifiableShares,
 	[]shamir.Commitment,
 ) {
@@ -61,8 +60,8 @@ func BRNGOutput(index open.Fn, k int, h curve.Point) (
 	coms := make([]shamir.Commitment, k)
 
 	var bs [32]byte
-	gPow := curve.New()
-	hPow := curve.New()
+	gPow := secp256k1.NewPoint()
+	hPow := secp256k1.NewPoint()
 	sCoeffs := make([]open.Fn, k)
 	rCoeffs := make([]open.Fn, k)
 	for i := 0; i < k; i++ {
@@ -95,7 +94,7 @@ func BRNGOutput(index open.Fn, k int, h curve.Point) (
 func BRNGOutputFullBatch(
 	indices []open.Fn,
 	b, c, k int,
-	h curve.Point,
+	h secp256k1.Point,
 ) (
 	map[open.Fn][]shamir.VerifiableShares,
 	[][]shamir.Commitment,
@@ -121,7 +120,7 @@ func BRNGOutputFullBatch(
 func BRNGOutputFull(
 	indices []open.Fn,
 	c, k int,
-	h curve.Point,
+	h secp256k1.Point,
 ) (
 	[]shamir.VerifiableShares,
 	[]shamir.Commitment,
@@ -160,7 +159,7 @@ func RNGSharesBatch(
 	indices []open.Fn,
 	index open.Fn,
 	b, k int,
-	h curve.Point,
+	h secp256k1.Point,
 	isZero bool,
 ) (
 	[]shamir.VerifiableShares,
@@ -197,7 +196,7 @@ func RNGShares(
 	indices []open.Fn,
 	index open.Fn,
 	k int,
-	h curve.Point,
+	h secp256k1.Point,
 	isZero bool,
 ) (shamir.VerifiableShares, []shamir.Commitment, shamir.VerifiableShares, shamir.Commitment) {
 	n := len(indices)

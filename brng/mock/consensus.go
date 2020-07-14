@@ -7,7 +7,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/table"
@@ -96,7 +95,7 @@ func (pc PullConsensus) Unmarshal(r io.Reader, m int) (int, error) {
 // represent the indices of the honest players and the adversary count
 // represents the maximum number of adversaries that there will be. `h`
 // represents the Pedersen commitment parameter.
-func NewPullConsensus(inds, honestIndices []secp256k1.Secp256k1N, advCount int, h curve.Point) PullConsensus {
+func NewPullConsensus(inds, honestIndices []secp256k1.Secp256k1N, advCount int, h secp256k1.Point) PullConsensus {
 	var table table.Table
 
 	done := false

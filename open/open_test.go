@@ -12,7 +12,6 @@ import (
 	"github.com/renproject/mpc/open/openutil"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
@@ -35,7 +34,7 @@ var _ = Describe("Opener", func() {
 
 	// Pedersen commitment system parameter. For testing this can be random,
 	// but in a real world use case this should be chosen appropriately.
-	h := curve.Random()
+	h := secp256k1.RandomPoint()
 
 	Describe("Properties", func() {
 		b := 5

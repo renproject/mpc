@@ -8,8 +8,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
@@ -26,7 +26,7 @@ var _ = Describe("RNG", func() {
 		var b, k int
 		var indices []open.Fn
 		var index open.Fn
-		var h curve.Point
+		var h secp256k1.Point
 		var isZero bool
 
 		// Setup is run before every test. It randomises the test parameters
@@ -35,7 +35,7 @@ var _ = Describe("RNG", func() {
 			open.Fn,
 			int,
 			int,
-			curve.Point,
+			secp256k1.Point,
 			bool,
 		) {
 			// n is the number of players participating in the RNG protocol
@@ -63,7 +63,7 @@ var _ = Describe("RNG", func() {
 
 			// h is the elliptic curve point, used as the Pedersen Commitment
 			// Scheme Parameter
-			h := curve.Random()
+			h := secp256k1.RandomPoint()
 
 			return indices, index, b, k, h, false
 		}
@@ -211,7 +211,7 @@ var _ = Describe("RNG", func() {
 	Describe("Network Simulation", func() {
 		var n, b, k, nOffline int
 		var indices []open.Fn
-		var h curve.Point
+		var h secp256k1.Point
 		var isZero bool
 		var ids []mpcutil.ID
 		var setsOfSharesByPlayer map[open.Fn][]shamir.VerifiableShares
@@ -224,7 +224,7 @@ var _ = Describe("RNG", func() {
 			machines []mpcutil.Machine,
 			isOffline map[mpcutil.ID]bool,
 			b, k int,
-			h curve.Point,
+			h secp256k1.Point,
 		) {
 			// ID of the first online machine
 			i := 0
@@ -286,7 +286,7 @@ var _ = Describe("RNG", func() {
 			indices = shamirutil.SequentialIndices(n)
 			b = 3 + rand.Intn(3)
 			k = rngutil.Min(3+rand.Intn(n-3), 7)
-			h = curve.Random()
+			h = secp256k1.RandomPoint()
 			isZero = false
 
 			// Machines (players) participating in the RNG protocol

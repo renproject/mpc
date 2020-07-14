@@ -6,7 +6,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/table"
@@ -166,7 +165,7 @@ func (brnger BRNGer) BatchSize() uint32 {
 
 // New creates a new BRNG state machine for the given indices and pedersen
 // parameter h.
-func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
+func New(indices []secp256k1.Secp256k1N, h secp256k1.Point) BRNGer {
 	state := Init
 
 	indicesCopy := make([]secp256k1.Secp256k1N, len(indices))

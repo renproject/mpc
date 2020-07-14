@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 
@@ -31,7 +31,7 @@ func NewRngMachine(
 	index open.Fn,
 	indices []open.Fn,
 	b, k int,
-	h curve.Point,
+	h secp256k1.Point,
 	isZero bool,
 	ownSetsOfShares []shamir.VerifiableShares,
 	ownSetsOfCommitments [][]shamir.Commitment,

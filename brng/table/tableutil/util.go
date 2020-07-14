@@ -3,13 +3,12 @@ package tableutil
 import (
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 
 	"github.com/renproject/mpc/brng/table"
 )
 
 func RandomValidElement(
-	to, from secp256k1.Secp256k1N, h curve.Point,
+	to, from secp256k1.Secp256k1N, h secp256k1.Point,
 ) (table.Element, shamir.VerifiableShare, shamir.Commitment) {
 	indices := []secp256k1.Secp256k1N{to}
 	shares := make(shamir.VerifiableShares, 1)
@@ -24,7 +23,7 @@ func RandomValidElement(
 }
 
 func RandomValidCol(
-	to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h curve.Point,
+	to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h secp256k1.Point,
 ) (table.Col, shamir.VerifiableShare, shamir.Commitment) {
 	col := make(table.Col, len(indices))
 

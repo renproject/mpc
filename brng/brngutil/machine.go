@@ -6,7 +6,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng"
@@ -238,7 +237,7 @@ func NewMachine(
 	id, consID mpcutil.ID,
 	playerIDs []mpcutil.ID,
 	indices, honestIndices []secp256k1.Secp256k1N,
-	h curve.Point,
+	h secp256k1.Point,
 	k, b int,
 ) BrngMachine {
 	if machineType == BrngTypePlayer {

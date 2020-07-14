@@ -7,8 +7,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/mpcutil"
@@ -27,7 +27,7 @@ var _ = Describe("RZG", func() {
 		var shuffleMsgs func([]mpcutil.Message)
 		var isOffline map[mpcutil.ID]bool
 		var b, k int
-		var h curve.Point
+		var h secp256k1.Point
 
 		JustBeforeEach(func() {
 			// Randomise RZG network scenario
@@ -35,7 +35,7 @@ var _ = Describe("RZG", func() {
 			indices = shamirutil.RandomIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
-			h = curve.Random()
+			h = secp256k1.RandomPoint()
 			isZero := true
 
 			// Machines (players) participating in the RZG protocol

@@ -9,7 +9,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/open"
@@ -23,7 +22,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 	var n, b, c, k int
 	var indices, otherIndices []open.Fn
 	var index open.Fn
-	var h curve.Point
+	var h secp256k1.Point
 
 	// Setup is run before every test. It randomises the test parameters.
 	Setup := func() (
@@ -33,7 +32,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		open.Fn,
 		int,
 		int,
-		curve.Point,
+		secp256k1.Point,
 	) {
 		// Number of players participating in the protocol
 		n := 5 + rand.Intn(6)
@@ -60,7 +59,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		k := 3 + rand.Intn(n-3)
 
 		// Pedersen commitment scheme parameter
-		h := curve.Random()
+		h := secp256k1.RandomPoint()
 
 		return n, indices, otherIndices, index, b, k, h
 	}
