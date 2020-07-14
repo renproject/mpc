@@ -10,7 +10,7 @@ import (
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/open/openutil"
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	util "github.com/renproject/shamir/util"

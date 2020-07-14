@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng"
-	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/brng/mock"
+	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/mpcutil"
 )
 

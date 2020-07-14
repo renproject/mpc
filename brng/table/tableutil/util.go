@@ -1,11 +1,11 @@
 package tableutil
 
 import (
-  "github.com/renproject/secp256k1-go"
-  "github.com/renproject/shamir"
-  "github.com/renproject/shamir/curve"
+	"github.com/renproject/secp256k1"
+	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/curve"
 
-  "github.com/renproject/mpc/brng/table"
+	"github.com/renproject/mpc/brng/table"
 )
 
 func RandomValidElement(
