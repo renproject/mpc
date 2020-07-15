@@ -2,11 +2,12 @@ package brng
 
 import (
 	"fmt"
-	"io"
+	"math/rand"
+	"reflect"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/table"
@@ -43,13 +44,13 @@ func (s State) String() string {
 func (s State) SizeHint() int { return 1 }
 
 // Marshal implements the surge.Marshaler interface.
-func (s State) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, uint8(s), m)
+func (s State) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.MarshalU8(uint8(s), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*uint8)(s), m)
+func (s *State) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.UnmarshalU8((*uint8)(s), buf, rem)
 }
 
 // BRNGer represents the state machine for the BRNG algorithm. The state
@@ -98,6 +99,13 @@ type BRNGer struct {
 	checker shamir.VSSChecker
 }
 
+// Generate implements the quick.Generator interface.
+func (brnger BRNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
+	indices := shamirutil.RandomIndices(rand.Intn(20))
+	h := secp256k1.RandomPoint()
+	return reflect.ValueOf(New(indices, h))
+}
+
 // SizeHint implements the surge.SizeHinter interface.
 func (brnger BRNGer) SizeHint() int {
 	return brnger.state.SizeHint() +
@@ -107,45 +115,45 @@ func (brnger BRNGer) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (brnger BRNGer) Marshal(w io.Writer, m int) (int, error) {
-	m, err := brnger.state.Marshal(w, m)
+func (brnger BRNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := brnger.state.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling state: %v", err)
+		return buf, rem, fmt.Errorf("marshaling state: %v", err)
 	}
-	m, err = surge.Marshal(w, uint32(brnger.batchSize), m)
+	buf, rem, err = surge.MarshalU32(uint32(brnger.batchSize), buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling batchSize: %v", err)
+		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
 	}
-	m, err = brnger.sharer.Marshal(w, m)
+	buf, rem, err = brnger.sharer.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling sharer: %v", err)
+		return buf, rem, fmt.Errorf("marshaling sharer: %v", err)
 	}
-	m, err = brnger.checker.Marshal(w, m)
+	buf, rem, err = brnger.checker.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("marshaling checker: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (brnger *BRNGer) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := brnger.state.Unmarshal(r, m)
+func (brnger *BRNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := brnger.state.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling state: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling state: %v", err)
 	}
-	m, err = surge.Unmarshal(r, &brnger.batchSize, m)
+	buf, rem, err = surge.UnmarshalU32(&brnger.batchSize, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}
-	m, err = brnger.sharer.Unmarshal(r, m)
+	buf, rem, err = brnger.sharer.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling sharer: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling sharer: %v", err)
 	}
-	m, err = brnger.checker.Unmarshal(r, m)
+	buf, rem, err = brnger.checker.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling checker: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // State returns the current state of the state machine.
@@ -166,10 +174,10 @@ func (brnger BRNGer) BatchSize() uint32 {
 
 // New creates a new BRNG state machine for the given indices and pedersen
 // parameter h.
-func New(indices []secp256k1.Secp256k1N, h curve.Point) BRNGer {
+func New(indices []secp256k1.Fn, h secp256k1.Point) BRNGer {
 	state := Init
 
-	indicesCopy := make([]secp256k1.Secp256k1N, len(indices))
+	indicesCopy := make([]secp256k1.Fn, len(indices))
 	copy(indicesCopy, indices)
 
 	sharer := shamir.NewVSSharer(indicesCopy, h)
@@ -189,7 +197,7 @@ func (brnger *BRNGer) TransitionStart(k, b int) table.Row {
 
 	row := table.MakeRow(brnger.sharer.N(), k, b)
 	for i := range row {
-		r := secp256k1.RandomSecp256k1N()
+		r := secp256k1.RandomFn()
 		pointerToShares := row[i].BorrowShares()
 		pointerToCommitment := row[i].BorrowCommitment()
 		brnger.sharer.Share(pointerToShares, pointerToCommitment, r, k)

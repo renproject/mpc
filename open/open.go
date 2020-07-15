@@ -2,17 +2,14 @@ package open
 
 import (
 	"fmt"
-	"io"
+	"math/rand"
+	"reflect"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
-	util "github.com/renproject/shamir/util"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
-
-// Fn is a convenience type alias.
-type Fn = secp256k1.Secp256k1N
 
 // ShareEvent represents the different outcomes that can occur when the state
 // machine processes a share.
@@ -185,10 +182,18 @@ type Opener struct {
 	// the commitment alone.
 
 	// Other members
-	secrets       []Fn
-	decommitments []Fn
+	secrets       []secp256k1.Fn
+	decommitments []secp256k1.Fn
 	checker       shamir.VSSChecker
 	reconstructor shamir.Reconstructor
+}
+
+// Generate implements the quick.Generator interface.
+func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
+	b := rand.Intn(20)
+	indices := shamirutil.RandomIndices(rand.Intn(20))
+	h := secp256k1.RandomPoint()
+	return reflect.ValueOf(New(uint32(b), indices, h))
 }
 
 // SizeHint implements the surge.SizeHinter interface.
@@ -204,75 +209,75 @@ func (opener Opener) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (opener Opener) Marshal(w io.Writer, m int) (int, error) {
-	m, err := surge.Marshal(w, opener.batchSize, m)
+func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.MarshalU32(opener.batchSize, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling batchSize: %v", err)
+		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
 	}
-	m, err = surge.Marshal(w, opener.commitments, m)
+	buf, rem, err = surge.Marshal(opener.commitments, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling commitments: %v", err)
+		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
 	}
-	m, err = surge.Marshal(w, opener.shareBuffers, m)
+	buf, rem, err = surge.Marshal(opener.shareBuffers, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling share buffers: %v", err)
+		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
 	}
-	m, err = surge.Marshal(w, opener.decomBuffers, m)
+	buf, rem, err = surge.Marshal(opener.decomBuffers, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling decommitment buffers: %v", err)
+		return buf, rem, fmt.Errorf("marshaling decommitment buffers: %v", err)
 	}
-	m, err = surge.Marshal(w, opener.secrets, m)
+	buf, rem, err = surge.Marshal(opener.secrets, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling secrets: %v", err)
+		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
 	}
-	m, err = surge.Marshal(w, opener.decommitments, m)
+	buf, rem, err = surge.Marshal(opener.decommitments, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling decommitments: %v", err)
+		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
 	}
-	m, err = opener.checker.Marshal(w, m)
+	buf, rem, err = opener.checker.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("marshaling checker: %v", err)
 	}
-	m, err = opener.reconstructor.Marshal(w, m)
+	buf, rem, err = opener.reconstructor.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling reconstructor: %v", err)
+		return buf, rem, fmt.Errorf("marshaling reconstructor: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := surge.Unmarshal(r, &opener.batchSize, m)
+func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.UnmarshalU32(&opener.batchSize, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling batchSize: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}
-	m, err = opener.unmarshalCommitments(r, m)
+	buf, rem, err = surge.Unmarshal(&opener.commitments, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
-	m, err = opener.unmarshalShareBuffers(r, m)
+	buf, rem, err = surge.Unmarshal(&opener.shareBuffers, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling share buffers: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
 	}
-	m, err = opener.unmarshalDecomBuffers(r, m)
+	buf, rem, err = surge.Unmarshal(&opener.decomBuffers, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling decommitment buffers: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling decommitment buffers: %v", err)
 	}
-	m, err = opener.unmarshalSecrets(r, m)
+	buf, rem, err = surge.Unmarshal(&opener.secrets, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling secrets: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
 	}
-	m, err = opener.unmarshalDecommitments(r, m)
+	buf, rem, err = surge.Unmarshal(&opener.decommitments, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling decommitments: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
 	}
-	m, err = opener.checker.Unmarshal(r, m)
+	buf, rem, err = opener.checker.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling checker: %v", err)
 	}
-	m, err = opener.reconstructor.Unmarshal(r, m)
+	buf, rem, err = opener.reconstructor.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling reconstructor: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling reconstructor: %v", err)
 	}
 
 	// Set the share buffer to have the correct capacity.
@@ -281,7 +286,7 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 		decomBuffer := make(shamir.Shares, opener.reconstructor.N())
 		n := copy(shareBuffer, opener.shareBuffers[i])
 		if n < len(opener.shareBuffers[i]) {
-			return m, fmt.Errorf(
+			return buf, rem, fmt.Errorf(
 				"invalid marshalled data: "+
 					"%v shares in the share buffer but the reconstructor is instantiated for %v players",
 				len(opener.shareBuffers[i]),
@@ -290,7 +295,7 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 		}
 		n = copy(decomBuffer, opener.decomBuffers[i])
 		if n < len(opener.decomBuffers[i]) {
-			return m, fmt.Errorf(
+			return buf, rem, fmt.Errorf(
 				"invalid marshalled data: "+
 					"%v shares in the decom buffer but the reconstructor is instantiated for %v players",
 				len(opener.decomBuffers[i]),
@@ -301,7 +306,7 @@ func (opener *Opener) Unmarshal(r io.Reader, m int) (int, error) {
 		opener.decomBuffers[i] = decomBuffer[:n]
 	}
 
-	return m, nil
+	return buf, rem, nil
 }
 
 // BatchSize returns the batch size of the opener machine
@@ -324,7 +329,7 @@ func (opener Opener) I() int {
 // but only if the state is Done. Otherwise, it will return the secrets for the
 // last sharing instance that made it to state Done. If the state machine has
 // never been in the state Done, then the zero shares are returned.
-func (opener Opener) Secrets() []Fn {
+func (opener Opener) Secrets() []secp256k1.Fn {
 	return opener.secrets
 }
 
@@ -332,14 +337,14 @@ func (opener Opener) Secrets() []Fn {
 // but only if the state is Done. Otherwise it will return the decommitments for
 // the last sharing instance that made it to state Done. If the state machine has never
 // been in the state Done, then the zero shares are returned.
-func (opener Opener) Decommitments() []Fn {
+func (opener Opener) Decommitments() []secp256k1.Fn {
 	return opener.decommitments
 }
 
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
-func New(b uint32, indices []Fn, h curve.Point) Opener {
+func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	shareBuffers := make([]shamir.Shares, b)
 	decomBuffers := make([]shamir.Shares, b)
 	for i := 0; i < int(b); i++ {
@@ -348,9 +353,12 @@ func New(b uint32, indices []Fn, h curve.Point) Opener {
 	}
 
 	commitments := make([]shamir.Commitment, b)
+	for i := range commitments {
+		commitments[i] = shamir.Commitment{}
+	}
 
-	secrets := make([]Fn, b)
-	decommitments := make([]Fn, b)
+	secrets := make([]secp256k1.Fn, b)
+	decommitments := make([]secp256k1.Fn, b)
 
 	return Opener{
 		batchSize:     b,
@@ -411,7 +419,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// We already have checked that every share in the provided set of shares
 	// has the same index.
 	// So checking this constraint for just the first share buffer suffices
-	var ind Fn
+	var ind secp256k1.Fn
 	innerShare := shares[0].Share()
 	for _, s := range opener.shareBuffers[0] {
 		ind = s.Index()
@@ -513,99 +521,4 @@ func decommitmentShare(vshare shamir.VerifiableShare) shamir.Share {
 	share := vshare.Share()
 
 	return shamir.NewShare(share.Index(), vshare.Decommitment())
-}
-
-func (opener *Opener) unmarshalCommitments(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	opener.commitments = (opener.commitments)[:0]
-	for i := uint32(0); i < l; i++ {
-		opener.commitments = append(opener.commitments, shamir.Commitment{})
-		m, err = opener.commitments[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
-}
-
-func (opener *Opener) unmarshalShareBuffers(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	opener.shareBuffers = (opener.shareBuffers)[:0]
-	for i := uint32(0); i < l; i++ {
-		opener.shareBuffers = append(opener.shareBuffers, shamir.Shares{})
-		m, err = opener.shareBuffers[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
-}
-
-func (opener *Opener) unmarshalDecomBuffers(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	opener.decomBuffers = (opener.decomBuffers)[:0]
-	for i := uint32(0); i < l; i++ {
-		opener.decomBuffers = append(opener.decomBuffers, shamir.Shares{})
-		m, err = opener.decomBuffers[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
-}
-
-func (opener *Opener) unmarshalSecrets(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	opener.secrets = (opener.secrets)[:0]
-	for i := uint32(0); i < l; i++ {
-		opener.secrets = append(opener.secrets, Fn{})
-		m, err = opener.secrets[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
-}
-
-func (opener *Opener) unmarshalDecommitments(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	opener.decommitments = (opener.decommitments)[:0]
-	for i := uint32(0); i < l; i++ {
-		opener.decommitments = append(opener.decommitments, Fn{})
-		m, err = opener.decommitments[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
 }

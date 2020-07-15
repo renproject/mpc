@@ -1,20 +1,17 @@
 package rng_test
 
 import (
-	"bytes"
 	"math/rand"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
-	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
 	"github.com/renproject/mpc/rng/rngutil"
 )
@@ -24,18 +21,18 @@ var _ = Describe("RNG", func() {
 
 	Describe("RNG Properties", func() {
 		var b, k int
-		var indices []open.Fn
-		var index open.Fn
-		var h curve.Point
+		var indices []secp256k1.Fn
+		var index secp256k1.Fn
+		var h secp256k1.Point
 		var isZero bool
 
 		// Setup is run before every test. It randomises the test parameters
 		Setup := func() (
-			[]open.Fn,
-			open.Fn,
+			[]secp256k1.Fn,
+			secp256k1.Fn,
 			int,
 			int,
-			curve.Point,
+			secp256k1.Point,
 			bool,
 		) {
 			// n is the number of players participating in the RNG protocol
@@ -63,7 +60,7 @@ var _ = Describe("RNG", func() {
 
 			// h is the elliptic curve point, used as the Pedersen Commitment
 			// Scheme Parameter
-			h := curve.Random()
+			h := secp256k1.RandomPoint()
 
 			return indices, index, b, k, h, false
 		}
@@ -106,115 +103,15 @@ var _ = Describe("RNG", func() {
 				})
 			})
 		})
-
-		Context("Marshaling and Unmarshaling", func() {
-			var rnger rng.RNGer
-			var openingsByPlayer map[open.Fn]shamir.VerifiableShares
-			var ownSetsOfShares []shamir.VerifiableShares
-			var ownSetsOfCommitments [][]shamir.Commitment
-
-			JustBeforeEach(func() {
-				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ =
-					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
-
-				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
-			})
-
-			It("Should correctly marshal and unmarshal (WaitingOpen)", func() {
-				buf := bytes.NewBuffer([]byte{})
-
-				m, err := rnger.Marshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var rnger2 rng.RNGer
-				m, err = rnger2.Unmarshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(rnger.BatchSize()).To(Equal(rnger2.BatchSize()))
-				Expect(rnger.State()).To(Equal(rnger2.State()))
-				Expect(rnger.N()).To(Equal(rnger2.N()))
-				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
-				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
-
-				for _, j := range indices {
-					expectedShares := rnger.DirectedOpenings(j)
-					shares := rnger2.DirectedOpenings(j)
-
-					Expect(expectedShares).To(Equal(shares))
-				}
-			})
-
-			It("should correctly marshal and unmarshal (Done)", func() {
-				count := 1
-				for _, from := range indices {
-					if count == k {
-						break
-					}
-
-					_ = rnger.TransitionOpen(openingsByPlayer[from])
-				}
-				Expect(rnger.State()).To(Equal(rng.Done))
-				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
-
-				buf := bytes.NewBuffer([]byte{})
-
-				m, err := rnger.Marshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var rnger2 rng.RNGer
-				m, err = rnger2.Unmarshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(rnger.BatchSize()).To(Equal(rnger2.BatchSize()))
-				Expect(rnger.State()).To(Equal(rnger2.State()))
-				Expect(rnger.N()).To(Equal(rnger2.N()))
-				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
-				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
-
-				for _, j := range indices {
-					expectedShares := rnger.DirectedOpenings(j)
-					shares := rnger2.DirectedOpenings(j)
-
-					Expect(expectedShares).To(Equal(shares))
-				}
-			})
-
-			It("Should fail when marshaling with not enough bytes", func() {
-				buf := bytes.NewBuffer([]byte{})
-
-				for i := 0; i < rnger.SizeHint(); i++ {
-					buf.Reset()
-					_, err := rnger.Marshal(buf, i)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-
-			It("Should fail when unmarshaling with not enough bytes", func() {
-				bs, _ := surge.ToBinary(rnger)
-
-				var rnger2 rng.RNGer
-				for i := 0; i < rnger.SizeHint(); i++ {
-					buf := bytes.NewBuffer(bs)
-
-					_, err := rnger2.Unmarshal(buf, i)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-		})
 	})
 
 	Describe("Network Simulation", func() {
 		var n, b, k, nOffline int
-		var indices []open.Fn
-		var h curve.Point
+		var indices []secp256k1.Fn
+		var h secp256k1.Point
 		var isZero bool
 		var ids []mpcutil.ID
-		var setsOfSharesByPlayer map[open.Fn][]shamir.VerifiableShares
+		var setsOfSharesByPlayer map[secp256k1.Fn][]shamir.VerifiableShares
 		var setsOfCommitmentsByPlayer [][]shamir.Commitment
 		var shuffleMsgs func([]mpcutil.Message)
 		var isOffline map[mpcutil.ID]bool
@@ -224,7 +121,7 @@ var _ = Describe("RNG", func() {
 			machines []mpcutil.Machine,
 			isOffline map[mpcutil.ID]bool,
 			b, k int,
-			h curve.Point,
+			h secp256k1.Point,
 		) {
 			// ID of the first online machine
 			i := 0
@@ -250,7 +147,7 @@ var _ = Describe("RNG", func() {
 
 				// Every player has computed the same commitments
 				for l, c := range rnCommitments {
-					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+					Expect(c.Eq(referenceCommitments[l])).To(BeTrue())
 				}
 
 				// Verify that each machine's share is valid with respect to
@@ -286,7 +183,7 @@ var _ = Describe("RNG", func() {
 			indices = shamirutil.SequentialIndices(n)
 			b = 3 + rand.Intn(3)
 			k = rngutil.Min(3+rand.Intn(n-3), 7)
-			h = curve.Random()
+			h = secp256k1.RandomPoint()
 			isZero = false
 
 			// Machines (players) participating in the RNG protocol

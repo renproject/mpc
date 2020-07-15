@@ -2,7 +2,6 @@ package rng
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/renproject/surge"
 )
@@ -44,11 +43,11 @@ func (s State) String() string {
 func (s State) SizeHint() int { return 1 }
 
 // Marshal implements the surge.Marshaler interface
-func (s State) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, uint8(s), m)
+func (s State) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.MarshalU8(uint8(s), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface
-func (s *State) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*uint8)(s), m)
+func (s *State) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.UnmarshalU8((*uint8)(s), buf, rem)
 }

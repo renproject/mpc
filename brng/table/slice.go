@@ -1,10 +1,7 @@
 package table
 
 import (
-	"io"
-
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
 
@@ -16,28 +13,13 @@ type Slice []Col
 func (slice Slice) SizeHint() int { return surge.SizeHint([]Col(slice)) }
 
 // Marshal implements the surge.Marshaler interface.
-func (slice Slice) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, []Col(slice), m)
+func (slice Slice) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Marshal([]Col(slice), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (slice *Slice) Unmarshal(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	*slice = (*slice)[:0]
-	for i := uint32(0); i < l; i++ {
-		*slice = append(*slice, Col{})
-		m, err = (*slice)[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
+func (slice *Slice) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Unmarshal((*[]Col)(slice), buf, rem)
 }
 
 // BatchSize returns the number of Cols in the slice, which is equal to the

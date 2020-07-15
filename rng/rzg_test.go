@@ -7,12 +7,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng/rngutil"
 )
 
@@ -22,12 +21,12 @@ var _ = Describe("RZG", func() {
 	Describe("Network Simulation", func() {
 		var ids []mpcutil.ID
 		var machines []mpcutil.Machine
-		var indices []open.Fn
+		var indices []secp256k1.Fn
 		var network mpcutil.Network
 		var shuffleMsgs func([]mpcutil.Message)
 		var isOffline map[mpcutil.ID]bool
 		var b, k int
-		var h curve.Point
+		var h secp256k1.Point
 
 		JustBeforeEach(func() {
 			// Randomise RZG network scenario
@@ -35,7 +34,7 @@ var _ = Describe("RZG", func() {
 			indices = shamirutil.RandomIndices(n)
 			b = 3 + rand.Intn(3)
 			k = 3 + rand.Intn(n-3)
-			h = curve.Random()
+			h = secp256k1.RandomPoint()
 			isZero := true
 
 			// Machines (players) participating in the RZG protocol
@@ -92,7 +91,7 @@ var _ = Describe("RZG", func() {
 
 				// Every player has computed the same commitments
 				for l, c := range rnCommitments {
-					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+					Expect(c.Eq(referenceCommitments[l])).To(BeTrue())
 				}
 
 				// Verify that each machine's share is valid with respect to

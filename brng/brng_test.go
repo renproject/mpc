@@ -1,7 +1,6 @@
 package brng_test
 
 import (
-	"bytes"
 	"math/rand"
 	"time"
 
@@ -9,13 +8,11 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/brng"
 	. "github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/brngutil"
 	"github.com/renproject/mpc/brng/table"
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 )
 
@@ -37,19 +34,19 @@ var _ = Describe("BRNG", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	// Pedersem paramter.
-	h := curve.Random()
+	h := secp256k1.RandomPoint()
 
 	n := 20
 	k := 7
 
 	var (
 		brnger  BRNGer
-		indices []secp256k1.Secp256k1N
+		indices []secp256k1.Fn
 		b, t    int
-		to      secp256k1.Secp256k1N
+		to      secp256k1.Fn
 	)
 
-	Setup := func() (BRNGer, int, int, secp256k1.Secp256k1N, []secp256k1.Secp256k1N) {
+	Setup := func() (BRNGer, int, int, secp256k1.Fn, []secp256k1.Fn) {
 		b := 5
 		t := k - 1
 		indices := shamirutil.RandomIndices(n)
@@ -65,8 +62,8 @@ var _ = Describe("BRNG", func() {
 
 	TransitionToOk := func(
 		brnger *BRNGer,
-		to secp256k1.Secp256k1N,
-		indices []secp256k1.Secp256k1N,
+		to secp256k1.Fn,
+		indices []secp256k1.Fn,
 		k, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
@@ -76,8 +73,8 @@ var _ = Describe("BRNG", func() {
 
 	TransitionToError := func(
 		brnger *BRNGer,
-		to secp256k1.Secp256k1N,
-		indices []secp256k1.Secp256k1N,
+		to secp256k1.Fn,
+		indices []secp256k1.Fn,
 		k, t, b int,
 	) {
 		_ = TransitionToWaiting(brnger, k, b)
@@ -271,7 +268,7 @@ var _ = Describe("BRNG", func() {
 			}
 
 			for i, commitment := range commitments {
-				Expect(commitment.Eq(&expectedCommitments[i])).To(BeTrue())
+				Expect(commitment.Eq(expectedCommitments[i])).To(BeTrue())
 			}
 		})
 	})
@@ -313,7 +310,7 @@ var _ = Describe("BRNG", func() {
 			shuffleMsgs, isOffline := MessageShufflerDropper(playerIDs, rand.Intn(k))
 
 			machines := make([]Machine, 0, len(indices)+1)
-			honestIndices := make([]secp256k1.Secp256k1N, 0, len(isOffline))
+			honestIndices := make([]secp256k1.Fn, 0, len(isOffline))
 			for i, id := range playerIDs {
 				machine := brngutil.NewMachine(brngutil.BrngTypePlayer, id, consID, playerIDs, indices, nil, h, k, b)
 				machines = append(machines, &machine)
@@ -356,7 +353,7 @@ var _ = Describe("BRNG", func() {
 					}
 
 					machine := machines[i].(*brngutil.BrngMachine)
-					Expect(machine.Commitments()[j].Eq(&comm)).To(BeTrue())
+					Expect(machine.Commitments()[j].Eq(comm)).To(BeTrue())
 				}
 			}
 
@@ -388,56 +385,6 @@ var _ = Describe("BRNG", func() {
 	//
 	// Miscellaneous tests
 	//
-
-	Context("Marshalling", func() {
-		trials := 100
-
-		It("should be equal after marshalling and unmarshalling", func() {
-			buf := bytes.NewBuffer([]byte{})
-			indices := shamirutil.RandomIndices(n)
-
-			for i := 0; i < trials; i++ {
-				buf.Reset()
-				brnger1 := New(indices, h)
-				m, err := brnger1.Marshal(buf, brnger1.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var brnger2 BRNGer
-				m, err = brnger2.Unmarshal(buf, brnger1.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(brnger1).To(Equal(brnger2))
-			}
-		})
-
-		It("should fail when marshalling without enough remaining bytes", func() {
-			buf := bytes.NewBuffer([]byte{})
-			indices := shamirutil.RandomIndices(n)
-			brnger := New(indices, h)
-
-			for i := 0; i < brnger.SizeHint(); i++ {
-				buf.Reset()
-				_, err := brnger.Marshal(buf, i)
-				Expect(err).To(HaveOccurred())
-			}
-		})
-
-		It("should fail when marshalling without enough remaining bytes", func() {
-			indices := shamirutil.RandomIndices(n)
-			brnger1 := New(indices, h)
-			bs, _ := surge.ToBinary(brnger1)
-
-			var brnger2 BRNGer
-			for i := 0; i < brnger1.SizeHint(); i++ {
-				buf := bytes.NewBuffer(bs)
-
-				_, err := brnger2.Unmarshal(buf, i)
-				Expect(err).To(HaveOccurred())
-			}
-		})
-	})
 
 	Context("Getters", func() {
 		It("should return the number of indices for the instance", func() {

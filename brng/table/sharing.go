@@ -3,9 +3,8 @@ package table
 import (
 	"errors"
 	"fmt"
-	"io"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
 
@@ -27,29 +26,29 @@ func (sharing Sharing) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (sharing Sharing) Marshal(w io.Writer, m int) (int, error) {
-	m, err := sharing.shares.Marshal(w, m)
+func (sharing Sharing) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := sharing.shares.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling shares: %v", err)
+		return buf, rem, fmt.Errorf("marshaling shares: %v", err)
 	}
-	m, err = sharing.commitment.Marshal(w, m)
+	buf, rem, err = sharing.commitment.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("marshaling commitment: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (sharing *Sharing) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := sharing.shares.Unmarshal(r, m)
+func (sharing *Sharing) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := sharing.shares.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling shares: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling shares: %v", err)
 	}
-	m, err = sharing.commitment.Unmarshal(r, m)
+	buf, rem, err = sharing.commitment.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Shares returns the underlying shares of the sharing.
@@ -78,7 +77,7 @@ func (sharing *Sharing) BorrowCommitment() *shamir.Commitment {
 
 // ShareWithIndex returns the share in the Sharing with the given index, or an
 // error if there is no share with the given index.
-func (sharing Sharing) ShareWithIndex(index secp256k1.Secp256k1N) (shamir.VerifiableShare, error) {
+func (sharing Sharing) ShareWithIndex(index secp256k1.Fn) (shamir.VerifiableShare, error) {
 	for _, share := range sharing.shares {
 		s := share.Share()
 		if s.IndexEq(&index) {

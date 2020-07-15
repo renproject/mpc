@@ -1,8 +1,6 @@
 package brngutil
 
 import (
-	"io"
-
 	"github.com/renproject/surge"
 )
 
@@ -22,11 +20,11 @@ const (
 func (id TypeID) SizeHint() int { return 1 }
 
 // Marshal implements the surge.Marshaler interface.
-func (id TypeID) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, uint8(id), m)
+func (id TypeID) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.MarshalU8(uint8(id), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (id *TypeID) Unmarshal(r io.Reader, m int) (int, error) {
-	return surge.Unmarshal(r, (*uint8)(id), m)
+func (id *TypeID) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.UnmarshalU8((*uint8)(id), buf, rem)
 }

@@ -1,21 +1,20 @@
 package tableutil
 
 import (
-  "github.com/renproject/secp256k1-go"
-  "github.com/renproject/shamir"
-  "github.com/renproject/shamir/curve"
+	"github.com/renproject/secp256k1"
+	"github.com/renproject/shamir"
 
-  "github.com/renproject/mpc/brng/table"
+	"github.com/renproject/mpc/brng/table"
 )
 
 func RandomValidElement(
-	to, from secp256k1.Secp256k1N, h curve.Point,
+	to, from secp256k1.Fn, h secp256k1.Point,
 ) (table.Element, shamir.VerifiableShare, shamir.Commitment) {
-	indices := []secp256k1.Secp256k1N{to}
+	indices := []secp256k1.Fn{to}
 	shares := make(shamir.VerifiableShares, 1)
 	commitment := shamir.NewCommitmentWithCapacity(1)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), 1)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), 1)
 
 	var c shamir.Commitment
 	c.Set(commitment)
@@ -24,7 +23,7 @@ func RandomValidElement(
 }
 
 func RandomValidCol(
-	to secp256k1.Secp256k1N, indices []secp256k1.Secp256k1N, h curve.Point,
+	to secp256k1.Fn, indices []secp256k1.Fn, h secp256k1.Point,
 ) (table.Col, shamir.VerifiableShare, shamir.Commitment) {
 	col := make(table.Col, len(indices))
 
@@ -36,7 +35,7 @@ func RandomValidCol(
 
 		col[i] = element
 		sumShares.Add(&sumShares, &share)
-		sumCommitments.Add(&sumCommitments, &commitment)
+		sumCommitments.Add(sumCommitments, commitment)
 	}
 
 	return col, sumShares, sumCommitments

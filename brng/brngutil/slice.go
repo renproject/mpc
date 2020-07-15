@@ -4,9 +4,8 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/brng/table"
@@ -14,11 +13,11 @@ import (
 
 // RandomValidSharing creates a random and valid sharing for the indices with
 // reconstruction threshold k and Pedersen parameter h.
-func RandomValidSharing(indices []secp256k1.Secp256k1N, k int, h curve.Point) table.Sharing {
+func RandomValidSharing(indices []secp256k1.Fn, k int, h secp256k1.Point) table.Sharing {
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), k)
 
 	return table.NewSharing(shares, commitment)
 }
@@ -26,15 +25,15 @@ func RandomValidSharing(indices []secp256k1.Secp256k1N, k int, h curve.Point) ta
 // RandomInvalidSharing creates a random sharing with a fault for the share
 // corresponding to player indices[badIndex].
 func RandomInvalidSharing(
-	indices []secp256k1.Secp256k1N,
+	indices []secp256k1.Fn,
 	k int,
-	h curve.Point,
+	h secp256k1.Point,
 	badIndex int,
 ) table.Sharing {
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
 	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomSecp256k1N(), k)
+	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), k)
 
 	// Perturb the bad indice.
 	perturbShare(&shares[badIndex])
@@ -45,7 +44,7 @@ func RandomInvalidSharing(
 // RandomValidRow constructs a random row for the players with the given
 // indices with batch size b from sharings with reconstruction threshold k and
 // Pedersen parameter h.
-func RandomValidRow(indices []secp256k1.Secp256k1N, k, b int, h curve.Point) table.Row {
+func RandomValidRow(indices []secp256k1.Fn, k, b int, h secp256k1.Point) table.Row {
 	row := make(table.Row, b)
 	for i := range row {
 		row[i] = RandomValidSharing(indices, k, h)
@@ -56,9 +55,9 @@ func RandomValidRow(indices []secp256k1.Secp256k1N, k, b int, h curve.Point) tab
 // RandomInvalidRow constructs a random row with faults in the batches given by
 // badBatches and for the player with index indices[badIndex].
 func RandomInvalidRow(
-	indices []secp256k1.Secp256k1N,
+	indices []secp256k1.Fn,
 	k, b int,
-	h curve.Point,
+	h secp256k1.Point,
 	badIndex int,
 	badBatches []int,
 ) table.Row {
@@ -80,7 +79,7 @@ func RandomInvalidRow(
 // RandomValidTable contructs a random valid table for the players with the
 // given indices with t rows that have a batch size b, reconstruction threshold
 // k and Pedersen parameter h.
-func RandomValidTable(indices []secp256k1.Secp256k1N, h curve.Point, k, b, t int) table.Table {
+func RandomValidTable(indices []secp256k1.Fn, h secp256k1.Point, k, b, t int) table.Table {
 	table := make(table.Table, t)
 	for i := range table {
 		table[i] = RandomValidRow(indices, k, b, h)
@@ -103,8 +102,8 @@ func NewSlicePos(batch, player int) SlicePos {
 // RandomInvalidTable constructs a random table with faults in the slice
 // corresponding to player indices[badIndex].
 func RandomInvalidTable(
-	indices []secp256k1.Secp256k1N,
-	h curve.Point,
+	indices []secp256k1.Fn,
+	h secp256k1.Point,
 	n, k, b, t, badIndex int,
 ) (table.Table, []SlicePos) {
 	table := make(table.Table, n)
@@ -143,9 +142,9 @@ func RandomInvalidTable(
 // to, where the reconstruction threshold is k, the batch size is b, the height
 // of the columns is t and h is the Pedersen parameter.
 func RandomValidSlice(
-	to secp256k1.Secp256k1N,
-	indices []secp256k1.Secp256k1N,
-	h curve.Point,
+	to secp256k1.Fn,
+	indices []secp256k1.Fn,
+	h secp256k1.Point,
 	k, b, t int,
 ) table.Slice {
 	table := RandomValidTable(indices, h, k, b, t)
@@ -156,9 +155,9 @@ func RandomValidSlice(
 // RandomInvalidSlice constructs a random slice with some faults, and returns
 // the slice as well as a list of the faults.
 func RandomInvalidSlice(
-	to secp256k1.Secp256k1N,
-	indices []secp256k1.Secp256k1N,
-	h curve.Point,
+	to secp256k1.Fn,
+	indices []secp256k1.Fn,
+	h secp256k1.Point,
 	n, k, b, t int,
 ) (table.Slice, []table.Element) {
 	badIndex := -1
@@ -187,7 +186,7 @@ func RandomInvalidSlice(
 
 // RowIsValid returns true if all of the sharings in the given row are valid
 // with respect to the commitments and the shares form a consistent k-sharing.
-func RowIsValid(row table.Row, k int, indices []secp256k1.Secp256k1N, h curve.Point) bool {
+func RowIsValid(row table.Row, k int, indices []secp256k1.Fn, h secp256k1.Point) bool {
 	reconstructor := shamir.NewReconstructor(indices)
 	checker := shamir.NewVSSChecker(h)
 

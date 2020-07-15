@@ -1,10 +1,7 @@
 package table
 
 import (
-	"io"
-
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/util"
 	"github.com/renproject/surge"
 )
 
@@ -16,28 +13,13 @@ type Col []Element
 func (col Col) SizeHint() int { return surge.SizeHint([]Element(col)) }
 
 // Marshal implements the surge.Marshaler interface.
-func (col Col) Marshal(w io.Writer, m int) (int, error) {
-	return surge.Marshal(w, []Element(col), m)
+func (col Col) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Marshal([]Element(col), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (col *Col) Unmarshal(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	*col = (*col)[:0]
-	for i := uint32(0); i < l; i++ {
-		*col = append(*col, Element{})
-		m, err = (*col)[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
+func (col *Col) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	return surge.Unmarshal((*[]Element)(col), buf, rem)
 }
 
 // Sum returns the share and Pedersen commitment that corresponds to the sum of
@@ -55,7 +37,7 @@ func (col Col) Sum() (shamir.VerifiableShare, shamir.Commitment) {
 
 	for i := 1; i < len(col); i++ {
 		share.Add(&share, &col[i].share)
-		commitment.Add(&commitment, &col[i].commitment)
+		commitment.Add(commitment, col[i].commitment)
 	}
 
 	return share, commitment

@@ -1,7 +1,6 @@
 package brng_test
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
 	"time"
@@ -32,26 +31,6 @@ var _ = Describe("State", func() {
 				}
 
 				Expect(State(i).String()).To(Equal(expected))
-			}
-		})
-	})
-
-	Context("Marshalling", func() {
-		It("should be equal after marshalling and unmarshalling", func() {
-			buf := bytes.NewBuffer([]byte{})
-			for i := 0; i < 256; i++ {
-				buf.Reset()
-				s1 := State(i)
-				m, err := s1.Marshal(buf, s1.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var s2 State
-				m, err = s2.Unmarshal(buf, s2.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(s1).To(Equal(s2))
 			}
 		})
 	})

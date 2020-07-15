@@ -2,18 +2,17 @@ package rngutil
 
 import (
 	"fmt"
-	"io"
 
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/open"
 )
 
 // RngMessage type represents the message structure in the RNG protocol
 type RngMessage struct {
 	from, to  mpcutil.ID
-	fromIndex open.Fn
+	fromIndex secp256k1.Fn
 	openings  shamir.VerifiableShares
 }
 
@@ -36,45 +35,45 @@ func (msg RngMessage) SizeHint() int {
 }
 
 // Marshal implements surge Marshaler
-func (msg RngMessage) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.from.Marshal(w, m)
+func (msg RngMessage) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := msg.from.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling from: %v", err)
+		return buf, rem, fmt.Errorf("marshaling from: %v", err)
 	}
-	m, err = msg.to.Marshal(w, m)
+	buf, rem, err = msg.to.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling to: %v", err)
+		return buf, rem, fmt.Errorf("marshaling to: %v", err)
 	}
-	m, err = msg.fromIndex.Marshal(w, m)
+	buf, rem, err = msg.fromIndex.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling fromIndex: %v", err)
+		return buf, rem, fmt.Errorf("marshaling fromIndex: %v", err)
 	}
-	m, err = msg.openings.Marshal(w, m)
+	buf, rem, err = msg.openings.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling openings: %v", err)
+		return buf, rem, fmt.Errorf("marshaling openings: %v", err)
 	}
 
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements surge Unmarshaler
-func (msg *RngMessage) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.from.Unmarshal(r, m)
+func (msg *RngMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := msg.from.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling from: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling from: %v", err)
 	}
-	m, err = msg.to.Unmarshal(r, m)
+	buf, rem, err = msg.to.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling to: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling to: %v", err)
 	}
-	m, err = msg.fromIndex.Unmarshal(r, m)
+	buf, rem, err = msg.fromIndex.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling fromIndex: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling fromIndex: %v", err)
 	}
-	m, err = msg.openings.Unmarshal(r, m)
+	buf, rem, err = msg.openings.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling openings: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling openings: %v", err)
 	}
 
-	return m, nil
+	return buf, rem, nil
 }

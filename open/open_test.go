@@ -1,18 +1,14 @@
 package open_test
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"math/rand"
 	"time"
 
 	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/open/openutil"
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
@@ -35,7 +31,7 @@ var _ = Describe("Opener", func() {
 
 	// Pedersen commitment system parameter. For testing this can be random,
 	// but in a real world use case this should be chosen appropriately.
-	h := curve.Random()
+	h := secp256k1.RandomPoint()
 
 	Describe("Properties", func() {
 		b := 5
@@ -43,26 +39,26 @@ var _ = Describe("Opener", func() {
 		k := 7
 
 		var (
-			indices      []open.Fn
+			indices      []secp256k1.Fn
 			opener       open.Opener
-			secrets      []open.Fn
+			secrets      []secp256k1.Fn
 			setsOfShares []shamir.VerifiableShares
 			commitments  []shamir.Commitment
 			sharer       shamir.VSSharer
 		)
 
 		Setup := func() (
-			[]open.Fn,
+			[]secp256k1.Fn,
 			open.Opener,
-			[]open.Fn,
+			[]secp256k1.Fn,
 			[]shamir.VerifiableShares,
 			[]shamir.Commitment,
 			shamir.VSSharer,
 		) {
 			indices := shamirutil.SequentialIndices(n)
-			secrets := make([]open.Fn, b)
+			secrets := make([]secp256k1.Fn, b)
 			for i := 0; i < b; i++ {
-				secrets[i] = secp256k1.RandomSecp256k1N()
+				secrets[i] = secp256k1.RandomFn()
 			}
 
 			sharer := shamir.NewVSSharer(indices, h)
@@ -254,57 +250,6 @@ var _ = Describe("Opener", func() {
 					for i, reconstructedSecret := range reconstructed {
 						Expect(reconstructedSecret.Eq(&secrets[i])).To(BeTrue())
 					}
-				}
-			})
-		})
-
-		//
-		// Miscellaneous
-		//
-
-		Context("Marshaling/Unmarshaling", func() {
-			JustBeforeEach(func() {
-				ProgressToDone()
-			})
-
-			It("Should correctly marshal and unmarshal", func() {
-				buf := bytes.NewBuffer([]byte{})
-
-				m, err := opener.Marshal(buf, opener.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var opener2 open.Opener
-				m, err = opener2.Unmarshal(buf, opener.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				// Reconstructor and Checker will not be exactly equal
-				// since they have some fields that are not marshalled
-				Expect(opener.K()).To(Equal(opener2.K()))
-				Expect(opener.I()).To(Equal(opener2.I()))
-				Expect(opener.BatchSize()).To(Equal(opener2.BatchSize()))
-				Expect(opener.Secrets()).To(Equal(opener2.Secrets()))
-			})
-
-			It("Should fail marshaling with not enough bytes", func() {
-				buf := bytes.NewBuffer([]byte{})
-
-				for i := 0; i < opener.SizeHint(); i++ {
-					_, err := opener.Marshal(buf, i)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-
-			It("Should fail unmarshaling with not enough bytes", func() {
-				bs, _ := surge.ToBinary(opener)
-
-				var opener2 open.Opener
-				for i := 0; i < opener.SizeHint(); i++ {
-					buf := bytes.NewBuffer(bs)
-
-					_, err := opener2.Unmarshal(buf, i)
-					Expect(err).To(HaveOccurred())
 				}
 			})
 		})
@@ -503,11 +448,11 @@ var _ = Describe("Opener", func() {
 		commitments := make([]shamir.Commitment, b)
 		machines := make([]Machine, n)
 		sharer := shamir.NewVSSharer(indices, h)
-		secrets := make([]open.Fn, b)
+		secrets := make([]secp256k1.Fn, b)
 		for i := 0; i < b; i++ {
 			setsOfShares[i] = make(shamir.VerifiableShares, n)
 			commitments[i] = shamir.NewCommitmentWithCapacity(k)
-			secrets[i] = secp256k1.RandomSecp256k1N()
+			secrets[i] = secp256k1.RandomFn()
 			sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
 		}
 
@@ -563,30 +508,30 @@ func (msg shareMsg) SizeHint() int {
 	return msg.shares.SizeHint() + msg.from.SizeHint() + msg.to.SizeHint()
 }
 
-func (msg shareMsg) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.shares.Marshal(w, m)
+func (msg shareMsg) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := msg.shares.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.from.Marshal(w, m)
+	buf, rem, err = msg.from.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.to.Marshal(w, m)
-	return m, err
+	buf, rem, err = msg.to.Marshal(buf, rem)
+	return buf, rem, err
 }
 
-func (msg *shareMsg) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.shares.Unmarshal(r, m)
+func (msg *shareMsg) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := msg.shares.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.from.Unmarshal(r, m)
+	buf, rem, err = msg.from.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.to.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = msg.to.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 type openMachine struct {
@@ -607,57 +552,50 @@ func (om openMachine) SizeHint() int {
 		om.opener.SizeHint()
 }
 
-func (om openMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := om.id.Marshal(w, m)
+func (om openMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := om.id.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-
-	var bs [4]byte
-	binary.BigEndian.PutUint32(bs[:], uint32(om.n))
-	n, err := w.Write(bs[:])
-	m -= n
+	buf, rem, err = surge.MarshalU32(uint32(om.n), buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-
-	m, err = om.shares.Marshal(w, m)
+	buf, rem, err = om.shares.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Marshal(w, om.commitments, m)
+	buf, rem, err = surge.Marshal(om.commitments, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = om.opener.Marshal(w, m)
-	return m, err
+	buf, rem, err = om.opener.Marshal(buf, rem)
+	return buf, rem, err
 }
 
-func (om *openMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := om.id.Unmarshal(r, m)
+func (om *openMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := om.id.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
 
-	var bs [4]byte
-	n, err := io.ReadFull(r, bs[:])
-	m -= n
+	var tmp uint32
+	buf, rem, err = surge.UnmarshalU32(&tmp, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	v := binary.BigEndian.Uint32(bs[:])
-	om.n = int(v)
+	om.n = int(tmp)
 
-	m, err = om.shares.Unmarshal(r, m)
+	buf, rem, err = om.shares.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Unmarshal(r, &om.commitments, m)
+	buf, rem, err = surge.Unmarshal(&om.commitments, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = om.opener.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = om.opener.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 func newMachine(
@@ -673,11 +611,11 @@ func newMachine(
 	return openMachine{id, n, shares, commitments, opener, lastE}
 }
 
-func (om openMachine) Secrets() []open.Fn {
+func (om openMachine) Secrets() []secp256k1.Fn {
 	return om.opener.Secrets()
 }
 
-func (om openMachine) Decommitments() []open.Fn {
+func (om openMachine) Decommitments() []secp256k1.Fn {
 	return om.opener.Decommitments()
 }
 

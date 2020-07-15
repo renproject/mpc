@@ -2,16 +2,14 @@ package brngutil
 
 import (
 	"fmt"
-	"io"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng"
-	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/brng/mock"
+	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/mpcutil"
 )
 
@@ -35,39 +33,39 @@ func (pm PlayerMachine) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (pm PlayerMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := pm.id.Marshal(w, m)
+func (pm PlayerMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := pm.id.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.consID.Marshal(w, m)
+	buf, rem, err = pm.consID.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.row.Marshal(w, m)
+	buf, rem, err = pm.row.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.brnger.Marshal(w, m)
-	return m, err
+	buf, rem, err = pm.brnger.Marshal(buf, rem)
+	return buf, rem, err
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (pm *PlayerMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := pm.id.Unmarshal(r, m)
+func (pm *PlayerMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := pm.id.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.consID.Unmarshal(r, m)
+	buf, rem, err = pm.consID.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.row.Unmarshal(r, m)
+	buf, rem, err = pm.row.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = pm.brnger.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = pm.brnger.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 // ID implements the Machine interface.
@@ -118,7 +116,7 @@ func (pm PlayerMachine) Commitments() []shamir.Commitment {
 type ConsensusMachine struct {
 	id        mpcutil.ID
 	playerIDs []mpcutil.ID
-	indices   []secp256k1.Secp256k1N
+	indices   []secp256k1.Fn
 	engine    mock.PullConsensus
 }
 
@@ -131,39 +129,39 @@ func (cm ConsensusMachine) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (cm ConsensusMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := cm.id.Marshal(w, m)
+func (cm ConsensusMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := cm.id.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Marshal(w, cm.playerIDs, m)
+	buf, rem, err = surge.Marshal(cm.playerIDs, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Marshal(w, cm.indices, m)
+	buf, rem, err = surge.Marshal(cm.indices, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = cm.engine.Marshal(w, m)
-	return m, err
+	buf, rem, err = cm.engine.Marshal(buf, rem)
+	return buf, rem, err
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (cm *ConsensusMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := cm.id.Unmarshal(r, m)
+func (cm *ConsensusMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := cm.id.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Unmarshal(r, &cm.playerIDs, m)
+	buf, rem, err = surge.Unmarshal(&cm.playerIDs, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Unmarshal(r, &cm.indices, m)
+	buf, rem, err = surge.Unmarshal(&cm.indices, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = cm.engine.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = cm.engine.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 // ID implements the Machine interface.
@@ -237,8 +235,8 @@ func NewMachine(
 	machineType TypeID,
 	id, consID mpcutil.ID,
 	playerIDs []mpcutil.ID,
-	indices, honestIndices []secp256k1.Secp256k1N,
-	h curve.Point,
+	indices, honestIndices []secp256k1.Fn,
+	h secp256k1.Point,
 	k, b int,
 ) BrngMachine {
 	if machineType == BrngTypePlayer {
@@ -283,7 +281,7 @@ func (bm BrngMachine) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (bm BrngMachine) Marshal(w io.Writer, m int) (int, error) {
+func (bm BrngMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	var ty TypeID
 	switch bm.machine.(type) {
 	case *PlayerMachine:
@@ -294,20 +292,20 @@ func (bm BrngMachine) Marshal(w io.Writer, m int) (int, error) {
 		panic(fmt.Sprintf("unexpected machine type %T", bm.machine))
 	}
 
-	m, err := ty.Marshal(w, m)
+	buf, rem, err := ty.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("error marshaling ty: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling ty: %v", err)
 	}
 
-	return bm.machine.Marshal(w, m)
+	return bm.machine.Marshal(buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
+func (bm *BrngMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	var ty TypeID
-	m, err := ty.Unmarshal(r, m)
+	buf, rem, err := ty.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
 
 	switch ty {
@@ -316,10 +314,10 @@ func (bm *BrngMachine) Unmarshal(r io.Reader, m int) (int, error) {
 	case BrngTypeConsensus:
 		bm.machine = new(ConsensusMachine)
 	default:
-		return m, fmt.Errorf("invalid machine type %v", ty)
+		return buf, rem, fmt.Errorf("invalid machine type %v", ty)
 	}
 
-	return bm.machine.Unmarshal(r, m)
+	return bm.machine.Unmarshal(buf, rem)
 }
 
 // ID implements the Machine interface.

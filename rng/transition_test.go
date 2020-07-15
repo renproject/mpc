@@ -7,12 +7,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 	"github.com/renproject/shamir/shamirutil"
 
-	"github.com/renproject/mpc/open"
 	"github.com/renproject/mpc/rng"
 	"github.com/renproject/mpc/rng/rngutil"
 )
@@ -21,19 +19,19 @@ var _ = Describe("RNG/RZG state transitions", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	var n, b, c, k int
-	var indices, otherIndices []open.Fn
-	var index open.Fn
-	var h curve.Point
+	var indices, otherIndices []secp256k1.Fn
+	var index secp256k1.Fn
+	var h secp256k1.Point
 
 	// Setup is run before every test. It randomises the test parameters.
 	Setup := func() (
 		int,
-		[]open.Fn,
-		[]open.Fn,
-		open.Fn,
+		[]secp256k1.Fn,
+		[]secp256k1.Fn,
+		secp256k1.Fn,
 		int,
 		int,
-		curve.Point,
+		secp256k1.Point,
 	) {
 		// Number of players participating in the protocol
 		n := 5 + rand.Intn(6)
@@ -45,7 +43,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		index := indices[rand.Intn(len(indices))]
 
 		// List of indices excluding the player index
-		otherIndices := make([]open.Fn, 0, len(indices)-1)
+		otherIndices := make([]secp256k1.Fn, 0, len(indices)-1)
 		for _, i := range indices {
 			if i.Eq(&index) {
 				continue
@@ -60,7 +58,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		k := 3 + rand.Intn(n-3)
 
 		// Pedersen commitment scheme parameter
-		h := curve.Random()
+		h := secp256k1.RandomPoint()
 
 		return n, indices, otherIndices, index, b, k, h
 	}
@@ -68,7 +66,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 	TransitionToWaitingOpen := func(rnger *rng.RNGer, isZero bool) (
 		[]shamir.VerifiableShares,
 		[][]shamir.Commitment,
-		map[open.Fn]shamir.VerifiableShares,
+		map[secp256k1.Fn]shamir.VerifiableShares,
 	) {
 		_, *rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 		ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
@@ -81,7 +79,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 	TransitionToDone := func(rnger *rng.RNGer, isZero bool) (
 		[]shamir.VerifiableShares,
 		[][]shamir.Commitment,
-		map[open.Fn]shamir.VerifiableShares,
+		map[secp256k1.Fn]shamir.VerifiableShares,
 	) {
 		_, *rnger = rng.New(index, indices, uint32(b), uint32(k), h)
 		ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
@@ -252,7 +250,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 			Context("WaitingOpen state transitions", func() {
 				var rnger rng.RNGer
-				var openingsByPlayer map[open.Fn]shamir.VerifiableShares
+				var openingsByPlayer map[secp256k1.Fn]shamir.VerifiableShares
 
 				JustBeforeEach(func() {
 					_, _, openingsByPlayer = TransitionToWaitingOpen(&rnger, isZero)
@@ -322,14 +320,14 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 				Specify("directed opens should be nil for invalid indices", func() {
 					// The chance that a random index is valid is negligible.
-					invalidIndex := secp256k1.RandomSecp256k1N()
+					invalidIndex := secp256k1.RandomFn()
 					Expect(rnger.DirectedOpenings(invalidIndex)).To(BeNil())
 				})
 			})
 
 			Context("Done state transitions", func() {
 				var rnger rng.RNGer
-				var openingsByPlayer map[open.Fn]shamir.VerifiableShares
+				var openingsByPlayer map[secp256k1.Fn]shamir.VerifiableShares
 				var ownSetsOfShares []shamir.VerifiableShares
 				var ownSetsOfCommitments [][]shamir.Commitment
 

@@ -2,9 +2,10 @@ package table
 
 import (
 	"fmt"
-	"io"
+	"math/rand"
+	"reflect"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
 
@@ -12,14 +13,26 @@ import (
 // share, it contains the index of the player that created the sharing, and the
 // assocaited Pedersen commitment.
 type Element struct {
-	from       secp256k1.Secp256k1N
+	from       secp256k1.Fn
 	share      shamir.VerifiableShare
 	commitment shamir.Commitment
 }
 
+// Generate implements the quick.Generator interface.
+func (e Element) Generate(rand *rand.Rand, size int) reflect.Value {
+	var share shamir.VerifiableShare
+	var commitment shamir.Commitment
+
+	from := secp256k1.RandomFn()
+	share = share.Generate(rand, size).Interface().(shamir.VerifiableShare)
+	commitment = commitment.Generate(rand, size).Interface().(shamir.Commitment)
+
+	return reflect.ValueOf(NewElement(from, share, commitment))
+}
+
 // NewElement constructs a new Element from the given arguments.
 func NewElement(
-	from secp256k1.Secp256k1N,
+	from secp256k1.Fn,
 	share shamir.VerifiableShare,
 	commitment shamir.Commitment,
 ) Element {
@@ -27,7 +40,7 @@ func NewElement(
 }
 
 // From returns the index of the player that created the element
-func (e Element) From() secp256k1.Secp256k1N {
+func (e Element) From() secp256k1.Fn {
 	return e.from
 }
 
@@ -48,37 +61,37 @@ func (e Element) SizeHint() int {
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (e Element) Marshal(w io.Writer, m int) (int, error) {
-	m, err := e.from.Marshal(w, m)
+func (e Element) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := e.from.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling from: %v", err)
+		return buf, rem, fmt.Errorf("marshaling from: %v", err)
 	}
-	m, err = e.share.Marshal(w, m)
+	buf, rem, err = e.share.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling share: %v", err)
+		return buf, rem, fmt.Errorf("marshaling share: %v", err)
 	}
-	m, err = e.commitment.Marshal(w, m)
+	buf, rem, err = e.commitment.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("marshaling commitment: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (e *Element) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := e.from.Unmarshal(r, m)
+func (e *Element) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := e.from.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling from: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling from: %v", err)
 	}
-	m, err = e.share.Unmarshal(r, m)
+	buf, rem, err = e.share.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling share: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling share: %v", err)
 	}
-	m, err = e.commitment.Unmarshal(r, m)
+	buf, rem, err = e.commitment.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling commitment: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
-	return m, nil
+	return buf, rem, nil
 }
 
 // Set the receiver to be equal to the given Element.

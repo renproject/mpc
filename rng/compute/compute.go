@@ -1,7 +1,7 @@
 package compute
 
 import (
-	"github.com/renproject/mpc/open"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
 
@@ -12,13 +12,13 @@ import (
 //
 // Panics: This function panics if the length of the slice of commitments is
 // less than 1.
-func ShareCommitment(index open.Fn, coms []shamir.Commitment) shamir.Commitment {
+func ShareCommitment(index secp256k1.Fn, coms []shamir.Commitment) shamir.Commitment {
 	var acc shamir.Commitment
 
 	acc.Set(coms[len(coms)-1])
 	for l := len(coms) - 2; l >= 0; l-- {
-		acc.Scale(&acc, &index)
-		acc.Add(&acc, &coms[l])
+		acc.Scale(acc, &index)
+		acc.Add(acc, coms[l])
 	}
 
 	return acc
@@ -31,7 +31,7 @@ func ShareCommitment(index open.Fn, coms []shamir.Commitment) shamir.Commitment 
 //
 // Panics: This function panics if the length of the slice of commitments is
 // less than 1.
-func ShareOfShare(index open.Fn, vshares shamir.VerifiableShares) shamir.VerifiableShare {
+func ShareOfShare(index secp256k1.Fn, vshares shamir.VerifiableShares) shamir.VerifiableShare {
 	acc := vshares[len(vshares)-1]
 	for l := len(vshares) - 2; l >= 0; l-- {
 		acc.Scale(&acc, &index)

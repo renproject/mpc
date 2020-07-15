@@ -4,40 +4,37 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/rng/compute"
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
 )
 
 var _ = Describe("RNG computation helper functions", func() {
 	trials := 50
 	k := 5
 
-	polyEval := func(x secp256k1.Secp256k1N, coeffs []secp256k1.Secp256k1N) secp256k1.Secp256k1N {
+	polyEval := func(x secp256k1.Fn, coeffs []secp256k1.Fn) secp256k1.Fn {
 		acc := coeffs[len(coeffs)-1]
 
 		for i := len(coeffs) - 2; i >= 0; i-- {
 			acc.Mul(&acc, &x)
 			acc.Add(&acc, &coeffs[i])
-			acc.Normalize()
 		}
 
 		return acc
 	}
 
 	Specify("commitments for shares should be computed correctly", func() {
-		var index secp256k1.Secp256k1N
-		var bs [32]byte
+		var index secp256k1.Fn
 
-		coeffs := make([][]secp256k1.Secp256k1N, k)
+		coeffs := make([][]secp256k1.Fn, k)
 		for i := range coeffs {
-			coeffs[i] = make([]secp256k1.Secp256k1N, k)
+			coeffs[i] = make([]secp256k1.Fn, k)
 		}
 
-		points := make([][]curve.Point, k)
+		points := make([][]secp256k1.Point, k)
 		for i := range points {
-			points[i] = make([]curve.Point, k)
+			points[i] = make([]secp256k1.Point, k)
 		}
 
 		coms := make([]shamir.Commitment, k)
@@ -56,32 +53,30 @@ var _ = Describe("RNG computation helper functions", func() {
 		// the result in the exponent).
 
 		for i := 0; i < trials; i++ {
-			index = secp256k1.RandomSecp256k1N()
+			index = secp256k1.RandomFn()
 
 			for j := range coeffs {
 				for l := range coeffs[j] {
-					coeffs[j][l] = secp256k1.RandomSecp256k1N()
-					coeffs[j][l].GetB32(bs[:])
-					points[j][l].BaseExp(bs)
+					coeffs[j][l] = secp256k1.RandomFn()
+					points[j][l].BaseExp(&coeffs[j][l])
 				}
 			}
 
 			for j := range coms {
 				coms[j].Set(shamir.Commitment{})
 				for l := range points[j] {
-					coms[j].AppendPoint(points[l][j])
+					coms[j].Append(points[l][j])
 				}
 			}
 
 			output := ShareCommitment(index, coms)
 
-			expected := curve.New()
+			expected := secp256k1.Point{}
 			for j := 0; j < output.Len(); j++ {
 				y := polyEval(index, coeffs[j])
-				y.GetB32(bs[:])
 
-				actual := output.GetPoint(j)
-				expected.BaseExp(bs)
+				actual := output[j]
+				expected.BaseExp(&y)
 
 				Expect(actual.Eq(&expected)).To(BeTrue())
 			}
@@ -89,19 +84,19 @@ var _ = Describe("RNG computation helper functions", func() {
 	})
 
 	Specify("shares of shares should be computed correctly", func() {
-		var to, from secp256k1.Secp256k1N
+		var to, from secp256k1.Fn
 
-		values := make([]secp256k1.Secp256k1N, k)
-		decoms := make([]secp256k1.Secp256k1N, k)
+		values := make([]secp256k1.Fn, k)
+		decoms := make([]secp256k1.Fn, k)
 		vshares := make(shamir.VerifiableShares, k)
 
 		for i := 0; i < trials; i++ {
-			to = secp256k1.RandomSecp256k1N()
-			from = secp256k1.RandomSecp256k1N()
+			to = secp256k1.RandomFn()
+			from = secp256k1.RandomFn()
 
 			for j := 0; j < k; j++ {
-				values[j] = secp256k1.RandomSecp256k1N()
-				decoms[j] = secp256k1.RandomSecp256k1N()
+				values[j] = secp256k1.RandomFn()
+				decoms[j] = secp256k1.RandomFn()
 			}
 
 			for j := range vshares {
