@@ -147,7 +147,7 @@ var _ = Describe("RNG", func() {
 
 				// Every player has computed the same commitments
 				for l, c := range rnCommitments {
-					Expect(c.Eq(&referenceCommitments[l])).To(BeTrue())
+					Expect(c.Eq(referenceCommitments[l])).To(BeTrue())
 				}
 
 				// Verify that each machine's share is valid with respect to

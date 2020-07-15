@@ -92,8 +92,8 @@ var _ = Describe("Table", func() {
 					t := 1 + rand.Intn(k-1)
 					h := secp256k1.RandomPoint()
 					indices := shamirutil.RandomIndices(n)
-					to_id := rand.Intn(n)
-					to := indices[to_id]
+					toID := rand.Intn(n)
+					to := indices[toID]
 
 					slice := brngutil.RandomValidSlice(to, indices, h, k, b, t)
 
@@ -109,8 +109,8 @@ var _ = Describe("Table", func() {
 			t := 1 + rand.Intn(k-1)
 			h := secp256k1.RandomPoint()
 			indices := shamirutil.RandomIndices(n)
-			to_id := rand.Intn(n)
-			to := indices[to_id]
+			toID := rand.Intn(n)
+			to := indices[toID]
 
 			invalidSlice, expectedFaults := brngutil.RandomInvalidSlice(to, indices, h, n, k, b, t)
 
@@ -199,7 +199,8 @@ var _ = Describe("Table", func() {
 				table := brngutil.RandomValidTable(indices, h, k, b, n)
 
 				for i := 1; i <= n; i++ {
-					at := secp256k1.NewSecp256k1N(uint64(i))
+					var at secp256k1.Fn
+					at.SetU16(uint16(i))
 					slice := table.TakeSlice(at, indices)
 
 					for j, col := range slice {
@@ -207,7 +208,7 @@ var _ = Describe("Table", func() {
 
 						for _, element := range col {
 							from := element.From()
-							fromUint := from.Uint64()
+							fromUint := from.Int().Uint64()
 							sharingInTable := table[fromUint-1][j]
 							share, err := sharingInTable.ShareWithIndex(at)
 

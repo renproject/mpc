@@ -268,7 +268,7 @@ var _ = Describe("BRNG", func() {
 			}
 
 			for i, commitment := range commitments {
-				Expect(commitment.Eq(&expectedCommitments[i])).To(BeTrue())
+				Expect(commitment.Eq(expectedCommitments[i])).To(BeTrue())
 			}
 		})
 	})
@@ -353,7 +353,7 @@ var _ = Describe("BRNG", func() {
 					}
 
 					machine := machines[i].(*brngutil.BrngMachine)
-					Expect(machine.Commitments()[j].Eq(&comm)).To(BeTrue())
+					Expect(machine.Commitments()[j].Eq(comm)).To(BeTrue())
 				}
 			}
 
