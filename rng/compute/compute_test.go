@@ -19,7 +19,6 @@ var _ = Describe("RNG computation helper functions", func() {
 		for i := len(coeffs) - 2; i >= 0; i-- {
 			acc.Mul(&acc, &x)
 			acc.Add(&acc, &coeffs[i])
-			acc.Normalize()
 		}
 
 		return acc
@@ -27,7 +26,6 @@ var _ = Describe("RNG computation helper functions", func() {
 
 	Specify("commitments for shares should be computed correctly", func() {
 		var index secp256k1.Fn
-		var bs [32]byte
 
 		coeffs := make([][]secp256k1.Fn, k)
 		for i := range coeffs {
