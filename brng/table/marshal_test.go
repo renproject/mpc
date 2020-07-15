@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("Surge marshalling", func() {
+var _ = Describe("Surge marshalling", func() {
 	trials := 10
 
 	ts := []reflect.Type{
@@ -35,7 +35,7 @@ var _ = FDescribe("Surge marshalling", func() {
 			})
 
 			Context("marshalling", func() {
-				FIt("should return an error when the buffer is too small", func() {
+				It("should return an error when the buffer is too small", func() {
 					for i := 0; i < trials; i++ {
 						Expect(surgeutil.MarshalBufTooSmall(t)).To(Succeed())
 					}
