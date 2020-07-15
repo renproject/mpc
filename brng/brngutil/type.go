@@ -21,10 +21,10 @@ func (id TypeID) SizeHint() int { return 1 }
 
 // Marshal implements the surge.Marshaler interface.
 func (id TypeID) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	return surge.Marshal(uint8(id), buf, rem)
+	return surge.MarshalU8(uint8(id), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (id *TypeID) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	return surge.Unmarshal((*uint8)(id), buf, rem)
+	return surge.UnmarshalU8((*uint8)(id), buf, rem)
 }

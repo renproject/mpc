@@ -44,10 +44,10 @@ func (s State) SizeHint() int { return 1 }
 
 // Marshal implements the surge.Marshaler interface
 func (s State) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	return surge.Marshal(uint8(s), buf, rem)
+	return surge.MarshalU8(uint8(s), buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface
 func (s *State) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	return surge.Unmarshal((*uint8)(s), buf, rem)
+	return surge.UnmarshalU8((*uint8)(s), buf, rem)
 }

@@ -199,7 +199,7 @@ func (opener Opener) SizeHint() int {
 
 // Marshal implements the surge.Marshaler interface.
 func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.Marshal(opener.batchSize, buf, rem)
+	buf, rem, err := surge.MarshalU32(opener.batchSize, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
 	}
@@ -236,7 +236,7 @@ func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.Unmarshal(&opener.batchSize, buf, rem)
+	buf, rem, err := surge.UnmarshalU32(&opener.batchSize, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}
