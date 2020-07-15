@@ -2,9 +2,7 @@ package open_test
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"math/rand"
 	"time"
 
@@ -562,30 +560,30 @@ func (msg shareMsg) SizeHint() int {
 	return msg.shares.SizeHint() + msg.from.SizeHint() + msg.to.SizeHint()
 }
 
-func (msg shareMsg) Marshal(w io.Writer, m int) (int, error) {
-	m, err := msg.shares.Marshal(w, m)
+func (msg shareMsg) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := msg.shares.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.from.Marshal(w, m)
+	buf, rem, err = msg.from.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.to.Marshal(w, m)
-	return m, err
+	buf, rem, err = msg.to.Marshal(buf, rem)
+	return buf, rem, err
 }
 
-func (msg *shareMsg) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := msg.shares.Unmarshal(r, m)
+func (msg *shareMsg) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := msg.shares.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.from.Unmarshal(r, m)
+	buf, rem, err = msg.from.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = msg.to.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = msg.to.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 type openMachine struct {
@@ -606,57 +604,50 @@ func (om openMachine) SizeHint() int {
 		om.opener.SizeHint()
 }
 
-func (om openMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := om.id.Marshal(w, m)
+func (om openMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := om.id.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-
-	var bs [4]byte
-	binary.BigEndian.PutUint32(bs[:], uint32(om.n))
-	n, err := w.Write(bs[:])
-	m -= n
+	buf, rem, err = surge.MarshalU32(uint32(om.n), buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-
-	m, err = om.shares.Marshal(w, m)
+	buf, rem, err = om.shares.Marshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Marshal(w, om.commitments, m)
+	buf, rem, err = surge.Marshal(om.commitments, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = om.opener.Marshal(w, m)
-	return m, err
+	buf, rem, err = om.opener.Marshal(buf, rem)
+	return buf, rem, err
 }
 
-func (om *openMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := om.id.Unmarshal(r, m)
+func (om *openMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := om.id.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
 
-	var bs [4]byte
-	n, err := io.ReadFull(r, bs[:])
-	m -= n
+	var tmp uint32
+	buf, rem, err = surge.UnmarshalU32(&tmp, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	v := binary.BigEndian.Uint32(bs[:])
-	om.n = int(v)
+	om.n = int(tmp)
 
-	m, err = om.shares.Unmarshal(r, m)
+	buf, rem, err = om.shares.Unmarshal(buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = surge.Unmarshal(r, &om.commitments, m)
+	buf, rem, err = surge.Unmarshal(&om.commitments, buf, rem)
 	if err != nil {
-		return m, err
+		return buf, rem, err
 	}
-	m, err = om.opener.Unmarshal(r, m)
-	return m, err
+	buf, rem, err = om.opener.Unmarshal(buf, rem)
+	return buf, rem, err
 }
 
 func newMachine(
