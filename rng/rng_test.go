@@ -1,7 +1,6 @@
 package rng_test
 
 import (
-	"bytes"
 	"math/rand"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/shamirutil"
-	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/mpcutil"
 	"github.com/renproject/mpc/rng"
@@ -103,106 +101,6 @@ var _ = Describe("RNG", func() {
 					Expect(rnger.State()).To(Equal(rng.Done))
 					Expect(rnger.HasConstructedShares()).To(BeTrue())
 				})
-			})
-		})
-
-		Context("Marshaling and Unmarshaling", func() {
-			var rnger rng.RNGer
-			var openingsByPlayer map[secp256k1.Fn]shamir.VerifiableShares
-			var ownSetsOfShares []shamir.VerifiableShares
-			var ownSetsOfCommitments [][]shamir.Commitment
-
-			JustBeforeEach(func() {
-				_, rnger = rng.New(index, indices, uint32(b), uint32(k), h)
-				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ =
-					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
-
-				rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
-			})
-
-			It("Should correctly marshal and unmarshal (WaitingOpen)", func() {
-				buf := bytes.NewBuffer([]byte{})
-
-				m, err := rnger.Marshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var rnger2 rng.RNGer
-				m, err = rnger2.Unmarshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(rnger.BatchSize()).To(Equal(rnger2.BatchSize()))
-				Expect(rnger.State()).To(Equal(rnger2.State()))
-				Expect(rnger.N()).To(Equal(rnger2.N()))
-				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
-				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
-
-				for _, j := range indices {
-					expectedShares := rnger.DirectedOpenings(j)
-					shares := rnger2.DirectedOpenings(j)
-
-					Expect(expectedShares).To(Equal(shares))
-				}
-			})
-
-			It("should correctly marshal and unmarshal (Done)", func() {
-				count := 1
-				for _, from := range indices {
-					if count == k {
-						break
-					}
-
-					_ = rnger.TransitionOpen(openingsByPlayer[from])
-				}
-				Expect(rnger.State()).To(Equal(rng.Done))
-				Expect(len(rnger.ReconstructedShares())).To(Equal(b))
-
-				buf := bytes.NewBuffer([]byte{})
-
-				m, err := rnger.Marshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var rnger2 rng.RNGer
-				m, err = rnger2.Unmarshal(buf, rnger.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(rnger.BatchSize()).To(Equal(rnger2.BatchSize()))
-				Expect(rnger.State()).To(Equal(rnger2.State()))
-				Expect(rnger.N()).To(Equal(rnger2.N()))
-				Expect(rnger.Threshold()).To(Equal(rnger2.Threshold()))
-				Expect(rnger.ReconstructedShares()).To(Equal(rnger2.ReconstructedShares()))
-
-				for _, j := range indices {
-					expectedShares := rnger.DirectedOpenings(j)
-					shares := rnger2.DirectedOpenings(j)
-
-					Expect(expectedShares).To(Equal(shares))
-				}
-			})
-
-			It("Should fail when marshaling with not enough bytes", func() {
-				buf := bytes.NewBuffer([]byte{})
-
-				for i := 0; i < rnger.SizeHint(); i++ {
-					buf.Reset()
-					_, err := rnger.Marshal(buf, i)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-
-			It("Should fail when unmarshaling with not enough bytes", func() {
-				bs, _ := surge.ToBinary(rnger)
-
-				var rnger2 rng.RNGer
-				for i := 0; i < rnger.SizeHint(); i++ {
-					buf := bytes.NewBuffer(bs)
-
-					_, err := rnger2.Unmarshal(buf, i)
-					Expect(err).To(HaveOccurred())
-				}
 			})
 		})
 	})

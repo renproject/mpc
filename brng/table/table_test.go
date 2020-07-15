@@ -1,7 +1,6 @@
 package table_test
 
 import (
-	"bytes"
 	"math/rand"
 	"time"
 
@@ -24,55 +23,6 @@ const (
 var _ = Describe("Table", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
-	Context("Sharing", func() {
-		It("Marshals and Unmarshals correctly", func() {
-			for t := 0; t < LoopTests; t++ {
-				n := 10 + rand.Intn(40)
-				k := 2 + rand.Intn(n-2)
-				h := secp256k1.RandomPoint()
-				indices := shamirutil.RandomIndices(n)
-
-				sharing := brngutil.RandomValidSharing(indices, k, h)
-
-				buf := bytes.NewBuffer([]byte{})
-				m, err := sharing.Marshal(buf, sharing.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var unmarshalledSharing Sharing
-				m, err = unmarshalledSharing.Unmarshal(buf, sharing.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(unmarshalledSharing).To(Equal(sharing))
-			}
-		})
-	})
-
-	Context("Element", func() {
-		It("Marshals and Unmarshals correctly", func() {
-			for t := 0; t < LoopTests; t++ {
-				to := secp256k1.RandomFn()
-				from := secp256k1.RandomFn()
-				h := secp256k1.RandomPoint()
-
-				element, _, _ := tableutil.RandomValidElement(to, from, h)
-
-				buf := bytes.NewBuffer([]byte{})
-				m, err := element.Marshal(buf, element.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				var unmarshalledElement Element
-				m, err = unmarshalledElement.Unmarshal(buf, element.SizeHint())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).To(Equal(0))
-
-				Expect(unmarshalledElement).To(Equal(element))
-			}
-		})
-	})
-
 	Context("Row", func() {
 		Specify("MakeRow correctly allocates memory for a new row", func() {
 			for t := 0; t < LoopTests; t++ {
@@ -86,32 +36,6 @@ var _ = Describe("Table", func() {
 				Expect(row.BatchSize()).To(Equal(b))
 				Expect(row.N()).To(Equal(n))
 			}
-		})
-
-		Context("Marshalling and Unmarshalling", func() {
-			It("Marshals and Unmarshals correctly", func() {
-				for t := 0; t < LoopTests; t++ {
-					n := 5 + rand.Intn(40)
-					k := 2 + rand.Intn(n-2)
-					b := 5 + rand.Intn(45)
-					h := secp256k1.RandomPoint()
-					indices := shamirutil.RandomIndices(n)
-
-					row := brngutil.RandomValidRow(indices, k, b, h)
-
-					buf := bytes.NewBuffer([]byte{})
-					m, err := row.Marshal(buf, row.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					var unmarshalledRow Row
-					m, err = unmarshalledRow.Unmarshal(buf, row.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					Expect(unmarshalledRow).To(Equal(row))
-				}
-			})
 		})
 	})
 
@@ -130,31 +54,6 @@ var _ = Describe("Table", func() {
 				Expect(sumShares).To(Equal(expectedSumShares))
 				Expect(sumCommitments).To(Equal(expectedSumCommitments))
 			}
-		})
-
-		Context("Marshalling and Unmarshalling", func() {
-			It("Marshals and Unmarshals correctly", func() {
-				for t := 0; t < LoopTests; t++ {
-					n := 5 + rand.Intn(40)
-					h := secp256k1.RandomPoint()
-					to := secp256k1.RandomFn()
-					indices := shamirutil.RandomIndices(n)
-
-					col, _, _ := tableutil.RandomValidCol(to, indices, h)
-
-					buf := bytes.NewBuffer([]byte{})
-					m, err := col.Marshal(buf, col.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					var unmarshalledCol Col
-					m, err = unmarshalledCol.Unmarshal(buf, col.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					Expect(unmarshalledCol).To(Equal(col))
-				}
-			})
 		})
 	})
 
@@ -203,35 +102,6 @@ var _ = Describe("Table", func() {
 			})
 		})
 
-		Context("Marshalling and Unmarshalling", func() {
-			It("Marshals and Unmarshals correctly", func() {
-				for t := 0; t < LoopTests; t++ {
-					n := 5 + rand.Intn(40)
-					k := 2 + rand.Intn(n-2)
-					b := 5 + rand.Intn(35)
-					t := 1 + rand.Intn(k-1)
-					h := secp256k1.RandomPoint()
-					indices := shamirutil.RandomIndices(n)
-					to_id := rand.Intn(n)
-					to := indices[to_id]
-
-					slice := brngutil.RandomValidSlice(to, indices, h, k, b, t)
-
-					buf := bytes.NewBuffer([]byte{})
-					m, err := slice.Marshal(buf, slice.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					var unmarshalledSlice Slice
-					m, err = unmarshalledSlice.Unmarshal(buf, slice.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					Expect(unmarshalledSlice).To(Equal(slice))
-				}
-			})
-		})
-
 		It("correctly identifies faults in an invalid slice", func() {
 			n := 5 + rand.Intn(40)
 			k := 2 + rand.Intn(n-2)
@@ -252,33 +122,6 @@ var _ = Describe("Table", func() {
 	})
 
 	Context("Table", func() {
-		Context("Marshalling and Unmarshalling", func() {
-			It("Marshals and Unmarshals correctly", func() {
-				for t := 0; t < LoopTests; t++ {
-					n := 5 + rand.Intn(40)
-					k := 2 + rand.Intn(n-2)
-					b := 5 + rand.Intn(35)
-					t := 1 + rand.Intn(k-1)
-					h := secp256k1.RandomPoint()
-					indices := shamirutil.RandomIndices(n)
-
-					table := brngutil.RandomValidTable(indices, h, k, b, t)
-
-					buf := bytes.NewBuffer([]byte{})
-					m, err := table.Marshal(buf, table.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					var unmarshalledTable Table
-					m, err = unmarshalledTable.Unmarshal(buf, table.SizeHint())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(Equal(0))
-
-					Expect(unmarshalledTable).To(Equal(table))
-				}
-			})
-		})
-
 		Context("HasValidDimensions", func() {
 			It("correctly notices invalid table (height = 0)", func() {
 				table := Table{}
