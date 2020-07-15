@@ -2,9 +2,12 @@ package rng
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
@@ -210,6 +213,17 @@ func (rnger RNGer) Commitments() []shamir.Commitment {
 	return commitmentsCopy
 }
 
+// Generate implements the quick.Generator interface.
+func (rnger RNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
+	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
+	ownIndex := indices[rand.Intn(len(indices))]
+	b := uint32(rand.Intn(10))
+	k := uint32(rand.Intn(20))
+	h := secp256k1.RandomPoint()
+	_, v := New(ownIndex, indices, b, k, h)
+	return reflect.ValueOf(v)
+}
+
 // New creates a new RNG state machine for a given batch size.
 // - Inputs
 // 	 - ownIndex is the current machine's index
@@ -232,6 +246,9 @@ func New(
 	// Declare variable to hold RNG machine's computed shares and commitments
 	// and allocate necessary memory.
 	commitments := make([]shamir.Commitment, b)
+	for i := range commitments {
+		commitments[i] = shamir.Commitment{}
+	}
 	openingsMap := make(map[secp256k1.Fn]shamir.VerifiableShares)
 	for _, index := range indices {
 		openingsMap[index] = make(shamir.VerifiableShares, 0, b)

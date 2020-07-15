@@ -2,9 +2,12 @@ package open
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 )
 
@@ -185,6 +188,14 @@ type Opener struct {
 	reconstructor shamir.Reconstructor
 }
 
+// Generate implements the quick.Generator interface.
+func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
+	b := rand.Intn(20)
+	indices := shamirutil.RandomIndices(rand.Intn(20))
+	h := secp256k1.RandomPoint()
+	return reflect.ValueOf(New(uint32(b), indices, h))
+}
+
 // SizeHint implements the surge.SizeHinter interface.
 func (opener Opener) SizeHint() int {
 	return surge.SizeHint(opener.batchSize) +
@@ -342,6 +353,9 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	}
 
 	commitments := make([]shamir.Commitment, b)
+	for i := range commitments {
+		commitments[i] = shamir.Commitment{}
+	}
 
 	secrets := make([]secp256k1.Fn, b)
 	decommitments := make([]secp256k1.Fn, b)

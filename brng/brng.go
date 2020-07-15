@@ -2,9 +2,12 @@ package brng
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/table"
@@ -94,6 +97,13 @@ type BRNGer struct {
 
 	sharer  shamir.VSSharer
 	checker shamir.VSSChecker
+}
+
+// Generate implements the quick.Generator interface.
+func (brnger BRNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
+	indices := shamirutil.RandomIndices(rand.Intn(20))
+	h := secp256k1.RandomPoint()
+	return reflect.ValueOf(New(indices, h))
 }
 
 // SizeHint implements the surge.SizeHinter interface.

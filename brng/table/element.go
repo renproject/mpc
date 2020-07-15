@@ -2,6 +2,8 @@ package table
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
@@ -14,6 +16,18 @@ type Element struct {
 	from       secp256k1.Fn
 	share      shamir.VerifiableShare
 	commitment shamir.Commitment
+}
+
+// Generate implements the quick.Generator interface.
+func (e Element) Generate(rand *rand.Rand, size int) reflect.Value {
+	var share shamir.VerifiableShare
+	var commitment shamir.Commitment
+
+	from := secp256k1.RandomFn()
+	share = share.Generate(rand, size).Interface().(shamir.VerifiableShare)
+	commitment = commitment.Generate(rand, size).Interface().(shamir.Commitment)
+
+	return reflect.ValueOf(NewElement(from, share, commitment))
 }
 
 // NewElement constructs a new Element from the given arguments.
