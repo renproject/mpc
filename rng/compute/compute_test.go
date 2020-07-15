@@ -60,8 +60,7 @@ var _ = Describe("RNG computation helper functions", func() {
 			for j := range coeffs {
 				for l := range coeffs[j] {
 					coeffs[j][l] = secp256k1.RandomFn()
-					coeffs[j][l].GetB32(bs[:])
-					points[j][l].BaseExp(bs)
+					points[j][l].BaseExp(&coeffs[j][l])
 				}
 			}
 
@@ -74,13 +73,12 @@ var _ = Describe("RNG computation helper functions", func() {
 
 			output := ShareCommitment(index, coms)
 
-			expected := secp256k1.NewPoint()
+			expected := secp256k1.Point{}
 			for j := 0; j < output.Len(); j++ {
 				y := polyEval(index, coeffs[j])
-				y.GetB32(bs[:])
 
 				actual := output[j]
-				expected.BaseExp(bs)
+				expected.BaseExp(&y)
 
 				Expect(actual.Eq(&expected)).To(BeTrue())
 			}

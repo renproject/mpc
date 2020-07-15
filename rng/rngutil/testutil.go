@@ -58,9 +58,8 @@ func BRNGOutput(index secp256k1.Fn, k int, h secp256k1.Point) (
 	shares := make(shamir.VerifiableShares, k)
 	coms := make([]shamir.Commitment, k)
 
-	var bs [32]byte
-	gPow := secp256k1.NewPoint()
-	hPow := secp256k1.NewPoint()
+	gPow := secp256k1.Point{}
+	hPow := secp256k1.Point{}
 	sCoeffs := make([]secp256k1.Fn, k)
 	rCoeffs := make([]secp256k1.Fn, k)
 	for i := 0; i < k; i++ {
@@ -68,10 +67,8 @@ func BRNGOutput(index secp256k1.Fn, k int, h secp256k1.Point) (
 			sCoeffs[j] = secp256k1.RandomFn()
 			rCoeffs[j] = secp256k1.RandomFn()
 
-			sCoeffs[j].GetB32(bs[:])
-			gPow.BaseExp(bs)
-			rCoeffs[j].GetB32(bs[:])
-			hPow.Scale(&h, bs)
+			gPow.BaseExp(&sCoeffs[j])
+			hPow.Scale(&h, &rCoeffs[j])
 			gPow.Add(&gPow, &hPow)
 			coms[i].Append(gPow)
 		}

@@ -2,11 +2,9 @@ package rngutil
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/mpcutil"
@@ -66,47 +64,47 @@ func (machine RngMachine) SizeHint() int {
 }
 
 // Marshal implements surge Marshaler
-func (machine RngMachine) Marshal(w io.Writer, m int) (int, error) {
-	m, err := machine.id.Marshal(w, m)
+func (machine RngMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := machine.id.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling id: %v", err)
+		return buf, rem, fmt.Errorf("marshaling id: %v", err)
 	}
-	m, err = machine.index.Marshal(w, m)
+	buf, rem, err = machine.index.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling index: %v", err)
+		return buf, rem, fmt.Errorf("marshaling index: %v", err)
 	}
-	m, err = surge.Marshal(w, machine.indices, m)
+	buf, rem, err = surge.Marshal(machine.indices, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling indices: %v", err)
+		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
 	}
-	m, err = machine.rnger.Marshal(w, m)
+	buf, rem, err = machine.rnger.Marshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("marshaling rnger: %v", err)
+		return buf, rem, fmt.Errorf("marshaling rnger: %v", err)
 	}
 
-	return m, nil
+	return buf, rem, nil
 }
 
 // Unmarshal implements surge Unmarshaler
-func (machine *RngMachine) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := machine.id.Unmarshal(r, m)
+func (machine *RngMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := machine.id.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling id: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling id: %v", err)
 	}
-	m, err = machine.index.Unmarshal(r, m)
+	buf, rem, err = machine.index.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling index: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling index: %v", err)
 	}
-	m, err = machine.unmarshalIndices(r, m)
+	buf, rem, err = surge.Unmarshal(&machine.indices, buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling indices: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
 	}
-	m, err = machine.rnger.Unmarshal(r, m)
+	buf, rem, err = machine.rnger.Unmarshal(buf, rem)
 	if err != nil {
-		return m, fmt.Errorf("unmarshaling rnger: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling rnger: %v", err)
 	}
 
-	return m, nil
+	return buf, rem, nil
 }
 
 // RandomNumbersShares returns the reconstructed shares for the
@@ -155,24 +153,4 @@ func (machine *RngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	default:
 		panic("unexpected message type")
 	}
-}
-
-// Private methods
-func (machine *RngMachine) unmarshalIndices(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := shamirutil.UnmarshalSliceLen32(&l, shamir.FnSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	machine.indices = (machine.indices)[:0]
-	for i := uint32(0); i < l; i++ {
-		machine.indices = append(machine.indices, secp256k1.Fn{})
-		m, err = machine.indices[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
-		}
-	}
-
-	return m, nil
 }
