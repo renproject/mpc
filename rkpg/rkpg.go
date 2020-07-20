@@ -2,653 +2,87 @@ package rkpg
 
 import (
 	"fmt"
-	"io"
 
-	"github.com/renproject/secp256k1-go"
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/curve"
-	"github.com/renproject/shamir/util"
-	"github.com/renproject/surge"
-
-	"github.com/renproject/mpc/open"
-	"github.com/renproject/mpc/rng"
 )
 
-// RKPGer describes the structure of the Random KeyPair Generation machine.
-// The machine can be used for an arbitrary number of invocations of RKPG,
-// however each instance is specific to the set of machine indices (parties) it
-// was initially constructed with, as well as the batch size, reconstruction
-// threshold and Pedersen Commitment Scheme Parameter.
-//
-// An RKPGer consists of:
-// - An embedded RNGer for random number generation
-// - An embedded RNGer for random zero generation
-// - An embedded Opener for reconstructing the share-hiding openings
-//
-// RKPG state machine has also been covered in this Github issue:
-// https://github.com/renproject/mpc/issues/14
-//
-// RKPGer can exist in one of the following states:
-// - Init
-// - WaitingRNG
-// - RNGsReady
-// - WaitingRZG
-// - WaitingOpen
-// - Done
-//
-// A new instance of RKPGer can be created by calling:
-// - New(index, indices, b, k, h)
-//
-// State transitions can be triggered by the following functions
-// - TransitionRNGShares
-// - TransitionRNGOpen
-// - TransitionRZGShares
-// - TransitionRZGOpen
-// - TransitionHidingOpenings
-// - Reset
-//
-// Every state transition function returns a transition event, depending
-// on the validity of the inputs and their processing. The various state
-// transitions are as follows:
-// - state(Init)
-//		- TransitionRNGShares
-//			|
-//			|__ Valid Inputs   --> event(RNGInputsAccepted) --> state(WaitingRNG)
-//			|__ Invalid Inputs --> event(RNGInputsIgnored)  --> state(Init)
-//		- Reset
-//			|
-//			|__ Reset --> event(ResetDone) --> state(Init)
-//			|__ Invalid reset criteria --> event(ResetAborted) --> state()
-//		- Any other message
-//			|__ Message(E) --> event(E) --> state(Init)
-//
-// Note: Here `E` is a an appropriate event returned by the Message(E)
-// For example, on a call Message(TransitionRZGOpen), event(RZGOpeningsIgnored) is returned
-//
-// - state(WaitingRNG)
-//		- TransitionRNGOpen
-//			|
-//			|__ Valid Inputs       --> event(RNGOpeningsAccepted) --> state(WaitingRNG)
-//			|__ Valid Inputs (kth) --> event(RNGReady)            --> state(RNGsReady)
-//			|__ Invalid Inputs     --> event(RNGOpeningsIgnored)  --> state(WaitingRNG)
-//		- Reset
-//			|
-//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
-//			|__ Invalid reset criteria --> event(ResetAborted) --> state(WaitingRNG)
-//		- Any other message
-//			|__ Message(E) --> event(E) --> state(WaitingRNG)
-//
-// - state(RNGsReady)
-//		- TransitionRZGShares
-//			|
-//			|__ Valid Inputs   --> event(RZGInputsAccepted) --> state(WaitingRZG)
-//			|__ Invalid Inputs --> event(RZGInputsIgnored)  --> state(RNGsReady)
-//		- Reset
-//			|
-//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
-//			|__ Invalid reset criteria --> event(ResetAborted) --> state(RNGsReady)
-//		- Any other message
-//			|__ Message(E) --> event(E) --> state(RNGsReady)
-//
-// - state(WaitingRZG)
-//		- TransitionRZGOpen
-//			|
-//			|__ Valid Inputs       --> event(RZGOpeningsAccepted) --> state(WaitingRZG)
-//			|__ Valid Inputs (kth) --> event(RZGReady)            --> state(WaitingOpen)
-//			|__ Invalid Inputs     --> event(RZGOpeningsIgnored)  --> state(WaitingRZG)
-//		- Reset
-//			|
-//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
-//			|__ Invalid reset criteria --> event(ResetAborted) --> state(WaitingRZG)
-//		- Any other message
-//			|__ Message(E) --> event(E) --> state(WaitingRZG)
-//
-// - state(WaitingOpen)
-//		- TransitionHidingOpenings
-//			|
-//			|__ Valid Inputs       --> event(HidingOpeningsAccepted) --> state(WaitingOpen)
-//			|__ Valid Inputs (kth) --> event(KeyPairsReady)          --> state(Done)
-//			|__ Invalid Inputs     --> event(HidingOpeningsIgnored) --> state(WaitingOpen)
-//		- Reset
-//			|
-//			|__ Valid reset criteria   --> event(ResetDone) --> state(Init)
-//			|__ Invalid reset criteria --> event(ResetAborted) --> state(WaitingOpen)
-//		- Any other message
-//			|__ Message(E) --> event(E) --> state(WaitingOpen)
-type RKPGer struct {
-	// state signifies the current state of the RKPG state machine
-	state State
+func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShares) (shamir.Shares, error) {
+	if len(rngShares) != int(params.b) || len(rzgShares) != int(params.b) {
+		return nil, fmt.Errorf(
+			"invalid share batch size: expected both %v (rng) and %v (rzg) to be %v",
+			len(rngShares), len(rzgShares), params.b,
+		)
+	}
 
-	// h denotes the Pedersen Commitment Scheme Parameter
-	h curve.Point
+	shares := make(shamir.Shares, len(rngShares))
+	for i := range shares {
+		rnShare := rngShares[i].Share()
+		rzShare := rzgShares[i].Share()
+		ind := rzShare.Index()
+		if !rnShare.IndexEq(&ind) {
+			return nil, fmt.Errorf("mismatched indices: expected %v to equal %v", rnShare.Index(), ind)
+		}
+		if _, ok := params.arrIndex[ind]; !ok {
+			return nil, fmt.Errorf("indices out of range: index %v not in index set", ind)
+		}
 
-	// rnger signifies the RNGer embedded within the RKPG state machine. Every
-	// invocation of random keypair generation requires an under-the-hood
-	// invocation of random number generation, whose shares are later revealed
-	// in order to construct the random keypair
-	rnger rng.RNGer
+		dRnShare := shamir.NewShare(ind, rngShares[i].Decommitment())
+		dRzShare := shamir.NewShare(ind, rzgShares[i].Decommitment())
 
-	// rnger signifies the RZGer embedded within the RKPG state machine. In order
-	// to open the underlying share's decommitments (to compute the random number
-	// "in the exponent"), we do a share-hiding opening by masking the shares to
-	// the secret decommitment with random shares of a zero secret
-	rzger rng.RNGer
+		shares[i].Add(&dRnShare, &dRzShare)
+	}
 
-	// opener signifies the Opener state machine operating within the RKPG
-	// state machine. As the RKPG machine receives openings from other machines,
-	// the opener machine also transitions, to eventually reconstruct the
-	// shared secret
-	opener open.Opener
-
-	// publicKeys hold the batch of public keys that will be computed once
-	// RKPGer's share-hiding secrets are reconstructed
-	publicKeys []curve.Point
+	return shares, nil
 }
 
-// SizeHint implements the surge SizeHinter interface
-func (rkpger RKPGer) SizeHint() int {
-	return rkpger.state.SizeHint() +
-		rkpger.h.SizeHint() +
-		rkpger.rnger.SizeHint() +
-		rkpger.rzger.SizeHint() +
-		rkpger.opener.SizeHint() +
-		surge.SizeHint(rkpger.publicKeys)
-}
-
-// Marshal implements the surge Marshaler interface
-func (rkpger RKPGer) Marshal(w io.Writer, m int) (int, error) {
-	m, err := rkpger.state.Marshal(w, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling state: %v", err)
+func TransitionShares(
+	state *State,
+	params *Params,
+	coms []shamir.Commitment,
+	shares shamir.Shares,
+) ([]secp256k1.Point, TransitionEvent) {
+	if len(shares) != int(params.b) {
+		return nil, WrongBatchSize
 	}
-	m, err = rkpger.h.Marshal(w, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling h: %v", err)
+	index := shares[0].Index()
+	ind, ok := params.arrIndex[index]
+	if !ok {
+		return nil, InvalidIndex
 	}
-	m, err = rkpger.rnger.Marshal(w, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling rnger: %v", err)
+	if state.shareReceived[ind] {
+		return nil, DuplicateIndex
 	}
-	m, err = rkpger.rzger.Marshal(w, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling rzger: %v", err)
-	}
-	m, err = rkpger.opener.Marshal(w, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling opener: %v", err)
-	}
-	m, err = surge.Marshal(w, rkpger.publicKeys, m)
-	if err != nil {
-		return m, fmt.Errorf("marshaling publicKeys: %v", err)
-	}
-
-	return m, nil
-}
-
-// Unmarshal implements the surge Unmarshaler interface
-func (rkpger *RKPGer) Unmarshal(r io.Reader, m int) (int, error) {
-	m, err := rkpger.state.Unmarshal(r, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling state: %v", err)
-	}
-	rkpger.h = curve.New()
-	m, err = rkpger.h.Unmarshal(r, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling h: %v", err)
-	}
-	m, err = rkpger.rnger.Unmarshal(r, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling rnger: %v", err)
-	}
-	m, err = rkpger.rzger.Unmarshal(r, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling rzger: %v", err)
-	}
-	m, err = rkpger.opener.Unmarshal(r, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling opener: %v", err)
-	}
-	m, err = rkpger.unmarshalPublicKeys(r, m)
-	if err != nil {
-		return m, fmt.Errorf("unmarshaling publicKeys: %v", err)
-	}
-
-	return m, nil
-}
-
-// State returns the current state of the RKPGer state machine
-func (rkpger RKPGer) State() State {
-	return rkpger.state
-}
-
-// N returns the number of machine replicas participating in the RKPG protocol
-func (rkpger RKPGer) N() int {
-	return rkpger.rnger.N()
-}
-
-// BatchSize returns the batch size of the RKPG state machine.
-// This also denotes the number of random keypairs that can possibly
-// be generated in a single successful invocation of random keypair generation
-func (rkpger RKPGer) BatchSize() uint32 {
-	return rkpger.rnger.BatchSize()
-}
-
-// Threshold returns the reconstruction threshold for every set of shamir
-// secret sharing
-func (rkpger RKPGer) Threshold() uint32 {
-	return rkpger.rnger.Threshold()
-}
-
-// New creates a new RKPG state machine for a given batch size
-//
-// ownIndex is the current machine's index
-// indices is the set of player indices
-// b is the number of random keypairs generated in one invocation of RKPG protocol
-//   also termed the batch size of the RKPGer
-// k is the reconstruction threshold for every shamir secret sharing, or the
-//   minimum number of valid shares required to reconstruct the underlying secret
-// h is the Pedersen Commitment Parameter, a point on elliptic curve
-func New(
-	ownIndex open.Fn,
-	indices []open.Fn,
-	b, k uint32,
-	h curve.Point,
-) (TransitionEvent, RKPGer) {
-	// Assign the initial state to the RKPGer
-	state := Init
-
-	// Panic if we cannot even initialise the embedded RNGer
-	event, rnger := rng.New(ownIndex, indices, b, k, h)
-	if event != rng.Initialised {
-		panic("RNGer initialisation failed")
-	}
-
-	// Panic if we cannot even initialise the embedded RZGer
-	event, rzger := rng.New(ownIndex, indices, b, k, h)
-	if event != rng.Initialised {
-		panic("RZGer initialisation failed")
-	}
-
-	// Create a new instance of an Opener
-	opener := open.New(b, indices, h)
-
-	// Allocate memory for the public keys
-	publicKeys := make([]curve.Point, int(b))
-	for i := 0; i < int(b); i++ {
-		publicKeys[i] = curve.Infinity()
-	}
-
-	return Initialised, RKPGer{
-		state:      state,
-		h:          h,
-		rnger:      rnger,
-		rzger:      rzger,
-		opener:     opener,
-		publicKeys: publicKeys,
-	}
-}
-
-// TransitionRNGShares accepts the BRNG outputs for RNG, and passes them on to
-// the embedded RNGer. The RKPGer transitions to WaitingRNG on success. The machine
-// can also transition to a RNGsReady state for the trivial case of reconstruction
-// threshold being equal to one
-//
-// setsOfShares are the batch of verifiable shares from BRNG output
-// setsOfCommitments are the corresponding batch of commitments for the shares
-func (rkpger *RKPGer) TransitionRNGShares(
-	setsOfShares []shamir.VerifiableShares,
-	setsOfCommitments [][]shamir.Commitment,
-) TransitionEvent {
-	// Ignore if the RKPGer is not in the appropriate state
-	if rkpger.state != Init {
-		return RNGInputsIgnored
-	}
-
-	// Pass the shares and commitments to the embedded RNGer
-	event := rkpger.rnger.TransitionShares(setsOfShares, setsOfCommitments, false)
-
-	// If the local commitments/shares were constructed, transition to the next
-	// state and emit an appropriate event representing the progress made
-	if event == rng.CommitmentsConstructed || event == rng.SharesConstructed {
-		rkpger.state = WaitingRNG
-		return RNGInputsAccepted
-	}
-
-	// If this was a trivial case where k = 1, transition to the appropriate state
-	// while emitting the appropriate event representing the progress made
-	if event == rng.RNGsReconstructed {
-		rkpger.state = RNGsReady
-		return RNGReady
-	}
-
-	// If none of the above scenarios matched, it means the inputs were invalid
-	// in one or more ways and hence we ignore them
-	return RNGInputsIgnored
-}
-
-// TransitionRNGOpen accepts openings from other machines for reconstructing the
-// unbiased random number shares. The RKPGer continues to be in the WaitingRNG
-// state until reconstructing its shares, upon which it transitions to RNGsReady
-//
-// fromIndex is the machine index of the open sender
-// openings are the verifiable shares opened to the current machine
-func (rkpger *RKPGer) TransitionRNGOpen(
-	fromIndex open.Fn,
-	openings shamir.VerifiableShares,
-) TransitionEvent {
-	// Ignore if the RKPGer is not in the appropriate state
-	if rkpger.state != WaitingRNG {
-		return RNGOpeningsIgnored
-	}
-
-	// Pass the openings to the embedded RNGer
-	event := rkpger.rnger.TransitionOpen(fromIndex, openings)
-
-	// If the openings were added, emit an appropriate event. This means the
-	// reconstruction was not yet possible and the embedded RNGer will continue
-	// waiting for more openings
-	if event == rng.OpeningsAdded {
-		return RNGOpeningsAccepted
-	}
-
-	// If the underlying secrets were reconstructed, it means the RNG
-	// protocol is complete.
-	// Transition to the appropriate state while emitting the appropriate
-	// event representing the progress made
-	if event == rng.RNGsReconstructed {
-		rkpger.state = RNGsReady
-		return RNGReady
-	}
-
-	// If none of the above scenarios matched, it means the openings were
-	// marked invalid in one or more ways and hence were ignored
-	return RNGOpeningsIgnored
-}
-
-// TransitionRZGShares accepts the BRNG outputs for RZG, and passes them on to
-// the embedded RZGer. The RKPGer transitions to WaitingRZG on success. The machine
-// can also transition to a WaitingOpen state for the trivial case of reconstruction
-// threshold being equal to one
-//
-// setsOfShares are the batch of verifiable shares from BRNG output
-// setsOfCommitments are the corresponding batch of commitments for the shares
-func (rkpger *RKPGer) TransitionRZGShares(
-	setsOfShares []shamir.VerifiableShares,
-	setsOfCommitments [][]shamir.Commitment,
-) TransitionEvent {
-	// Ignore if the RKPGer is not in the appropriate state
-	if rkpger.state != RNGsReady {
-		return RZGInputsIgnored
-	}
-
-	// Pass the shares and commitments to the embedded RZGer
-	event := rkpger.rzger.TransitionShares(setsOfShares, setsOfCommitments, true)
-
-	// If the local commitments/shares were constructed, transition to the next
-	// state and emit an appropriate event representing the progress made
-	if event == rng.CommitmentsConstructed || event == rng.SharesConstructed {
-		rkpger.state = WaitingRZG
-		return RZGInputsAccepted
-	}
-
-	// If this was a trivial case where k = 1, compute the commitments for the
-	// share-hiding opening to follow and reset the RKPGer's embedded opener.
-	// Also, transition to the appropriate state while emitting the appropriate
-	// event representing the progress made
-	if event == rng.RNGsReconstructed {
-		rkpger.resetOpener()
-		rkpger.state = WaitingOpen
-		return RZGReady
-	}
-
-	// If none of the above scenarios matches, it means the inputs were invalid
-	// in one or more ways and hence we ignore them
-	return RZGInputsIgnored
-}
-
-// TransitionRZGOpen accepts openings from other machines for reconstructing the
-// random shares for zero sharing. The RKPGer continues to be in the WaitingRZG
-// state until reconstructing its shares, upon which it transitions to WaitingOpen
-//
-// fromIndex is the machine index of the open sender
-// openings are the verifiable shares opened to the current machine
-func (rkpger *RKPGer) TransitionRZGOpen(
-	fromIndex open.Fn,
-	openings shamir.VerifiableShares,
-) TransitionEvent {
-	// Ignore if the RKPGer is not in the appropriate state
-	if rkpger.state != WaitingRZG {
-		return RZGOpeningsIgnored
-	}
-
-	// Pass the openings to the embedded RZGer
-	event := rkpger.rzger.TransitionOpen(fromIndex, openings)
-
-	// If the openings were added, emit an appropriate event. This means the
-	// reconstruction was not yet possible and the embedded RZGer will continue
-	// waiting for more openings
-	if event == rng.OpeningsAdded {
-		return RZGOpeningsAccepted
-	}
-
-	// If the underlying secrets were reconstructed, it means the RZG
-	// protocol is complete. We then compute the commitments for the
-	// share-hiding opening to follow and reset the RKPGer's embedded opener.
-	// Also, transition to the appropriate state while emitting the appropriate
-	// event representing the progress made
-	if event == rng.RNGsReconstructed {
-		rkpger.resetOpener()
-		rkpger.state = WaitingOpen
-
-		// Open its own share-hiding openings now that we have
-		// reset the opener and are ready with the hiding openings
-		rkpger.TransitionHidingOpenings(rkpger.HidingOpenings())
-
-		return RZGReady
-	}
-
-	// If none of the above scenarios matched, it means the openings were
-	// marked invalid in one or more ways and hence were ignored
-	return RZGOpeningsIgnored
-}
-
-// TransitionHidingOpenings accepts the share-hiding openings from other machines
-// in the network participating in the RKPG protocol. Valid openings are added
-// to the RKPGer's embedded Opener, and once k valid openings are available,
-// the Opener reconstructs the underlying secrets.
-func (rkpger *RKPGer) TransitionHidingOpenings(
-	openings shamir.VerifiableShares,
-) TransitionEvent {
-	// Ignore if the RKPGer is not in appropriate state
-	if rkpger.state != WaitingOpen {
-		return HidingOpeningsIgnored
-	}
-
-	// Pass the openings to the embedded Opener
-	event := rkpger.opener.TransitionShares(openings)
-
-	// If the shares were successfully added to the Opener's buffer
-	// emit an event representing this progress
-	if event == open.SharesAdded {
-		return HidingOpeningsAccepted
-	}
-
-	// If the shares were in fact the kth, and reconstruction was successful,
-	// compute the random keypairs, transition to the Done state and emit
-	// an event representing this progress
-	if event == open.Done {
-		rkpger.computeKeyPairs()
-		rkpger.state = Done
-		return KeyPairsReady
-	}
-
-	// If none of the above scenarios were satisfied, the openings were invalid
-	// in one or more ways, and hence were ignored by the Opener
-	return HidingOpeningsIgnored
-}
-
-// Reset transitions a RKPGer in any state to the Init state
-func (rkpger *RKPGer) Reset() TransitionEvent {
-	// If the embedded RNG cannot be reset, abort the operation
-	event := rkpger.rnger.Reset()
-	if event != rng.Reset {
-		return ResetAborted
-	}
-
-	// If the embedded RZG cannot be reset, abort the operation
-	event = rkpger.rzger.Reset()
-	if event != rng.Reset {
-		return ResetAborted
-	}
-
-	// Reset the public key points
-	defaultPoint := curve.Infinity()
-	for _, publicKey := range rkpger.publicKeys {
-		publicKey.Set(&defaultPoint)
-	}
-
-	// The reset operation was successful, so transition to the appropriate
-	// state and emit the appropriate event
-	rkpger.state = Init
-	return ResetDone
-}
-
-// DirectedRNGOpenings returns the RNG specific directed openings from this
-// machine to another specified machine in the RKPG protocol
-func (rkpger RKPGer) DirectedRNGOpenings(to open.Fn) shamir.VerifiableShares {
-	return rkpger.rnger.DirectedOpenings(to)
-}
-
-// DirectedRZGOpenings returns the RZG specific directed openings from this
-// machine to another specified machine in the RKPG protocol
-func (rkpger RKPGer) DirectedRZGOpenings(to open.Fn) shamir.VerifiableShares {
-	return rkpger.rzger.DirectedOpenings(to)
-}
-
-// HidingOpenings returns the share-hiding openings from this RKPGer machine
-func (rkpger RKPGer) HidingOpenings() shamir.VerifiableShares {
-	// Ignore if the RKPGer is not in appropriate state
-	// Provide the hiding openings only if in the WaitingOpen or Done state
-	if rkpger.state != WaitingOpen && rkpger.state != Done {
-		return nil
-	}
-
-	// Fetch shares to the RNG and RZG
-	rngShares := rkpger.rnger.ReconstructedShares()
-	rzgShares := rkpger.rzger.ReconstructedShares()
-
-	// Add both the RNG and RZG shares to construct the share-hiding openings
-	// s_i = r_i + z_i
-	hidingOpenings := make(shamir.VerifiableShares, rkpger.BatchSize())
-	for i, rngShare := range rngShares {
-		hidingOpenings[i].Add(&rngShare, &rzgShares[i])
-	}
-
-	return hidingOpenings
-}
-
-// RNGCommitments returns the commitments to the batch of unbiased random numbers
-func (rkpger RKPGer) RNGCommitments() []shamir.Commitment {
-	return rkpger.rnger.Commitments()
-}
-
-// KeyPairs returns a tuple of the reconstructed batch of random keypairs
-// and the RKPGer's own share of the corresponding unbiased random numbers
-func (rkpger RKPGer) KeyPairs() ([]curve.Point, shamir.VerifiableShares) {
-	// Return nil values if the RKPGer is not in the Done state
-	if rkpger.state != Done {
-		return nil, nil
-	}
-
-	// Copy the public keys
-	publicKeysCopy := make([]curve.Point, rkpger.BatchSize())
-	copy(publicKeysCopy, rkpger.publicKeys)
-
-	// Copy the machine's shares for the unbiased random numbers
-	sharesCopy := make(shamir.VerifiableShares, rkpger.BatchSize())
-	copy(sharesCopy, rkpger.rnger.ReconstructedShares())
-
-	return publicKeysCopy, sharesCopy
-}
-
-// Private functions
-
-// resetOpener is called once RZG is done. At this stage, the RKPGer has
-// the required information to compute the final set of commitments for the
-// share-hiding opening, and reset its Opener with these commitments
-func (rkpger *RKPGer) resetOpener() {
-	// Fetch commitments from RNG and RZG
-	rngComms := rkpger.rnger.Commitments()
-	rzgComms := rkpger.rzger.Commitments()
-
-	// Because we're doing a share-hiding opening, the new share
-	// s_i = r_i + z_i
-	// Hence, we also need to add the corresponding commitments
-	// to compute the commitment for the share-hiding opening
-	comms := make([]shamir.Commitment, rkpger.BatchSize())
-	for i, rngComm := range rngComms {
-		comms[i] = shamir.NewCommitmentWithCapacity(int(rkpger.Threshold()))
-		comms[i].Add(&rngComm, &rzgComms[i])
-	}
-	rkpger.opener.TransitionReset(comms)
-
-	// Initialise the public keys to be the first point of each commitment.
-	// These will be later scaled by the reconstructed decommitments from the
-	// share-hiding opening
-	for i, comm := range comms {
-		point := comm.GetPoint(0)
-		rkpger.publicKeys[i].Set(&point)
-	}
-}
-
-// computeKeyPairs is called once the share-hiding opening is done and
-// the decommitments were reconstructed. This function uses those decommitments
-// to scale the initialised public keys and compute the random keypairs
-func (rkpger *RKPGer) computeKeyPairs() {
-	// Fetch the reconstructed batch of decommitments
-	// This is the batch of t_0's
-	decomms := rkpger.opener.Decommitments()
-
-	// For each of the initialised public keys, scale them to reveal the
-	// unbiased random numbers "in the exponent", i.e. the random public keys
-	for i := 0; i < len(rkpger.publicKeys); i++ {
-		// Compute the negation of t_0, i.e. (-t_0)
-		var decommInv secp256k1.Secp256k1N
-		decommInv.Neg(&decomms[i], 1)
-		decommInv.Normalize()
-
-		// Get the bytes representation of (-t_0)
-		var decommInvBytes [32]byte
-		decommInv.GetB32(decommInvBytes[:])
-
-		// Scale the Pedersen Commitment Scheme Parameter
-		// h^(-t_0)
-		hPow := curve.New()
-		hPow.Scale(&rkpger.h, decommInvBytes)
-
-		// Add this to the initialised public key
-		// g^(c_0) . h^(t_0) . h^(-t_0) = g^(c_0)
-		rkpger.publicKeys[i].Add(&rkpger.publicKeys[i], &hPow)
-	}
-}
-
-// unmarshalPublicKeys reads from the io.Reader and unmarshals data into
-// rkpger.publicKeys
-func (rkpger *RKPGer) unmarshalPublicKeys(r io.Reader, m int) (int, error) {
-	var l uint32
-	m, err := util.UnmarshalSliceLen32(&l, curve.PointSizeBytes, r, m)
-	if err != nil {
-		return m, err
-	}
-
-	rkpger.publicKeys = (rkpger.publicKeys)[:0]
-	for i := uint32(0); i < l; i++ {
-		rkpger.publicKeys = append(rkpger.publicKeys, curve.New())
-		m, err = rkpger.publicKeys[i].Unmarshal(r, m)
-		if err != nil {
-			return m, err
+	for i := 1; i < len(shares); i++ {
+		if !shares[i].IndexEq(&index) {
+			return nil, InconsistentShares
 		}
 	}
 
-	return m, nil
+	for i, buf := range state.buffers {
+		buf[ind] = shares[i].Value()
+	}
+	state.shareReceived[ind] = true
+	state.count++
+
+	if int(state.count) < int(params.n-params.k+1) {
+		return nil, ShareAdded
+	}
+	secrets := make([]secp256k1.Fn, params.b)
+	for i, buf := range state.buffers {
+		poly, ok := params.decoder.Decode(buf)
+		if !ok {
+			return nil, TooManyErrors
+		}
+		secrets[i] = *poly.Coefficient(0)
+	}
+
+	pubKeys := make([]secp256k1.Point, params.b)
+	for i, secret := range secrets {
+		secret.Negate(&secret)
+		pubKeys[i].Scale(&params.h, &secret)
+		pubKeys[i].Add(&pubKeys[i], &coms[i][0])
+	}
+
+	return pubKeys, Reconstructed
 }
