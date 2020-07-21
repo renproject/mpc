@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/renproject/mpc/mpcutil"
 	. "github.com/renproject/mpc/rkpg"
 	"github.com/renproject/mpc/rkpg/rkpgutil"
 	"github.com/renproject/shamir"
@@ -30,17 +31,18 @@ var _ = Describe("RKPG", func() {
 		return n, k, t, b, h, indices, params, state
 	}
 
-	Context("state transitions", func() {
-		RXGOutputs := func(k, b int, indices []secp256k1.Fn, h secp256k1.Point) (
-			[]shamir.VerifiableShares,
-			[]shamir.VerifiableShares,
-			[]shamir.Commitment,
-		) {
-			rngShares, rngComs := rkpgutil.RNGOutputBatch(indices, k, b, h)
-			rzgShares, _ := rkpgutil.RZGOutputBatch(indices, k, b, h)
-			return rngShares, rzgShares, rngComs
-		}
+	RXGOutputs := func(k, b int, indices []secp256k1.Fn, h secp256k1.Point) (
+		[]shamir.VerifiableShares,
+		[]shamir.VerifiableShares,
+		[]shamir.Commitment,
+		[]secp256k1.Fn,
+	) {
+		rngShares, rngComs, secrets := rkpgutil.RNGOutputBatch(indices, k, b, h)
+		rzgShares, _ := rkpgutil.RZGOutputBatch(indices, k, b, h)
+		return rngShares, rzgShares, rngComs, secrets
+	}
 
+	Context("state transitions", func() {
 		CreateInvalidShares := func(
 			n, t, b int,
 			params *Params,
@@ -143,9 +145,9 @@ var _ = Describe("RKPG", func() {
 		})
 
 		Specify("valid shares", func() {
-			for i := 0; i < trials; i++ {
+			for i := 0; i < 1; i++ {
 				n, k, _, b, h, indices, params, state := RandomTestParams()
-				rngShares, rzgShares, rngComs := RXGOutputs(k, b, indices, h)
+				rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
 
 				var err error
 				shares := make([]shamir.Shares, n)
@@ -160,16 +162,20 @@ var _ = Describe("RKPG", func() {
 					Expect(e).To(Equal(ShareAdded))
 					Expect(res).To(BeNil())
 				}
-				res, e := TransitionShares(&state, &params, rngComs, shares[threshold-1])
-				Expect(res).ToNot(BeNil())
+				pubkeys, e := TransitionShares(&state, &params, rngComs, shares[threshold-1])
 				Expect(e).To(Equal(Reconstructed))
+				for i := range pubkeys {
+					var expected secp256k1.Point
+					expected.BaseExpUnsafe(&secrets[i])
+					Expect(expected.Eq(&pubkeys[i])).To(BeTrue())
+				}
 			}
 		})
 
 		Specify("invalid shares", func() {
 			for i := 0; i < trials; i++ {
 				n, k, t, b, h, indices, params, state := RandomTestParams()
-				rngShares, rzgShares, rngComs := RXGOutputs(k, b, indices, h)
+				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
 
 				shares := CreateInvalidShares(n, t, b, &params, rngShares, rzgShares)
 				CheckAgainstInvalidShares(n, k, &state, &params, shares, rngComs)
@@ -179,7 +185,7 @@ var _ = Describe("RKPG", func() {
 		Specify("the state object can be reused", func() {
 			for i := 0; i < trials; i++ {
 				n, k, t, b, h, indices, params, state := RandomTestParams()
-				rngShares, rzgShares, rngComs := RXGOutputs(k, b, indices, h)
+				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
 
 				shares := CreateInvalidShares(n, t, b, &params, rngShares, rzgShares)
 				CheckAgainstInvalidShares(n, k, &state, &params, shares, rngComs)
@@ -230,6 +236,146 @@ var _ = Describe("RKPG", func() {
 				_, err := InitialMessages(&params, rngShares, rzgShares)
 				Expect(err).To(HaveOccurred())
 			}
+		})
+	})
+
+	FContext("network simulation", func() {
+		SequentialIDs := func(n int) []mpcutil.ID {
+			ids := make([]mpcutil.ID, n)
+			for i := range ids {
+				ids[i] = mpcutil.ID(i + 1)
+			}
+			return ids
+		}
+
+		RandomDishonestSubset := func(
+			n, t int,
+			ids []mpcutil.ID,
+			ty rkpgutil.MachineType,
+		) map[mpcutil.ID]rkpgutil.MachineType {
+			dishonestIDs := make(map[mpcutil.ID]struct{}, t)
+			{
+				tmp := make([]mpcutil.ID, n)
+				copy(tmp, ids)
+				rand.Shuffle(len(tmp), func(i, j int) {
+					tmp[i], tmp[j] = tmp[j], tmp[i]
+				})
+				for _, id := range tmp[:t] {
+					dishonestIDs[id] = struct{}{}
+				}
+			}
+			machineType := make(map[mpcutil.ID]rkpgutil.MachineType, n)
+			for _, id := range ids {
+				if _, ok := dishonestIDs[id]; ok {
+					machineType[id] = ty
+				} else {
+					machineType[id] = rkpgutil.Honest
+				}
+			}
+			return machineType
+		}
+
+		BuildMachines := func(
+			n, b int,
+			indices []secp256k1.Fn,
+			params Params,
+			rngComs []shamir.Commitment,
+			rngShares, rzgShares []shamir.VerifiableShares,
+			ids []mpcutil.ID,
+			machineType map[mpcutil.ID]rkpgutil.MachineType,
+		) []mpcutil.Machine {
+			machines := make([]mpcutil.Machine, n)
+			for i, id := range ids {
+				state := NewState(n, b)
+				var machine mpcutil.Machine
+				switch machineType[id] {
+				case rkpgutil.Offline:
+					m := rkpgutil.OfflineMachine(ids[i])
+					machine = &m
+				case rkpgutil.Malicious:
+					m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices)
+					machine = &m
+				case rkpgutil.Honest:
+					m := rkpgutil.NewHonestMachine(
+						ids[i],
+						ids,
+						params,
+						state,
+						rngComs,
+						rngShares[i],
+						rzgShares[i],
+					)
+					machine = &m
+				}
+				machines[i] = machine
+			}
+			return machines
+		}
+
+		Run := func(machines []mpcutil.Machine, ids []mpcutil.ID) {
+			shuffleMsgs, _ := mpcutil.MessageShufflerDropper(ids, 0)
+			network := mpcutil.NewNetwork(machines, shuffleMsgs)
+			network.SetCaptureHist(true)
+
+			err := network.Run()
+			Expect(err).ToNot(HaveOccurred())
+		}
+
+		CheckOutputs := func(
+			machines []mpcutil.Machine,
+			machineType map[mpcutil.ID]rkpgutil.MachineType,
+			secrets []secp256k1.Fn,
+		) {
+			// All players should have the same public keys.
+			var refPoints []secp256k1.Point
+			for i := range machines {
+				if machineType[machines[i].ID()] == rkpgutil.Honest {
+					refPoints = machines[i].(*rkpgutil.HonestMachine).Points
+					break
+				}
+			}
+			for i := range machines {
+				if machineType[machines[i].ID()] != rkpgutil.Honest {
+					continue
+				}
+				points := machines[i].(*rkpgutil.HonestMachine).Points
+				for j := range refPoints {
+					Expect(refPoints[j].Eq(&points[j])).To(BeTrue())
+				}
+			}
+
+			// The public keys should correspond to the private keys.
+			for i := range refPoints {
+				var expected secp256k1.Point
+				expected.BaseExpUnsafe(&secrets[i])
+				Expect(expected.Eq(&refPoints[i])).To(BeTrue())
+			}
+		}
+
+		Context("offline players", func() {
+			Specify("players should end up with the same correct public key", func() {
+				n, k, t, b, h, indices, params, _ := RandomTestParams()
+				rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
+				ids := SequentialIDs(n)
+				machineType := RandomDishonestSubset(n, t, ids, rkpgutil.Offline)
+
+				machines := BuildMachines(n, b, indices, params, rngComs, rngShares, rzgShares, ids, machineType)
+				Run(machines, ids)
+				CheckOutputs(machines, machineType, secrets)
+			})
+		})
+
+		Context("malicious players", func() {
+			Specify("players should end up with the same correct public key", func() {
+				n, k, t, b, h, indices, params, _ := RandomTestParams()
+				rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
+				ids := SequentialIDs(n)
+				machineType := RandomDishonestSubset(n, t, ids, rkpgutil.Malicious)
+
+				machines := BuildMachines(n, b, indices, params, rngComs, rngShares, rzgShares, ids, machineType)
+				Run(machines, ids)
+				CheckOutputs(machines, machineType, secrets)
+			})
 		})
 	})
 })

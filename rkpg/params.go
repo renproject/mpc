@@ -12,7 +12,7 @@ import (
 type Params struct {
 	n, k, b  int32
 	h        secp256k1.Point
-	arrIndex map[secp256k1.Fn]int32
+	ArrIndex map[secp256k1.Fn]int32
 	decoder  rs.Decoder
 }
 
@@ -27,7 +27,7 @@ func CreateParams(k, b int, h secp256k1.Point, indices []secp256k1.Fn) Params {
 	return Params{
 		n: int32(n), k: int32(k), b: int32(b),
 		h:        h,
-		arrIndex: arrIndex,
+		ArrIndex: arrIndex,
 		decoder:  decoder,
 	}
 }
@@ -46,7 +46,7 @@ func (params Params) Generate(rand *rand.Rand, size int) reflect.Value {
 	ps := Params{
 		n: n, k: k, b: b,
 		h:        h,
-		arrIndex: arrIndex,
+		ArrIndex: arrIndex,
 		decoder:  decoder,
 	}
 	return reflect.ValueOf(ps)
@@ -58,7 +58,7 @@ func (params Params) SizeHint() int {
 		surge.SizeHint(params.k) +
 		surge.SizeHint(params.b) +
 		params.h.SizeHint() +
-		surge.SizeHint(params.arrIndex) +
+		surge.SizeHint(params.ArrIndex) +
 		params.decoder.SizeHint()
 }
 
@@ -80,7 +80,7 @@ func (params Params) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = surge.Marshal(params.arrIndex, buf, rem)
+	buf, rem, err = surge.Marshal(params.ArrIndex, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -105,7 +105,7 @@ func (params *Params) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = surge.Unmarshal(&params.arrIndex, buf, rem)
+	buf, rem, err = surge.Unmarshal(&params.ArrIndex, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}

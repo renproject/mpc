@@ -9,7 +9,7 @@ func RNGOutputBatch(
 	indices []secp256k1.Fn,
 	k, b int,
 	h secp256k1.Point,
-) ([]shamir.VerifiableShares, []shamir.Commitment) {
+) ([]shamir.VerifiableShares, []shamir.Commitment, []secp256k1.Fn) {
 	return RXGOutputBatch(indices, k, b, h, false)
 }
 
@@ -18,7 +18,8 @@ func RZGOutputBatch(
 	k, b int,
 	h secp256k1.Point,
 ) ([]shamir.VerifiableShares, []shamir.Commitment) {
-	return RXGOutputBatch(indices, k, b, h, true)
+	shares, coms, _ := RXGOutputBatch(indices, k, b, h, true)
+	return shares, coms
 }
 
 func RXGOutputBatch(
@@ -26,14 +27,16 @@ func RXGOutputBatch(
 	k, b int,
 	h secp256k1.Point,
 	zero bool,
-) ([]shamir.VerifiableShares, []shamir.Commitment) {
+) ([]shamir.VerifiableShares, []shamir.Commitment, []secp256k1.Fn) {
 	shares := make([]shamir.VerifiableShares, b)
 	coms := make([]shamir.Commitment, b)
+	secrets := make([]secp256k1.Fn, b)
 	for i := range shares {
 		if zero {
 			shares[i], coms[i] = RXGOutput(indices, k, h, secp256k1.NewFnFromU16(0))
 		} else {
-			shares[i], coms[i] = RXGOutput(indices, k, h, secp256k1.RandomFn())
+			secrets[i] = secp256k1.RandomFn()
+			shares[i], coms[i] = RXGOutput(indices, k, h, secrets[i])
 		}
 	}
 	sharesTrans := make([]shamir.VerifiableShares, len(indices))
@@ -45,7 +48,7 @@ func RXGOutputBatch(
 			sharesTrans[j][i] = share
 		}
 	}
-	return sharesTrans, coms
+	return sharesTrans, coms, secrets
 }
 
 func RXGOutput(

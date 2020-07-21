@@ -23,14 +23,14 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 		if !rnShare.IndexEq(&ind) {
 			return nil, fmt.Errorf("mismatched indices: expected %v to equal %v", rnShare.Index(), ind)
 		}
-		if _, ok := params.arrIndex[ind]; !ok {
+		if _, ok := params.ArrIndex[ind]; !ok {
 			return nil, fmt.Errorf("indices out of range: index %v not in index set", ind)
 		}
 
 		dRnShare := shamir.NewShare(ind, rngShares[i].Decommitment())
-		dRzShare := shamir.NewShare(ind, rzgShares[i].Decommitment())
+		RzShare := rzgShares[i].Share()
 
-		shares[i].Add(&dRnShare, &dRzShare)
+		shares[i].Add(&dRnShare, &RzShare)
 	}
 
 	return shares, nil
@@ -46,7 +46,7 @@ func TransitionShares(
 		return nil, WrongBatchSize
 	}
 	index := shares[0].Index()
-	ind, ok := params.arrIndex[index]
+	ind, ok := params.ArrIndex[index]
 	if !ok {
 		return nil, InvalidIndex
 	}
