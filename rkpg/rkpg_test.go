@@ -241,123 +241,6 @@ var _ = Describe("RKPG", func() {
 	})
 
 	Context("network simulation", func() {
-		SequentialIDs := func(n int) []mpcutil.ID {
-			ids := make([]mpcutil.ID, n)
-			for i := range ids {
-				ids[i] = mpcutil.ID(i + 1)
-			}
-			return ids
-		}
-
-		RandomDishonestSubset := func(
-			ids []mpcutil.ID,
-			t int,
-			ty rkpgutil.MachineType,
-		) map[mpcutil.ID]rkpgutil.MachineType {
-			n := len(ids)
-			dishonestIDs := make(map[mpcutil.ID]struct{}, t)
-			{
-				tmp := make([]mpcutil.ID, n)
-				copy(tmp, ids)
-				rand.Shuffle(len(tmp), func(i, j int) {
-					tmp[i], tmp[j] = tmp[j], tmp[i]
-				})
-				for _, id := range tmp[:t] {
-					dishonestIDs[id] = struct{}{}
-				}
-			}
-			machineType := make(map[mpcutil.ID]rkpgutil.MachineType, n)
-			for _, id := range ids {
-				if _, ok := dishonestIDs[id]; ok {
-					machineType[id] = ty
-				} else {
-					machineType[id] = rkpgutil.Honest
-				}
-			}
-			return machineType
-		}
-
-		BuildMachines := func(
-			indices []secp256k1.Fn,
-			params Params,
-			rngComs []shamir.Commitment,
-			rngShares, rzgShares []shamir.VerifiableShares,
-			ids []mpcutil.ID,
-			machineType map[mpcutil.ID]rkpgutil.MachineType,
-		) []mpcutil.Machine {
-			n := len(indices)
-			b := len(rngComs)
-			machines := make([]mpcutil.Machine, n)
-			for i, id := range ids {
-				state := NewState(n, b)
-				var machine mpcutil.Machine
-				switch machineType[id] {
-				case rkpgutil.Offline:
-					m := rkpgutil.OfflineMachine(ids[i])
-					machine = &m
-				case rkpgutil.Malicious:
-					m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, false)
-					machine = &m
-				case rkpgutil.MaliciousZero:
-					m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, true)
-					machine = &m
-				case rkpgutil.Honest:
-					m := rkpgutil.NewHonestMachine(
-						ids[i],
-						ids,
-						params,
-						state,
-						rngComs,
-						rngShares[i],
-						rzgShares[i],
-					)
-					machine = &m
-				}
-				machines[i] = machine
-			}
-			return machines
-		}
-
-		Run := func(machines []mpcutil.Machine, ids []mpcutil.ID) {
-			shuffleMsgs, _ := mpcutil.MessageShufflerDropper(ids, 0)
-			network := mpcutil.NewNetwork(machines, shuffleMsgs)
-			network.SetCaptureHist(true)
-
-			err := network.Run()
-			Expect(err).ToNot(HaveOccurred())
-		}
-
-		CheckOutputs := func(
-			machines []mpcutil.Machine,
-			machineType map[mpcutil.ID]rkpgutil.MachineType,
-			secrets []secp256k1.Fn,
-		) {
-			// All players should have the same public keys.
-			var refPoints []secp256k1.Point
-			for i := range machines {
-				if machineType[machines[i].ID()] == rkpgutil.Honest {
-					refPoints = machines[i].(*rkpgutil.HonestMachine).Points
-					break
-				}
-			}
-			for i := range machines {
-				if machineType[machines[i].ID()] != rkpgutil.Honest {
-					continue
-				}
-				points := machines[i].(*rkpgutil.HonestMachine).Points
-				for j := range refPoints {
-					Expect(refPoints[j].Eq(&points[j])).To(BeTrue())
-				}
-			}
-
-			// The public keys should correspond to the private keys.
-			for i := range refPoints {
-				var expected secp256k1.Point
-				expected.BaseExpUnsafe(&secrets[i])
-				Expect(expected.Eq(&refPoints[i])).To(BeTrue())
-			}
-		}
-
 		tys := []rkpgutil.MachineType{
 			rkpgutil.Offline,
 			rkpgutil.Malicious,
@@ -369,12 +252,88 @@ var _ = Describe("RKPG", func() {
 				Specify("players should end up with the same correct public key", func() {
 					n, k, t, b, h, indices, params, _ := RandomTestParams()
 					rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
-					ids := SequentialIDs(n)
-					machineType := RandomDishonestSubset(ids, t, ty)
+					ids := make([]mpcutil.ID, n)
+					for i := range ids {
+						ids[i] = mpcutil.ID(i + 1)
+					}
+					dishonestIDs := make(map[mpcutil.ID]struct{}, t)
+					{
+						tmp := make([]mpcutil.ID, n)
+						copy(tmp, ids)
+						rand.Shuffle(len(tmp), func(i, j int) {
+							tmp[i], tmp[j] = tmp[j], tmp[i]
+						})
+						for _, id := range tmp[:t] {
+							dishonestIDs[id] = struct{}{}
+						}
+					}
+					machineType := make(map[mpcutil.ID]rkpgutil.MachineType, n)
+					for _, id := range ids {
+						if _, ok := dishonestIDs[id]; ok {
+							machineType[id] = ty
+						} else {
+							machineType[id] = rkpgutil.Honest
+						}
+					}
 
-					machines := BuildMachines(indices, params, rngComs, rngShares, rzgShares, ids, machineType)
-					Run(machines, ids)
-					CheckOutputs(machines, machineType, secrets)
+					machines := make([]mpcutil.Machine, n)
+					for i, id := range ids {
+						state := NewState(n, b)
+						var machine mpcutil.Machine
+						switch machineType[id] {
+						case rkpgutil.Offline:
+							m := rkpgutil.OfflineMachine(ids[i])
+							machine = &m
+						case rkpgutil.Malicious:
+							m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, false)
+							machine = &m
+						case rkpgutil.MaliciousZero:
+							m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, true)
+							machine = &m
+						case rkpgutil.Honest:
+							m := rkpgutil.NewHonestMachine(
+								ids[i],
+								ids,
+								params,
+								state,
+								rngComs,
+								rngShares[i],
+								rzgShares[i],
+							)
+							machine = &m
+						}
+						machines[i] = machine
+					}
+					shuffleMsgs, _ := mpcutil.MessageShufflerDropper(ids, 0)
+					network := mpcutil.NewNetwork(machines, shuffleMsgs)
+					network.SetCaptureHist(true)
+					err := network.Run()
+					Expect(err).ToNot(HaveOccurred())
+
+					// All players should have the same public keys.
+					var refPoints []secp256k1.Point
+					for i := range machines {
+						if machineType[machines[i].ID()] == rkpgutil.Honest {
+							refPoints = machines[i].(*rkpgutil.HonestMachine).Points
+							break
+						}
+					}
+					for i := range machines {
+						if machineType[machines[i].ID()] != rkpgutil.Honest {
+							continue
+						}
+						points := machines[i].(*rkpgutil.HonestMachine).Points
+						for j := range refPoints {
+							Expect(refPoints[j].Eq(&points[j])).To(BeTrue())
+						}
+					}
+
+					// The public keys should correspond to the private keys.
+					for i := range refPoints {
+						var expected secp256k1.Point
+						expected.BaseExpUnsafe(&secrets[i])
+						Expect(expected.Eq(&refPoints[i])).To(BeTrue())
+					}
 				})
 			})
 		}
