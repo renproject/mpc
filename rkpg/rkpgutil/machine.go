@@ -16,7 +16,23 @@ const (
 	Honest = MachineType(iota)
 	Offline
 	Malicious
+	MaliciousZero
 )
+
+func (ty MachineType) String() string {
+	switch ty {
+	case Honest:
+		return "Honest"
+	case Offline:
+		return "Offline"
+	case Malicious:
+		return "Malicious"
+	case MaliciousZero:
+		return "MaliciousZero"
+	default:
+		return "Unknown"
+	}
+}
 
 type HonestMachine struct {
 	OwnID mpcutil.ID
@@ -87,6 +103,7 @@ type MaliciousMachine struct {
 	IDs     []mpcutil.ID
 	B       int32
 	Indices []secp256k1.Fn
+	Zero    bool
 }
 
 func NewMaliciousMachine(
@@ -94,12 +111,14 @@ func NewMaliciousMachine(
 	ids []mpcutil.ID,
 	b int32,
 	indices []secp256k1.Fn,
+	zero bool,
 ) MaliciousMachine {
 	return MaliciousMachine{
 		OwnID:   ownID,
 		IDs:     ids,
 		B:       b,
 		Indices: indices,
+		Zero:    zero,
 	}
 }
 
@@ -108,10 +127,16 @@ func (m MaliciousMachine) ID() mpcutil.ID { return m.OwnID }
 // InitialMessages implements the mpcutil.Machine interface.
 func (m MaliciousMachine) InitialMessages() []mpcutil.Message {
 	messages := make([]mpcutil.Message, len(m.IDs))
+	var val secp256k1.Fn
 	for i, to := range m.IDs {
 		msgShares := make(shamir.Shares, m.B)
 		for j := range msgShares {
-			msgShares[j] = shamir.NewShare(m.Indices[i], secp256k1.RandomFn())
+			if m.Zero {
+				val.SetU16(0)
+			} else {
+				val = secp256k1.RandomFn()
+			}
+			msgShares[j] = shamir.NewShare(m.Indices[i], val)
 		}
 		messages[i] = &Message{
 			ToID:       to,
@@ -218,7 +243,8 @@ func (m MaliciousMachine) SizeHint() int {
 	return m.OwnID.SizeHint() +
 		surge.SizeHint(m.IDs) +
 		surge.SizeHint(m.B) +
-		surge.SizeHint(m.Indices)
+		surge.SizeHint(m.Indices) +
+		surge.SizeHint(m.Zero)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -232,6 +258,10 @@ func (m MaliciousMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	buf, rem, err = surge.MarshalI32(m.B, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	buf, rem, err = surge.MarshalBool(m.Zero, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -249,6 +279,10 @@ func (m *MaliciousMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	buf, rem, err = surge.UnmarshalI32(&m.B, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	buf, rem, err = surge.UnmarshalBool(&m.Zero, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}

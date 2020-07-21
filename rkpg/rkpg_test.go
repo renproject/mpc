@@ -1,6 +1,7 @@
 package rkpg_test
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -239,7 +240,7 @@ var _ = Describe("RKPG", func() {
 		})
 	})
 
-	FContext("network simulation", func() {
+	Context("network simulation", func() {
 		SequentialIDs := func(n int) []mpcutil.ID {
 			ids := make([]mpcutil.ID, n)
 			for i := range ids {
@@ -249,10 +250,11 @@ var _ = Describe("RKPG", func() {
 		}
 
 		RandomDishonestSubset := func(
-			n, t int,
 			ids []mpcutil.ID,
+			t int,
 			ty rkpgutil.MachineType,
 		) map[mpcutil.ID]rkpgutil.MachineType {
+			n := len(ids)
 			dishonestIDs := make(map[mpcutil.ID]struct{}, t)
 			{
 				tmp := make([]mpcutil.ID, n)
@@ -276,7 +278,6 @@ var _ = Describe("RKPG", func() {
 		}
 
 		BuildMachines := func(
-			n, b int,
 			indices []secp256k1.Fn,
 			params Params,
 			rngComs []shamir.Commitment,
@@ -284,6 +285,8 @@ var _ = Describe("RKPG", func() {
 			ids []mpcutil.ID,
 			machineType map[mpcutil.ID]rkpgutil.MachineType,
 		) []mpcutil.Machine {
+			n := len(indices)
+			b := len(rngComs)
 			machines := make([]mpcutil.Machine, n)
 			for i, id := range ids {
 				state := NewState(n, b)
@@ -293,7 +296,10 @@ var _ = Describe("RKPG", func() {
 					m := rkpgutil.OfflineMachine(ids[i])
 					machine = &m
 				case rkpgutil.Malicious:
-					m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices)
+					m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, false)
+					machine = &m
+				case rkpgutil.MaliciousZero:
+					m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, true)
 					machine = &m
 				case rkpgutil.Honest:
 					m := rkpgutil.NewHonestMachine(
@@ -352,30 +358,25 @@ var _ = Describe("RKPG", func() {
 			}
 		}
 
-		Context("offline players", func() {
-			Specify("players should end up with the same correct public key", func() {
-				n, k, t, b, h, indices, params, _ := RandomTestParams()
-				rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
-				ids := SequentialIDs(n)
-				machineType := RandomDishonestSubset(n, t, ids, rkpgutil.Offline)
+		tys := []rkpgutil.MachineType{
+			rkpgutil.Offline,
+			rkpgutil.Malicious,
+			rkpgutil.MaliciousZero,
+		}
 
-				machines := BuildMachines(n, b, indices, params, rngComs, rngShares, rzgShares, ids, machineType)
-				Run(machines, ids)
-				CheckOutputs(machines, machineType, secrets)
+		for _, ty := range tys {
+			Context(fmt.Sprintf("dishonest machine type %v", ty), func() {
+				Specify("players should end up with the same correct public key", func() {
+					n, k, t, b, h, indices, params, _ := RandomTestParams()
+					rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
+					ids := SequentialIDs(n)
+					machineType := RandomDishonestSubset(ids, t, ty)
+
+					machines := BuildMachines(indices, params, rngComs, rngShares, rzgShares, ids, machineType)
+					Run(machines, ids)
+					CheckOutputs(machines, machineType, secrets)
+				})
 			})
-		})
-
-		Context("malicious players", func() {
-			Specify("players should end up with the same correct public key", func() {
-				n, k, t, b, h, indices, params, _ := RandomTestParams()
-				rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
-				ids := SequentialIDs(n)
-				machineType := RandomDishonestSubset(n, t, ids, rkpgutil.Malicious)
-
-				machines := BuildMachines(n, b, indices, params, rngComs, rngShares, rzgShares, ids, machineType)
-				Run(machines, ids)
-				CheckOutputs(machines, machineType, secrets)
-			})
-		})
+		}
 	})
 })
