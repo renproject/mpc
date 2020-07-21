@@ -2,8 +2,10 @@ package rkpg
 
 import "fmt"
 
+// TransitionEvent represents a result of a state transition.
 type TransitionEvent uint8
 
+// Enumeration for state transition events.
 const (
 	WrongBatchSize = TransitionEvent(iota)
 	InvalidIndex

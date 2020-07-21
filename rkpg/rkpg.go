@@ -7,6 +7,8 @@ import (
 	"github.com/renproject/shamir"
 )
 
+// InitialMessages creates the share batch for the open performed in the RKPG
+// protocol.
 func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShares) (shamir.Shares, error) {
 	if len(rngShares) != int(params.b) || len(rzgShares) != int(params.b) {
 		return nil, fmt.Errorf(
@@ -36,6 +38,12 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 	return shares, nil
 }
 
+// TransitionShares applies a state transition to the given state upon
+// receiveing the given shares from another party during the open in the RKPG
+// protocol. The given commitments correspond to the RNG shares that were input
+// for RKPG. Once enough shares have been received to reconstruct, they are
+// used to compute and return the output public key batch. If not enough shares
+// have been received, the return value will be nil.
 func TransitionShares(
 	state *State,
 	params *Params,
@@ -53,12 +61,14 @@ func TransitionShares(
 	if state.shareReceived[ind] {
 		return nil, DuplicateIndex
 	}
+	// Check that all indices in the share batch are the same.
 	for i := 1; i < len(shares); i++ {
 		if !shares[i].IndexEq(&index) {
 			return nil, InconsistentShares
 		}
 	}
 
+	// Checks have passed so we update the state.
 	for i, buf := range state.buffers {
 		buf[ind] = shares[i].Value()
 	}
@@ -66,12 +76,15 @@ func TransitionShares(
 	state.count++
 
 	if int(state.count) < int(params.n-params.k+1) {
+		// Not enough shares have been received for construction.
 		return nil, ShareAdded
 	}
 	secrets := make([]secp256k1.Fn, params.b)
 	for i, buf := range state.buffers {
 		poly, ok := params.decoder.Decode(buf)
 		if !ok {
+			// The RS decoder was not able to reconstruct the polynomial
+			// because there are too many incorrect shares.
 			return nil, TooManyErrors
 		}
 		secrets[i] = *poly.Coefficient(0)
@@ -79,10 +92,10 @@ func TransitionShares(
 
 	pubKeys := make([]secp256k1.Point, params.b)
 	for i, secret := range secrets {
+		// Compute xG = (xG + sH) + (-s)H
 		secret.Negate(&secret)
 		pubKeys[i].Scale(&params.h, &secret)
 		pubKeys[i].Add(&pubKeys[i], &coms[i][0])
 	}
-
 	return pubKeys, Reconstructed
 }

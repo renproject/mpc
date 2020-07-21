@@ -9,12 +9,14 @@ import (
 	"github.com/renproject/surge"
 )
 
+// State represents the current state of an instance of the RKPG protocol.
 type State struct {
 	count         int32
 	shareReceived []bool
 	buffers       [][]secp256k1.Fn
 }
 
+// NewState constructs a new state object for n players with a batch size of b.
 func NewState(n, b int) State {
 	count := int32(0)
 	shareReceived := make([]bool, n)
@@ -30,6 +32,8 @@ func NewState(n, b int) State {
 	}
 }
 
+// Clear the state object. It will then be ready to use for a new isntance of
+// RKPG.
 func (state *State) Clear() {
 	state.count = 0
 	for i := range state.shareReceived {
@@ -43,7 +47,7 @@ func (state *State) Clear() {
 }
 
 // Generate implements the quick.Generator interface.
-func (s State) Generate(_ *rand.Rand, size int) reflect.Value {
+func (state State) Generate(_ *rand.Rand, size int) reflect.Value {
 	b := rand.Intn(size + 1)
 	n := size / rngutil.Max(b, 1)
 	count := rand.Int31n(int32(n))
@@ -58,42 +62,44 @@ func (s State) Generate(_ *rand.Rand, size int) reflect.Value {
 			buffers[i][j] = secp256k1.RandomFn()
 		}
 	}
-	state := State{
+	s := State{
 		count:         count,
 		shareReceived: shareReceived,
 		buffers:       buffers,
 	}
-	return reflect.ValueOf(state)
+	return reflect.ValueOf(s)
 }
 
 // SizeHint implements the surge.SizeHinter interface.
-func (s State) SizeHint() int {
-	return surge.SizeHint(int32(s.count)) + surge.SizeHint(s.shareReceived) + surge.SizeHint(s.buffers)
+func (state State) SizeHint() int {
+	return surge.SizeHint(int32(state.count)) +
+		surge.SizeHint(state.shareReceived) +
+		surge.SizeHint(state.buffers)
 }
 
 // Marshal implements the surge.Marshaler interface.
-func (s State) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.MarshalI32(int32(s.count), buf, rem)
+func (state State) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.MarshalI32(int32(state.count), buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = surge.Marshal(s.shareReceived, buf, rem)
+	buf, rem, err = surge.Marshal(state.shareReceived, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = surge.Marshal(s.buffers, buf, rem)
+	buf, rem, err = surge.Marshal(state.buffers, buf, rem)
 	return buf, rem, err
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
-func (s *State) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.UnmarshalI32(&s.count, buf, rem)
+func (state *State) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.UnmarshalI32(&state.count, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = surge.Unmarshal(&s.shareReceived, buf, rem)
+	buf, rem, err = surge.Unmarshal(&state.shareReceived, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
-	return surge.Unmarshal(&s.buffers, buf, rem)
+	return surge.Unmarshal(&state.buffers, buf, rem)
 }

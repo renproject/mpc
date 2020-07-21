@@ -9,6 +9,8 @@ import (
 	"github.com/renproject/surge"
 )
 
+// Params represent parameters for an instance of the RKPG protocol. This will
+// remain constant for the duration of the instance of RKPG.
 type Params struct {
 	n, k, b  int32
 	h        secp256k1.Point
@@ -16,6 +18,7 @@ type Params struct {
 	decoder  rs.Decoder
 }
 
+// CreateParams constructs a new parameters object.
 func CreateParams(k, b int, h secp256k1.Point, indices []secp256k1.Fn) Params {
 	n := len(indices)
 	arrIndex := make(map[secp256k1.Fn]int32, n)

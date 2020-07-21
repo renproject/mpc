@@ -10,12 +10,22 @@ import (
 	"github.com/renproject/surge"
 )
 
+// MachineType represents a type of player in the network.
 type MachineType byte
 
 const (
+	// Honest represents a player that follows the RKPG protocol as specified.
 	Honest = MachineType(iota)
+
+	// Offline represents a player that is offline.
 	Offline
+
+	// Malicious represents a player that deviates from the RKPG protocol by
+	// sending shares with incorrect values.
 	Malicious
+
+	// MaliciousZero represents a player that deviates from the RKPG protocol
+	// by sending shares with values equal to zero.
 	MaliciousZero
 )
 
@@ -34,6 +44,7 @@ func (ty MachineType) String() string {
 	}
 }
 
+// HonestMachine is a machine that follows the RKPG protocol as specified.
 type HonestMachine struct {
 	OwnID mpcutil.ID
 	IDs   []mpcutil.ID
@@ -46,6 +57,7 @@ type HonestMachine struct {
 	RNGShares, RZGShares shamir.VerifiableShares
 }
 
+// NewHonestMachine constructs and returns a new honest machine.
 func NewHonestMachine(
 	ownID mpcutil.ID,
 	ids []mpcutil.ID,
@@ -67,6 +79,7 @@ func NewHonestMachine(
 	}
 }
 
+// ID implements the mpcutil.Machine interface.
 func (m HonestMachine) ID() mpcutil.ID { return m.OwnID }
 
 // InitialMessages implements the mpcutil.Machine interface.
@@ -98,14 +111,20 @@ func (m *HonestMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	return nil
 }
 
+// A MaliciousMachine represents a player that acts maliciously by sending
+// shares with incorrect values.
 type MaliciousMachine struct {
 	OwnID   mpcutil.ID
 	IDs     []mpcutil.ID
 	B       int32
 	Indices []secp256k1.Fn
-	Zero    bool
+
+	// If set, the player will send shares that have values equal to zero.
+	// Otherwise, these values will be random.
+	Zero bool
 }
 
+// NewMaliciousMachine constructs and returns a new malicious machine.
 func NewMaliciousMachine(
 	ownID mpcutil.ID,
 	ids []mpcutil.ID,
@@ -122,6 +141,7 @@ func NewMaliciousMachine(
 	}
 }
 
+// ID implements the mpcutil.Machine interface.
 func (m MaliciousMachine) ID() mpcutil.ID { return m.OwnID }
 
 // InitialMessages implements the mpcutil.Machine interface.
@@ -152,12 +172,17 @@ func (m *MaliciousMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	return nil
 }
 
+// An OfflineMachine represents a player that is offline. It does not send any
+// messages.
 type OfflineMachine mpcutil.ID
 
+// ID implements the mpcutil.Machine interface.
 func (m OfflineMachine) ID() mpcutil.ID { return mpcutil.ID(m) }
 
+// InitialMessages implements the mpcutil.Machine interface.
 func (m OfflineMachine) InitialMessages() []mpcutil.Message { return nil }
 
+// Handle implements the mpcutil.Machine interface.
 func (m OfflineMachine) Handle(_ mpcutil.Message) []mpcutil.Message { return nil }
 
 // SizeHint implements the surge.SizeHinter interface.

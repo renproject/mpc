@@ -5,12 +5,16 @@ import (
 	"github.com/renproject/shamir"
 )
 
+// A Message is sent between machines during a RKPG simulation.
 type Message struct {
 	ToID, FromID mpcutil.ID
 	ShareBatch   shamir.Shares
 }
 
-func (msg Message) To() mpcutil.ID   { return msg.ToID }
+// To implements the mpcutil.Message interface.
+func (msg Message) To() mpcutil.ID { return msg.ToID }
+
+// From implements the mpcutil.Message interface.
 func (msg Message) From() mpcutil.ID { return msg.FromID }
 
 // SizeHint implements the surge.SizeHinter interface.

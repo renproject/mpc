@@ -5,6 +5,10 @@ import (
 	"github.com/renproject/shamir"
 )
 
+// RNGOutputBatch returns a random valid output of an instance of the RNG
+// protocol. In the returned shares, shares[i] are the outputs for player i and
+// has length equal to the batch size. The returned Fn values are the secret
+// values for each sharing in the batch.
 func RNGOutputBatch(
 	indices []secp256k1.Fn,
 	k, b int,
@@ -13,6 +17,9 @@ func RNGOutputBatch(
 	return RXGOutputBatch(indices, k, b, h, false)
 }
 
+// RZGOutputBatch returns a random valid output of an instance of the RZG
+// protocol. In the returned shares, shares[i] are the outputs for player i and
+// has length equal to the batch size.
 func RZGOutputBatch(
 	indices []secp256k1.Fn,
 	k, b int,
@@ -22,6 +29,7 @@ func RZGOutputBatch(
 	return shares, coms
 }
 
+// RXGOutputBatch returns either RNG or RZG output based on the flag zero.
 func RXGOutputBatch(
 	indices []secp256k1.Fn,
 	k, b int,
@@ -51,6 +59,8 @@ func RXGOutputBatch(
 	return sharesTrans, coms, secrets
 }
 
+// RXGOutput returns the shares and a commitment for a valid verifiable sharing
+// of the value x with threshold k and Pedersen parameter h.
 func RXGOutput(
 	indices []secp256k1.Fn,
 	k int,
