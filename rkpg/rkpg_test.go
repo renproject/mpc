@@ -282,7 +282,7 @@ var _ = Describe("RKPG", func() {
 						var machine mpcutil.Machine
 						switch machineType[id] {
 						case rkpgutil.Offline:
-							m := rkpgutil.OfflineMachine(ids[i])
+							m := mpcutil.OfflineMachine(ids[i])
 							machine = &m
 						case rkpgutil.Malicious:
 							m := rkpgutil.NewMaliciousMachine(ids[i], ids, int32(b), indices, false)

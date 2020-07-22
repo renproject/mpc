@@ -34,24 +34,6 @@ type Message interface {
 	To() ID
 }
 
-// The Machine interface represents one of the players in a distributed
-// network. Every machine must have a unique ID, and be able to handle incoming
-// messages.
-type Machine interface {
-	surge.MarshalUnmarshaler
-
-	ID() ID
-
-	// InitialMessages should return the messages that a Machine sends at the
-	// start of a network run, i.e. those messages that it would send before
-	// having received any, if there are such messages.
-	InitialMessages() []Message
-
-	// Handle processes an incoming message and returns response messages, if
-	// any.
-	Handle(Message) []Message
-}
-
 // A Network is used to simulate a network of distributed Machines that send
 // and recieve messages from eachother.
 type Network struct {

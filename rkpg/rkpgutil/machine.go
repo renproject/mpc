@@ -172,19 +172,6 @@ func (m *MaliciousMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	return nil
 }
 
-// An OfflineMachine represents a player that is offline. It does not send any
-// messages.
-type OfflineMachine mpcutil.ID
-
-// ID implements the mpcutil.Machine interface.
-func (m OfflineMachine) ID() mpcutil.ID { return mpcutil.ID(m) }
-
-// InitialMessages implements the mpcutil.Machine interface.
-func (m OfflineMachine) InitialMessages() []mpcutil.Message { return nil }
-
-// Handle implements the mpcutil.Machine interface.
-func (m OfflineMachine) Handle(_ mpcutil.Message) []mpcutil.Message { return nil }
-
 // SizeHint implements the surge.SizeHinter interface.
 func (m HonestMachine) SizeHint() int {
 	return m.OwnID.SizeHint() +
@@ -312,19 +299,4 @@ func (m *MaliciousMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	return surge.Unmarshal(&m.Indices, buf, rem)
-}
-
-// SizeHint implements the surge.SizeHinter interface.
-func (m OfflineMachine) SizeHint() int {
-	return mpcutil.ID(m).SizeHint()
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (m OfflineMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	return mpcutil.ID(m).Marshal(buf, rem)
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (m *OfflineMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	return (*mpcutil.ID)(m).Unmarshal(buf, rem)
 }
