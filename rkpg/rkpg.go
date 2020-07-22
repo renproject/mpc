@@ -25,7 +25,7 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 		if !rnShare.IndexEq(&ind) {
 			return nil, fmt.Errorf("mismatched indices: expected %v to equal %v", rnShare.Index(), ind)
 		}
-		if _, ok := params.ArrIndex[ind]; !ok {
+		if _, ok := params.arrIndex[ind]; !ok {
 			return nil, fmt.Errorf("indices out of range: index %v not in index set", ind)
 		}
 
@@ -54,7 +54,7 @@ func HandleShareBatch(
 		return nil, WrongBatchSize
 	}
 	index := shares[0].Index()
-	ind, ok := params.ArrIndex[index]
+	ind, ok := params.arrIndex[index]
 	if !ok {
 		return nil, InvalidIndex
 	}
@@ -76,7 +76,7 @@ func HandleShareBatch(
 	state.count++
 
 	if int(state.count) < int(params.n-params.k+1) {
-		// Not enough shares have been received for construction.
+		// Not enough shares have been received for reconstruction.
 		return nil, ShareAdded
 	}
 	secrets := make([]secp256k1.Fn, params.b)
