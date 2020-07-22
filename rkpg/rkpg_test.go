@@ -74,16 +74,16 @@ var _ = Describe("RKPG", func() {
 			threshold := n - k + 1
 			errThreshold := n - 2
 			for i := 0; i < threshold-1; i++ {
-				res, e := TransitionShares(state, params, coms, shares[i])
+				res, e := HandleShareBatch(state, params, coms, shares[i])
 				Expect(e).To(Equal(ShareAdded))
 				Expect(res).To(BeNil())
 			}
 			for i := threshold - 1; i < errThreshold-1; i++ {
-				res, e := TransitionShares(state, params, coms, shares[i])
+				res, e := HandleShareBatch(state, params, coms, shares[i])
 				Expect(e).To(Equal(TooManyErrors))
 				Expect(res).To(BeNil())
 			}
-			res, e := TransitionShares(state, params, coms, shares[errThreshold-1])
+			res, e := HandleShareBatch(state, params, coms, shares[errThreshold-1])
 			Expect(res).ToNot(BeNil())
 			Expect(e).To(Equal(Reconstructed))
 		}
@@ -93,7 +93,7 @@ var _ = Describe("RKPG", func() {
 				_, _, _, b, _, _, params, state := RandomTestParams()
 				shares := make(shamir.Shares, b)
 
-				res, e := TransitionShares(&state, &params, []shamir.Commitment{}, shares[:b-1])
+				res, e := HandleShareBatch(&state, &params, []shamir.Commitment{}, shares[:b-1])
 				Expect(res).To(BeNil())
 				Expect(e).To(Equal(WrongBatchSize))
 			}
@@ -107,7 +107,7 @@ var _ = Describe("RKPG", func() {
 				// As it is an uninitialised slice, all of the shares in
 				// `shares` should have index zero, which should not be in the
 				// set `indices` with overwhelming probability.
-				res, e := TransitionShares(&state, &params, []shamir.Commitment{}, shares)
+				res, e := HandleShareBatch(&state, &params, []shamir.Commitment{}, shares)
 				Expect(res).To(BeNil())
 				Expect(e).To(Equal(InvalidIndex))
 			}
@@ -122,8 +122,8 @@ var _ = Describe("RKPG", func() {
 					shares[i] = shamir.NewShare(indices[0], secp256k1.Fn{})
 				}
 
-				_, _ = TransitionShares(&state, &params, []shamir.Commitment{}, shares)
-				res, e := TransitionShares(&state, &params, []shamir.Commitment{}, shares)
+				_, _ = HandleShareBatch(&state, &params, []shamir.Commitment{}, shares)
+				res, e := HandleShareBatch(&state, &params, []shamir.Commitment{}, shares)
 				Expect(res).To(BeNil())
 				Expect(e).To(Equal(DuplicateIndex))
 			}
@@ -139,7 +139,7 @@ var _ = Describe("RKPG", func() {
 					shares[i] = shamir.NewShare(indices[1], secp256k1.Fn{})
 				}
 
-				res, e := TransitionShares(&state, &params, []shamir.Commitment{}, shares)
+				res, e := HandleShareBatch(&state, &params, []shamir.Commitment{}, shares)
 				Expect(res).To(BeNil())
 				Expect(e).To(Equal(InconsistentShares))
 			}
@@ -159,11 +159,11 @@ var _ = Describe("RKPG", func() {
 
 				threshold := n - k + 1
 				for i := 0; i < threshold-1; i++ {
-					res, e := TransitionShares(&state, &params, rngComs, shares[i])
+					res, e := HandleShareBatch(&state, &params, rngComs, shares[i])
 					Expect(e).To(Equal(ShareAdded))
 					Expect(res).To(BeNil())
 				}
-				pubkeys, e := TransitionShares(&state, &params, rngComs, shares[threshold-1])
+				pubkeys, e := HandleShareBatch(&state, &params, rngComs, shares[threshold-1])
 				Expect(e).To(Equal(Reconstructed))
 				for i := range pubkeys {
 					var expected secp256k1.Point

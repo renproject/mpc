@@ -104,7 +104,7 @@ func (m HonestMachine) InitialMessages() []mpcutil.Message {
 // Handle implements the mpcutil.Machine interface.
 func (m *HonestMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	message := msg.(*Message)
-	points, _ := rkpg.TransitionShares(&m.State, &m.Params, m.Coms, message.ShareBatch)
+	points, _ := rkpg.HandleShareBatch(&m.State, &m.Params, m.Coms, message.ShareBatch)
 	if points != nil {
 		m.Points = points
 	}

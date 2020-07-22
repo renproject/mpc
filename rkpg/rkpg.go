@@ -38,13 +38,13 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 	return shares, nil
 }
 
-// TransitionShares applies a state transition to the given state upon
+// HandleShareBatch applies a state transition to the given state upon
 // receiveing the given shares from another party during the open in the RKPG
 // protocol. The given commitments correspond to the RNG shares that were input
-// for RKPG. Once enough shares have been received to reconstruct, they are
-// used to compute and return the output public key batch. If not enough shares
-// have been received, the return value will be nil.
-func TransitionShares(
+// for RKPG. Once enough shares have been received to reconstruct, the
+// commitments are used to compute and return the output public key batch. If
+// not enough shares have been received, the return value will be nil.
+func HandleShareBatch(
 	state *State,
 	params *Params,
 	coms []shamir.Commitment,
