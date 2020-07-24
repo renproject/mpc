@@ -391,13 +391,8 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 		return Ignored
 	}
 
-	// For every share in the set of shares
-	firstShare := shares[0].Share
-	firstIndex := firstShare.Index
 	for i, vshare := range shares {
-		// Verify that each provided share has the same index
-		share := vshare.Share
-		if !share.IndexEq(&firstIndex) {
+		if !vshare.Share.IndexEq(&shares[0].Share.Index) {
 			return InvalidShares
 		}
 
@@ -413,18 +408,11 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// the case that if the index is a duplicate, so too will be the entire
 	// share.
 	//
-	// TODO: These temporary variables are gross, and there will probably be an
-	// easier way if we were using shares that assumed the indices of the
-	// shares were sequential starting from 1. Look into enforcing this.
-	//
 	// We already have checked that every share in the provided set of shares
-	// has the same index.
-	// So checking this constraint for just the first share buffer suffices
-	var ind secp256k1.Fn
-	innerShare := shares[0].Share
+	// has the same index, so checking this constraint for just the first share
+	// buffer suffices.
 	for _, s := range opener.shareBuffers[0] {
-		ind = s.Index
-		if innerShare.IndexEq(&ind) {
+		if shares[0].Share.IndexEq(&s.Index) {
 			return IndexDuplicate
 		}
 	}
@@ -504,7 +492,5 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 
 // Private functions
 func decommitmentShare(vshare shamir.VerifiableShare) shamir.Share {
-	share := vshare.Share
-
-	return shamir.NewShare(share.Index, vshare.Decommitment)
+	return shamir.NewShare(vshare.Share.Index, vshare.Decommitment)
 }
