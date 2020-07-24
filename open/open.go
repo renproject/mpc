@@ -269,12 +269,6 @@ func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	return buf, rem, nil
 }
 
-// BatchSize returns the batch size of the opener machine
-// That is, the number of secrets it can reconstruct in one successful execution
-func (opener Opener) BatchSize() uint32 {
-	return opener.batchSize
-}
-
 // K returns the reconstruction threshold for the current sharing instance.
 func (opener Opener) K() int {
 	return opener.commitments[0].Len()
@@ -312,7 +306,11 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 // and returns a ShareEvent that describes the outcome of the state transition.
 // See the documentation for the different ShareEvent possiblities for their
 // significance.
-func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (ShareEvent, []secp256k1.Fn, []secp256k1.Fn) {
+func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (
+	ShareEvent,
+	[]secp256k1.Fn,
+	[]secp256k1.Fn,
+) {
 	// Do nothing when in the Uninitialised state. This can be checked by
 	// seeing if k is zero, as Resetting the state machine can only be done if
 	// k is greater than 0.
@@ -320,54 +318,50 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (ShareEve
 		return Ignored, nil, nil
 	}
 
-	// If the number of verifiable shares provided is not equal to the batch size
-	// of the Opener machine, ignore them
-	if len(shares) != int(opener.BatchSize()) {
+	// The number of shares should equal the batch size.
+	if len(shares) != int(opener.batchSize) {
 		return Ignored, nil, nil
 	}
 
-	for i, vshare := range shares {
-		if !vshare.Share.IndexEq(&shares[0].Share.Index) {
-			return InvalidShares, nil, nil
-		}
-
-		// Even if a single share is invalid, we mark the entire set of shares
-		// to be invalid
-		if !shamir.IsValid(opener.h, &opener.commitments[i], &vshare) {
+	// All shares should have the same index.
+	for i := 1; i < len(shares); i++ {
+		if !shares[i].Share.IndexEq(&shares[0].Share.Index) {
 			return InvalidShares, nil, nil
 		}
 	}
+	index := shares[0].Share.Index
 
-	// Check if a share with this index is already in the buffer. Note that
-	// since we have already checked that the share is valid, it is necessarily
-	// the case that if the index is a duplicate, so too will be the entire
-	// share.
-	//
-	// We already have checked that every share in the provided set of shares
-	// has the same index, so checking this constraint for just the first share
-	// buffer suffices.
+	// The share index must be in the index set.
+	{
+		exists := false
+		for i := range opener.indices {
+			if index.Eq(&opener.indices[i]) {
+				exists = true
+			}
+		}
+		if !exists {
+			return IndexOutOfRange, nil, nil
+		}
+	}
+
+	// There should be no duplicate indices.
 	for _, s := range opener.shareBuffers[0] {
-		if shares[0].Share.IndexEq(&s.Share.Index) {
+		if s.Share.IndexEq(&index) {
 			return IndexDuplicate, nil, nil
 		}
 	}
 
-	// If the share buffer is full and the index is not a duplicate, it must be
-	// out of range. Note that since this share has passed the above checks, it
-	// must actually be a valid share. This requires knowledge of the sharing
-	// polynomials which would imply either a malicious dealer or a malicious
-	// player that contructs new valid shares after being able to open.
-	//
-	// Since we append shares to every buffer at the same time, at every point
-	// in time the lenth of each share buffer will be the same.
-	// Again, checking this constraint for just the first share buffer suffices
-	if len(opener.shareBuffers[0]) == cap(opener.shareBuffers[0]) {
-		return IndexOutOfRange, nil, nil
+	// No shares should be invalid. If even a single share is invalid, we mark
+	// the entire set of shares to be invalid.
+	for i, share := range shares {
+		if !shamir.IsValid(opener.h, &opener.commitments[i], &share) {
+			return InvalidShares, nil, nil
+		}
 	}
 
 	// At this stage we know that the shares are allowed to be added to the
-	// respective buffers
-	for i := 0; i < int(opener.BatchSize()); i++ {
+	// respective buffers.
+	for i := 0; i < int(opener.batchSize); i++ {
 		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i])
 	}
 
@@ -377,7 +371,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (ShareEve
 		secrets := make([]secp256k1.Fn, opener.batchSize)
 		decommitments := make([]secp256k1.Fn, opener.batchSize)
 		shareBuf := make(shamir.Shares, numShares)
-		for i := 0; i < int(opener.BatchSize()); i++ {
+		for i := 0; i < int(opener.batchSize); i++ {
 			for j := range opener.shareBuffers[i] {
 				shareBuf[j].Index = opener.shareBuffers[i][j].Share.Index
 				shareBuf[j].Value = opener.shareBuffers[i][j].Share.Value
@@ -394,7 +388,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (ShareEve
 	}
 
 	// At this stage we have added the shares to the respective buffers
-	// but we were not yet able to reconstruct the secrets
+	// but we were not yet able to reconstruct the secrets.
 	return SharesAdded, nil, nil
 }
 
@@ -404,8 +398,8 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (ShareEve
 // for their significance.
 func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEvent {
 	// It is not valid for k to be less than 1
-	if len(commitments) != int(opener.BatchSize()) {
-		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.BatchSize(), len(commitments)))
+	if len(commitments) != int(opener.batchSize) {
+		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.batchSize, len(commitments)))
 	}
 
 	// Make sure each commitment is for the same threshold
@@ -427,7 +421,7 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 		ret = Reset
 	}
 
-	for i := 0; i < int(opener.BatchSize()); i++ {
+	for i := 0; i < int(opener.batchSize); i++ {
 		opener.shareBuffers[i] = opener.shareBuffers[i][:0]
 		opener.commitments[i].Set(commitments[i])
 	}
