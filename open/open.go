@@ -183,13 +183,6 @@ type Opener struct {
 	// Global parameters
 	indices []secp256k1.Fn
 	h       secp256k1.Point
-
-	// The state variable `k` in the formal description can be computed using
-	// the commitment alone.
-
-	// Other members
-	secrets       []secp256k1.Fn
-	decommitments []secp256k1.Fn
 }
 
 // Generate implements the quick.Generator interface.
@@ -205,8 +198,6 @@ func (opener Opener) SizeHint() int {
 	return surge.SizeHint(opener.batchSize) +
 		surge.SizeHint(opener.commitments) +
 		surge.SizeHint(opener.shareBuffers) +
-		surge.SizeHint(opener.secrets) +
-		surge.SizeHint(opener.decommitments) +
 		opener.h.SizeHint() +
 		surge.SizeHint(opener.indices)
 }
@@ -224,14 +215,6 @@ func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	buf, rem, err = surge.Marshal(opener.shareBuffers, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.secrets, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.decommitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
 	}
 	buf, rem, err = opener.h.Marshal(buf, rem)
 	if err != nil {
@@ -257,14 +240,6 @@ func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	buf, rem, err = surge.Unmarshal(&opener.shareBuffers, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.secrets, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.decommitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
 	}
 	buf, rem, err = opener.h.Unmarshal(buf, rem)
 	if err != nil {
@@ -310,22 +285,6 @@ func (opener Opener) I() int {
 	return len(opener.shareBuffers[0])
 }
 
-// Secrets returns the reconstructed secrets for the current sharing instance,
-// but only if the state is Done. Otherwise, it will return the secrets for the
-// last sharing instance that made it to state Done. If the state machine has
-// never been in the state Done, then the zero shares are returned.
-func (opener Opener) Secrets() []secp256k1.Fn {
-	return opener.secrets
-}
-
-// Decommitments returns the reconstructed decommitments for the current sharing instance,
-// but only if the state is Done. Otherwise it will return the decommitments for
-// the last sharing instance that made it to state Done. If the state machine has never
-// been in the state Done, then the zero shares are returned.
-func (opener Opener) Decommitments() []secp256k1.Fn {
-	return opener.decommitments
-}
-
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
@@ -340,17 +299,12 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 		commitments[i] = shamir.Commitment{}
 	}
 
-	secrets := make([]secp256k1.Fn, b)
-	decommitments := make([]secp256k1.Fn, b)
-
 	return Opener{
-		batchSize:     b,
-		commitments:   commitments,
-		shareBuffers:  shareBuffers,
-		secrets:       secrets,
-		decommitments: decommitments,
-		h:             h,
-		indices:       indices,
+		batchSize:    b,
+		commitments:  commitments,
+		shareBuffers: shareBuffers,
+		h:            h,
+		indices:      indices,
 	}
 }
 
@@ -358,29 +312,29 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 // and returns a ShareEvent that describes the outcome of the state transition.
 // See the documentation for the different ShareEvent possiblities for their
 // significance.
-func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEvent {
+func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (ShareEvent, []secp256k1.Fn, []secp256k1.Fn) {
 	// Do nothing when in the Uninitialised state. This can be checked by
 	// seeing if k is zero, as Resetting the state machine can only be done if
 	// k is greater than 0.
 	if opener.K() <= 0 {
-		return Ignored
+		return Ignored, nil, nil
 	}
 
 	// If the number of verifiable shares provided is not equal to the batch size
 	// of the Opener machine, ignore them
 	if len(shares) != int(opener.BatchSize()) {
-		return Ignored
+		return Ignored, nil, nil
 	}
 
 	for i, vshare := range shares {
 		if !vshare.Share.IndexEq(&shares[0].Share.Index) {
-			return InvalidShares
+			return InvalidShares, nil, nil
 		}
 
 		// Even if a single share is invalid, we mark the entire set of shares
 		// to be invalid
 		if !shamir.IsValid(opener.h, &opener.commitments[i], &vshare) {
-			return InvalidShares
+			return InvalidShares, nil, nil
 		}
 	}
 
@@ -394,7 +348,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// buffer suffices.
 	for _, s := range opener.shareBuffers[0] {
 		if shares[0].Share.IndexEq(&s.Share.Index) {
-			return IndexDuplicate
+			return IndexDuplicate, nil, nil
 		}
 	}
 
@@ -408,7 +362,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// in time the lenth of each share buffer will be the same.
 	// Again, checking this constraint for just the first share buffer suffices
 	if len(opener.shareBuffers[0]) == cap(opener.shareBuffers[0]) {
-		return IndexOutOfRange
+		return IndexOutOfRange, nil, nil
 	}
 
 	// At this stage we know that the shares are allowed to be added to the
@@ -420,26 +374,28 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// If we have just added the kth share, we can reconstruct.
 	numShares := len(opener.shareBuffers[0])
 	if numShares == opener.K() {
+		secrets := make([]secp256k1.Fn, opener.batchSize)
+		decommitments := make([]secp256k1.Fn, opener.batchSize)
 		shareBuf := make(shamir.Shares, numShares)
 		for i := 0; i < int(opener.BatchSize()); i++ {
 			for j := range opener.shareBuffers[i] {
 				shareBuf[j].Index = opener.shareBuffers[i][j].Share.Index
 				shareBuf[j].Value = opener.shareBuffers[i][j].Share.Value
 			}
-			opener.secrets[i] = shamir.Open(shareBuf)
+			secrets[i] = shamir.Open(shareBuf)
 			for j := range opener.shareBuffers[i] {
 				shareBuf[j].Index = opener.shareBuffers[i][j].Share.Index
 				shareBuf[j].Value = opener.shareBuffers[i][j].Decommitment
 			}
-			opener.decommitments[i] = shamir.Open(shareBuf)
+			decommitments[i] = shamir.Open(shareBuf)
 		}
 
-		return Done
+		return Done, secrets, decommitments
 	}
 
 	// At this stage we have added the shares to the respective buffers
 	// but we were not yet able to reconstruct the secrets
-	return SharesAdded
+	return SharesAdded, nil, nil
 }
 
 // TransitionReset handles the state transition logic on receiving a Reset

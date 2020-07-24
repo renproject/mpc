@@ -91,6 +91,8 @@ type RNGer struct {
 
 	// openingsMap holds a map of directed openings towards a player.
 	openingsMap map[secp256k1.Fn]shamir.VerifiableShares
+
+	secrets, decommitments []secp256k1.Fn
 }
 
 // SizeHint implements the surge.SizeHinter interface.
@@ -103,6 +105,7 @@ func (rnger RNGer) SizeHint() int {
 		rnger.opener.SizeHint() +
 		surge.SizeHint(rnger.commitments) +
 		surge.SizeHint(rnger.openingsMap)
+	// FIXME
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -140,6 +143,7 @@ func (rnger RNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, fmt.Errorf("marshaling openingsMap: %v", err)
 	}
 	return buf, rem, nil
+	// FIXME
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
@@ -177,6 +181,7 @@ func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, fmt.Errorf("unmarshaling openingsMap: %v", err)
 	}
 	return buf, rem, nil
+	// FIXME
 }
 
 // State returns the current state of the RNGer state machine.
@@ -407,11 +412,14 @@ func (rnger *RNGer) TransitionShares(
 
 	// Supply the locally computed shares to the opener.
 	if !ignoreShares {
-		event := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
+		// TODO
+		event, secrets, decommitments := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
 
 		// This only happens when k = 1.
 		if event == open.Done {
 			rnger.state = Done
+			rnger.secrets = secrets
+			rnger.decommitments = decommitments
 			return RNGsReconstructed
 		}
 	}
@@ -483,11 +491,13 @@ func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) TransitionE
 
 	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs.
-	event := rnger.opener.TransitionShares(openings)
+	event, secrets, decommitments := rnger.opener.TransitionShares(openings)
 
 	switch event {
 	case open.Done:
 		rnger.state = Done
+		rnger.secrets = secrets
+		rnger.decommitments = decommitments
 		return RNGsReconstructed
 	case open.SharesAdded:
 		return OpeningsAdded
@@ -505,13 +515,10 @@ func (rnger RNGer) ReconstructedShares() shamir.VerifiableShares {
 		return nil
 	}
 
-	secrets := rnger.opener.Secrets()
-	decommitments := rnger.opener.Decommitments()
-	vshares := make(shamir.VerifiableShares, len(secrets))
-
-	for i, secret := range secrets {
+	vshares := make(shamir.VerifiableShares, rnger.batchSize)
+	for i, secret := range rnger.secrets {
 		share := shamir.NewShare(rnger.index, secret)
-		vshares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+		vshares[i] = shamir.NewVerifiableShare(share, rnger.decommitments[i])
 	}
 
 	return vshares
