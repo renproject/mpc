@@ -109,14 +109,14 @@ var _ = Describe("RNG computation helper functions", func() {
 			output := ShareOfShare(to, vshares)
 
 			// The value of the share should be correct.
-			share := output.Share()
-			actual := share.Value()
+			share := output.Share
+			actual := share.Value
 			expected := polyEval(to, values)
 
 			Expect(actual.Eq(&expected)).To(BeTrue())
 
 			// The decommitment of the share should be correct.
-			actual = output.Decommitment()
+			actual = output.Decommitment
 			expected = polyEval(to, decoms)
 
 			Expect(actual.Eq(&expected)).To(BeTrue())

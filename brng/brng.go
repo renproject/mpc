@@ -94,9 +94,8 @@ func (s *State) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 type BRNGer struct {
 	state     State
 	batchSize uint32
-
-	sharer  shamir.VSSharer
-	checker shamir.VSSChecker
+	indices   []secp256k1.Fn
+	h         secp256k1.Point
 }
 
 // Generate implements the quick.Generator interface.
@@ -110,8 +109,8 @@ func (brnger BRNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
 func (brnger BRNGer) SizeHint() int {
 	return brnger.state.SizeHint() +
 		surge.SizeHint(brnger.batchSize) +
-		brnger.sharer.SizeHint() +
-		brnger.checker.SizeHint()
+		surge.SizeHint(brnger.indices) +
+		brnger.h.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -124,13 +123,13 @@ func (brnger BRNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
 	}
-	buf, rem, err = brnger.sharer.Marshal(buf, rem)
+	buf, rem, err = surge.Marshal(brnger.indices, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling sharer: %v", err)
+		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
 	}
-	buf, rem, err = brnger.checker.Marshal(buf, rem)
+	buf, rem, err = brnger.h.Marshal(buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("marshaling h: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -145,13 +144,13 @@ func (brnger *BRNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}
-	buf, rem, err = brnger.sharer.Unmarshal(buf, rem)
+	buf, rem, err = surge.Unmarshal(&brnger.indices, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling sharer: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
 	}
-	buf, rem, err = brnger.checker.Unmarshal(buf, rem)
+	buf, rem, err = brnger.h.Unmarshal(buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling h: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -159,12 +158,6 @@ func (brnger *BRNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 // State returns the current state of the state machine.
 func (brnger BRNGer) State() State {
 	return brnger.state
-}
-
-// N returns the total number of players participating
-// in the BRNG protocol
-func (brnger BRNGer) N() int {
-	return brnger.sharer.N()
 }
 
 // BatchSize returns the expected batch size of the state machine.
@@ -180,12 +173,9 @@ func New(indices []secp256k1.Fn, h secp256k1.Point) BRNGer {
 	indicesCopy := make([]secp256k1.Fn, len(indices))
 	copy(indicesCopy, indices)
 
-	sharer := shamir.NewVSSharer(indicesCopy, h)
-	checker := shamir.NewVSSChecker(h)
-
 	// initialise the batch size as 0
 	// it will be updated when state machine transitions to start
-	return BRNGer{state, 0, sharer, checker}
+	return BRNGer{state, 0, indices, h}
 }
 
 // TransitionStart performs the state transition for the BRNGer state machine
@@ -195,12 +185,12 @@ func (brnger *BRNGer) TransitionStart(k, b int) table.Row {
 		return nil
 	}
 
-	row := table.MakeRow(brnger.sharer.N(), k, b)
+	row := table.MakeRow(len(brnger.indices), k, b)
 	for i := range row {
 		r := secp256k1.RandomFn()
 		pointerToShares := row[i].BorrowShares()
 		pointerToCommitment := row[i].BorrowCommitment()
-		brnger.sharer.Share(pointerToShares, pointerToCommitment, r, k)
+		shamir.VShareSecret(pointerToShares, pointerToCommitment, brnger.indices, brnger.h, r, k)
 	}
 
 	brnger.state = Waiting
@@ -231,7 +221,7 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 
 	// This checks the validity of every element in every column of the slice
 	// Faults are an array of elements that fail the validity check
-	faults := slice.Faults(&brnger.checker)
+	faults := slice.Faults(brnger.h)
 	if faults != nil {
 		brnger.state = Error
 

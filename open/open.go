@@ -184,8 +184,8 @@ type Opener struct {
 	// Other members
 	secrets       []secp256k1.Fn
 	decommitments []secp256k1.Fn
-	checker       shamir.VSSChecker
-	reconstructor shamir.Reconstructor
+	h             secp256k1.Point
+	indices       []secp256k1.Fn
 }
 
 // Generate implements the quick.Generator interface.
@@ -204,8 +204,8 @@ func (opener Opener) SizeHint() int {
 		surge.SizeHint(opener.decomBuffers) +
 		surge.SizeHint(opener.secrets) +
 		surge.SizeHint(opener.decommitments) +
-		opener.checker.SizeHint() +
-		opener.reconstructor.SizeHint()
+		opener.h.SizeHint() +
+		surge.SizeHint(opener.indices)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -234,13 +234,13 @@ func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
 	}
-	buf, rem, err = opener.checker.Marshal(buf, rem)
+	buf, rem, err = opener.h.Marshal(buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("marshaling h: %v", err)
 	}
-	buf, rem, err = opener.reconstructor.Marshal(buf, rem)
+	buf, rem, err = surge.Marshal(opener.indices, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling reconstructor: %v", err)
+		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -271,26 +271,27 @@ func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
 	}
-	buf, rem, err = opener.checker.Unmarshal(buf, rem)
+	buf, rem, err = opener.h.Unmarshal(buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling h: %v", err)
 	}
-	buf, rem, err = opener.reconstructor.Unmarshal(buf, rem)
+	buf, rem, err = surge.Unmarshal(&opener.indices, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling reconstructor: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
 	}
 
 	// Set the share buffer to have the correct capacity.
+	n := len(opener.indices)
 	for i := 0; i < int(opener.batchSize); i++ {
-		shareBuffer := make(shamir.Shares, opener.reconstructor.N())
-		decomBuffer := make(shamir.Shares, opener.reconstructor.N())
+		shareBuffer := make(shamir.Shares, n)
+		decomBuffer := make(shamir.Shares, n)
 		n := copy(shareBuffer, opener.shareBuffers[i])
 		if n < len(opener.shareBuffers[i]) {
 			return buf, rem, fmt.Errorf(
 				"invalid marshalled data: "+
 					"%v shares in the share buffer but the reconstructor is instantiated for %v players",
 				len(opener.shareBuffers[i]),
-				opener.reconstructor.N(),
+				n,
 			)
 		}
 		n = copy(decomBuffer, opener.decomBuffers[i])
@@ -299,7 +300,7 @@ func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 				"invalid marshalled data: "+
 					"%v shares in the decom buffer but the reconstructor is instantiated for %v players",
 				len(opener.decomBuffers[i]),
-				opener.reconstructor.N(),
+				n,
 			)
 		}
 		opener.shareBuffers[i] = shareBuffer[:n]
@@ -367,8 +368,8 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 		decomBuffers:  decomBuffers,
 		secrets:       secrets,
 		decommitments: decommitments,
-		checker:       shamir.NewVSSChecker(h),
-		reconstructor: shamir.NewReconstructor(indices),
+		h:             h,
+		indices:       indices,
 	}
 }
 
@@ -391,18 +392,18 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	}
 
 	// For every share in the set of shares
-	firstShare := shares[0].Share()
-	firstIndex := firstShare.Index()
+	firstShare := shares[0].Share
+	firstIndex := firstShare.Index
 	for i, vshare := range shares {
 		// Verify that each provided share has the same index
-		share := vshare.Share()
+		share := vshare.Share
 		if !share.IndexEq(&firstIndex) {
 			return InvalidShares
 		}
 
 		// Even if a single share is invalid, we mark the entire set of shares
 		// to be invalid
-		if !opener.checker.IsValid(&opener.commitments[i], &vshare) {
+		if !shamir.IsValid(opener.h, &opener.commitments[i], &vshare) {
 			return InvalidShares
 		}
 	}
@@ -420,9 +421,9 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// has the same index.
 	// So checking this constraint for just the first share buffer suffices
 	var ind secp256k1.Fn
-	innerShare := shares[0].Share()
+	innerShare := shares[0].Share
 	for _, s := range opener.shareBuffers[0] {
-		ind = s.Index()
+		ind = s.Index
 		if innerShare.IndexEq(&ind) {
 			return IndexDuplicate
 		}
@@ -444,30 +445,15 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEven
 	// At this stage we know that the shares are allowed to be added to the
 	// respective buffers
 	for i := 0; i < int(opener.BatchSize()); i++ {
-		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i].Share())
+		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i].Share)
 		opener.decomBuffers[i] = append(opener.decomBuffers[i], decommitmentShare(shares[i]))
 	}
 
 	// If we have just added the kth share, we can reconstruct.
 	if len(opener.shareBuffers[0]) == opener.K() {
-		var err error
 		for i := 0; i < int(opener.BatchSize()); i++ {
-			opener.secrets[i], err = opener.reconstructor.CheckedOpen(opener.shareBuffers[i], opener.K())
-
-			// The previous checks should ensure that the error does not occur.
-			//
-			// TODO: It seems wrong that we did the checks here, but then many of
-			// the same checks get run in CheckedOpen. Think about whether this is
-			// OK.
-			if err != nil {
-				panic(err)
-			}
-
-			opener.decommitments[i], err = opener.reconstructor.CheckedOpen(opener.decomBuffers[i], opener.K())
-
-			if err != nil {
-				panic(err)
-			}
+			opener.secrets[i] = shamir.Open(opener.shareBuffers[i])
+			opener.decommitments[i] = shamir.Open(opener.decomBuffers[i])
 		}
 
 		return Done
@@ -518,7 +504,7 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 
 // Private functions
 func decommitmentShare(vshare shamir.VerifiableShare) shamir.Share {
-	share := vshare.Share()
+	share := vshare.Share
 
-	return shamir.NewShare(share.Index(), vshare.Decommitment())
+	return shamir.NewShare(share.Index, vshare.Decommitment)
 }

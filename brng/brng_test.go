@@ -359,8 +359,6 @@ var _ = Describe("BRNG", func() {
 
 			// Check that for each batch, the output shares of the online
 			// players form a consistent and valid sharing.
-			reconstructor := shamir.NewReconstructor(indices)
-			vsschecker := shamir.NewVSSChecker(h)
 			for j := 0; j < b; j++ {
 				shares := make(shamir.VerifiableShares, 0, n-len(isOffline))
 				for i := 0; i < len(machines)-1; i++ {
@@ -372,26 +370,13 @@ var _ = Describe("BRNG", func() {
 					machineShares := pmachine.Shares()
 					machineCommitments := pmachine.Commitments()
 
-					Expect(vsschecker.IsValid(&machineCommitments[j], &machineShares[j])).To(BeTrue())
+					Expect(shamir.IsValid(h, &machineCommitments[j], &machineShares[j])).To(BeTrue())
 
 					shares = append(shares, machineShares[j])
 				}
 
-				Expect(shamirutil.VsharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+				Expect(shamirutil.VsharesAreConsistent(shares, k)).To(BeTrue())
 			}
-		})
-	})
-
-	//
-	// Miscellaneous tests
-	//
-
-	Context("Getters", func() {
-		It("should return the number of indices for the instance", func() {
-			indices := shamirutil.RandomIndices(n)
-			brnger := New(indices, h)
-
-			Expect(brnger.N()).To(Equal(len(indices)))
 		})
 	})
 })

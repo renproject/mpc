@@ -79,7 +79,7 @@ func (sharing *Sharing) BorrowCommitment() *shamir.Commitment {
 // error if there is no share with the given index.
 func (sharing Sharing) ShareWithIndex(index secp256k1.Fn) (shamir.VerifiableShare, error) {
 	for _, share := range sharing.shares {
-		s := share.Share()
+		s := share.Share
 		if s.IndexEq(&index) {
 			return share, nil
 		}

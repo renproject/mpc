@@ -123,14 +123,13 @@ func BRNGOutputFull(
 ) {
 	n := len(indices)
 
-	sharer := shamir.NewVSSharer(indices, h)
 	coefShares := make([]shamir.VerifiableShares, c)
 	coefComms := make([]shamir.Commitment, c)
 
 	for i := range coefShares {
 		coefShares[i] = make(shamir.VerifiableShares, n)
 		coefComms[i] = shamir.NewCommitmentWithCapacity(k)
-		sharer.Share(&coefShares[i], &coefComms[i], secp256k1.RandomFn(), k)
+		shamir.VShareSecret(&coefShares[i], &coefComms[i], indices, h, secp256k1.RandomFn(), k)
 	}
 
 	coefSharesTrans := make([]shamir.VerifiableShares, n)

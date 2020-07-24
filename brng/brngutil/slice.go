@@ -16,8 +16,7 @@ import (
 func RandomValidSharing(indices []secp256k1.Fn, k int, h secp256k1.Point) table.Sharing {
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
-	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), k)
+	shamir.VShareSecret(&shares, &commitment, indices, h, secp256k1.RandomFn(), k)
 
 	return table.NewSharing(shares, commitment)
 }
@@ -32,8 +31,7 @@ func RandomInvalidSharing(
 ) table.Sharing {
 	shares := make(shamir.VerifiableShares, len(indices))
 	commitment := shamir.NewCommitmentWithCapacity(k)
-	vssharer := shamir.NewVSSharer(indices, h)
-	vssharer.Share(&shares, &commitment, secp256k1.RandomFn(), k)
+	shamir.VShareSecret(&shares, &commitment, indices, h, secp256k1.RandomFn(), k)
 
 	// Perturb the bad indice.
 	perturbShare(&shares[badIndex])
@@ -187,18 +185,15 @@ func RandomInvalidSlice(
 // RowIsValid returns true if all of the sharings in the given row are valid
 // with respect to the commitments and the shares form a consistent k-sharing.
 func RowIsValid(row table.Row, k int, indices []secp256k1.Fn, h secp256k1.Point) bool {
-	reconstructor := shamir.NewReconstructor(indices)
-	checker := shamir.NewVSSChecker(h)
-
 	for _, sharing := range row {
 		c := sharing.Commitment()
 		for _, share := range sharing.Shares() {
-			if !checker.IsValid(&c, &share) {
+			if !shamir.IsValid(h, &c, &share) {
 				return false
 			}
 		}
 
-		if !shamirutil.VsharesAreConsistent(sharing.Shares(), &reconstructor, k) {
+		if !shamirutil.VsharesAreConsistent(sharing.Shares(), k) {
 			return false
 		}
 	}

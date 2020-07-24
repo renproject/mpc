@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/renproject/secp256k1"
-	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/brng/brngutil"
@@ -114,8 +113,7 @@ var _ = Describe("Table", func() {
 
 			invalidSlice, expectedFaults := brngutil.RandomInvalidSlice(to, indices, h, n, k, b, t)
 
-			vssChecker := shamir.NewVSSChecker(h)
-			faults := invalidSlice.Faults(&vssChecker)
+			faults := invalidSlice.Faults(h)
 
 			Expect(faults).To(Equal(expectedFaults))
 		})
