@@ -221,11 +221,10 @@ func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
 	return SharesAdded, nil, nil
 }
 
-// Reset handles the state transition logic on receiving a Reset message, and
-// returns a ResetEvent that describes the outcome of the state transition. See
-// the documentation for the different ResetEvent possiblities for their
-// significance.
-func (opener *Opener) Reset(commitments []shamir.Commitment) ResetEvent {
+// NewInstance initialises the opener for a new instance of the open algorithm,
+// corresponding to the given Pedersen commitments. See the documentation for
+// the different ResetEvent possiblities for their significance.
+func (opener *Opener) NewInstance(commitments []shamir.Commitment) ResetEvent {
 	if len(commitments) != int(opener.batchSize) {
 		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.batchSize, len(commitments)))
 	}

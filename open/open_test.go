@@ -85,7 +85,7 @@ var _ = Describe("Opener", func() {
 
 		ProgressToWaitingI := func(i int) ([]secp256k1.Fn, []secp256k1.Fn) {
 			var secrets, decommitments []secp256k1.Fn
-			_ = opener.Reset(commitments)
+			_ = opener.NewInstance(commitments)
 			for j := 0; j < i; j++ {
 				shares := openutil.GetSharesAt(setsOfShares, j)
 				_, secrets, decommitments = opener.HandleShareBatch(shares)
@@ -106,7 +106,7 @@ var _ = Describe("Opener", func() {
 				})
 
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
-					_ = opener.Reset(commitments)
+					_ = opener.NewInstance(commitments)
 					Expect(InStateWaitingCK0(k)).To(BeTrue())
 				})
 
@@ -121,7 +121,7 @@ var _ = Describe("Opener", func() {
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
 					for i := 0; i < k; i++ {
 						ProgressToWaitingI(i)
-						_ = opener.Reset(commitments)
+						_ = opener.NewInstance(commitments)
 						Expect(InStateWaitingCK0(k)).To(BeTrue())
 					}
 				})
@@ -182,7 +182,7 @@ var _ = Describe("Opener", func() {
 				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
 					for i := 0; i < k; i++ {
 						ProgressToWaitingI(i)
-						_ = opener.Reset(commitments)
+						_ = opener.NewInstance(commitments)
 						Expect(InStateWaitingCK0(k)).To(BeTrue())
 					}
 				})
@@ -257,7 +257,7 @@ var _ = Describe("Opener", func() {
 			Context("Reset events", func() {
 				Specify("Not yet done in a sharing instance -> Aborted", func() {
 					ProgressToWaitingI(rand.Intn(k - 1))
-					event := opener.Reset(commitments)
+					event := opener.NewInstance(commitments)
 					Expect(event).To(Equal(open.Aborted))
 				})
 
@@ -266,7 +266,7 @@ var _ = Describe("Opener", func() {
 
 					for j := 0; j < len(commitments); j++ {
 						commitments = append(commitments[:j], commitments[j+1:]...)
-						Expect(func() { opener.Reset(commitments) }).To(Panic())
+						Expect(func() { opener.NewInstance(commitments) }).To(Panic())
 					}
 				})
 
@@ -276,7 +276,7 @@ var _ = Describe("Opener", func() {
 					for j := 0; j < len(commitments); j++ {
 						// commitment threshold is changed to < k
 						commitments[j] = shamir.NewCommitmentWithCapacity(1 + rand.Intn(k-1))
-						Expect(func() { opener.Reset(commitments) }).To(Panic())
+						Expect(func() { opener.NewInstance(commitments) }).To(Panic())
 					}
 				})
 
@@ -287,12 +287,12 @@ var _ = Describe("Opener", func() {
 						commitments[j] = shamir.NewCommitmentWithCapacity(0)
 					}
 
-					Expect(func() { opener.Reset(commitments) }).To(Panic())
+					Expect(func() { opener.NewInstance(commitments) }).To(Panic())
 				})
 
 				Specify("Otherwise -> Reset", func() {
 					// Uninitialised
-					event := opener.Reset(commitments)
+					event := opener.NewInstance(commitments)
 					Expect(event).To(Equal(open.Reset))
 
 					// Done
@@ -301,7 +301,7 @@ var _ = Describe("Opener", func() {
 						shares := openutil.GetSharesAt(setsOfShares, i+k)
 						_, _, _ = opener.HandleShareBatch(shares)
 					}
-					event = opener.Reset(commitments)
+					event = opener.NewInstance(commitments)
 					Expect(event).To(Equal(open.Reset))
 				})
 			})
@@ -599,7 +599,7 @@ func newMachine(
 	commitments []shamir.Commitment,
 	opener open.Opener,
 ) openMachine {
-	opener.Reset(commitments)
+	opener.NewInstance(commitments)
 	_, secrets, decommitments := opener.HandleShareBatch(shares)
 	lastE := open.ShareEvent(0)
 	return openMachine{id, n, shares, commitments, opener, secrets, decommitments, lastE}
