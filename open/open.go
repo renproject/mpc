@@ -174,7 +174,7 @@ func (e ResetEvent) String() string {
 //		- Waiting(`c`, `k`, `i`), `i` < `k-1` 	-> Waiting(`c`, `k`, `i+1`)
 type Opener struct {
 	// State
-	state State
+	shareBufs []shamir.VerifiableShares
 
 	// Instance parameters
 	batchSize   uint32
@@ -197,14 +197,14 @@ func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
 func (opener Opener) SizeHint() int {
 	return surge.SizeHint(opener.batchSize) +
 		surge.SizeHint(opener.commitments) +
-		opener.state.SizeHint() +
+		surge.SizeHint(opener.shareBufs) +
 		opener.h.SizeHint() +
 		surge.SizeHint(opener.indices)
 }
 
 // Marshal implements the surge.Marshaler interface.
 func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := opener.state.Marshal(buf, rem)
+	buf, rem, err := surge.Marshal(opener.shareBufs, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
 	}
@@ -229,7 +229,7 @@ func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := opener.state.Unmarshal(buf, rem)
+	buf, rem, err := surge.Unmarshal(&opener.shareBufs, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
 	}
@@ -259,20 +259,24 @@ func (opener Opener) K() int {
 
 // I returns the current number of valid shares that the opener has received.
 func (opener Opener) I() int {
-	return opener.state.NumShares()
+	return len(opener.shareBufs[0])
 }
 
 // New returns a new instance of the Opener state machine for the given set of
 // indices and the given Pedersen commitment system parameter. The state
 // machine begins in the Uninitialised state.
 func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
+	shareBufs := make([]shamir.VerifiableShares, b)
+	for i := range shareBufs {
+		shareBufs[i] = shamir.VerifiableShares{}
+	}
 	commitments := make([]shamir.Commitment, b)
 	for i := range commitments {
 		commitments[i] = shamir.Commitment{}
 	}
 
 	return Opener{
-		state:       NewState(b),
+		shareBufs:   shareBufs,
 		batchSize:   b,
 		commitments: commitments,
 		h:           h,
@@ -323,7 +327,7 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (
 	}
 
 	// There should be no duplicate indices.
-	for _, s := range opener.state.buf[0] {
+	for _, s := range opener.shareBufs[0] {
 		if s.Share.IndexEq(&index) {
 			return IndexDuplicate, nil, nil
 		}
@@ -340,24 +344,24 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (
 	// At this stage we know that the shares are allowed to be added to the
 	// respective buffers.
 	for i := 0; i < int(opener.batchSize); i++ {
-		opener.state.buf[i] = append(opener.state.buf[i], shares[i])
+		opener.shareBufs[i] = append(opener.shareBufs[i], shares[i])
 	}
 
 	// If we have just added the kth share, we can reconstruct.
-	numShares := len(opener.state.buf[0])
+	numShares := len(opener.shareBufs[0])
 	if numShares == opener.K() {
 		secrets := make([]secp256k1.Fn, opener.batchSize)
 		decommitments := make([]secp256k1.Fn, opener.batchSize)
 		shareBuf := make(shamir.Shares, numShares)
 		for i := 0; i < int(opener.batchSize); i++ {
-			for j := range opener.state.buf[i] {
-				shareBuf[j].Index = opener.state.buf[i][j].Share.Index
-				shareBuf[j].Value = opener.state.buf[i][j].Share.Value
+			for j := range opener.shareBufs[i] {
+				shareBuf[j].Index = opener.shareBufs[i][j].Share.Index
+				shareBuf[j].Value = opener.shareBufs[i][j].Share.Value
 			}
 			secrets[i] = shamir.Open(shareBuf)
-			for j := range opener.state.buf[i] {
-				shareBuf[j].Index = opener.state.buf[i][j].Share.Index
-				shareBuf[j].Value = opener.state.buf[i][j].Decommitment
+			for j := range opener.shareBufs[i] {
+				shareBuf[j].Index = opener.shareBufs[i][j].Share.Index
+				shareBuf[j].Value = opener.shareBufs[i][j].Decommitment
 			}
 			decommitments[i] = shamir.Open(shareBuf)
 		}
@@ -393,14 +397,14 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 	}
 
 	var ret ResetEvent
-	if len(opener.state.buf[0]) < opener.K() {
+	if len(opener.shareBufs[0]) < opener.K() {
 		ret = Aborted
 	} else {
 		ret = Reset
 	}
 
 	for i := 0; i < int(opener.batchSize); i++ {
-		opener.state.buf[i] = opener.state.buf[i][:0]
+		opener.shareBufs[i] = opener.shareBufs[i][:0]
 		opener.commitments[i].Set(commitments[i])
 	}
 

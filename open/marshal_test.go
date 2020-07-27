@@ -14,7 +14,6 @@ import (
 var _ = Describe("Surge marshalling", func() {
 	trials := 10
 	tys := []reflect.Type{
-		reflect.TypeOf(open.State{}),
 		reflect.TypeOf(open.Opener{}),
 	}
 
