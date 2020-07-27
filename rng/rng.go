@@ -422,14 +422,14 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	// Reset the Opener machine with the computed commitments.
-	rnger.opener.TransitionReset(locallyComputedCommitments)
+	rnger.opener.Reset(locallyComputedCommitments)
 
 	// Transition the machine's state.
 	rnger.state = WaitingOpen
 
 	// Supply the locally computed shares to the opener.
 	if !ignoreShares {
-		event, secrets, decommitments := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
+		event, secrets, decommitments := rnger.opener.HandleShareBatch(rnger.openingsMap[rnger.index])
 
 		// This only happens when k = 1.
 		if event == open.Done {
@@ -507,7 +507,7 @@ func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) TransitionE
 
 	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs.
-	event, secrets, decommitments := rnger.opener.TransitionShares(openings)
+	event, secrets, decommitments := rnger.opener.HandleShareBatch(openings)
 
 	switch event {
 	case open.Done:

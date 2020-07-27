@@ -131,11 +131,11 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	}
 }
 
-// TransitionShares handles the state transition logic upon receiving a set of shares,
-// and returns a ShareEvent that describes the outcome of the state transition.
-// See the documentation for the different ShareEvent possiblities for their
-// significance.
-func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (
+// HandleShareBatch handles the state transition logic upon receiving a set of
+// shares, and returns a ShareEvent that describes the outcome of the state
+// transition.  See the documentation for the different ShareEvent possiblities
+// for their significance.
+func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
 	ShareEvent,
 	[]secp256k1.Fn,
 	[]secp256k1.Fn,
@@ -221,11 +221,11 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (
 	return SharesAdded, nil, nil
 }
 
-// TransitionReset handles the state transition logic on receiving a Reset
-// message, and returns a ResetEvent that describes the outcome of the state
-// transition. See the documentation for the different ResetEvent possiblities
-// for their significance.
-func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEvent {
+// Reset handles the state transition logic on receiving a Reset message, and
+// returns a ResetEvent that describes the outcome of the state transition. See
+// the documentation for the different ResetEvent possiblities for their
+// significance.
+func (opener *Opener) Reset(commitments []shamir.Commitment) ResetEvent {
 	if len(commitments) != int(opener.batchSize) {
 		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.batchSize, len(commitments)))
 	}
