@@ -11,92 +11,6 @@ import (
 	"github.com/renproject/surge"
 )
 
-// ShareEvent represents the different outcomes that can occur when the state
-// machine processes a share.
-type ShareEvent uint8
-
-const (
-	// Done signifies that the state machine now has transitioned to Done
-	// because it now has enough shares to perform a reconstruction of the
-	// secret. This therefore means that the secret was reconstructed and can
-	// now be accessed for this sharing instance.
-	Done = ShareEvent(iota)
-
-	// Ignored signifies that the state machine is currently in the
-	// Uninitialised state and so the share was ignored.
-	Ignored
-
-	// IndexDuplicate signifies that the received share has an index that is
-	// the same as the index of one of the shares that is already in the list
-	// of valid shares received for the current sharing instance. This can be
-	// output in both the Waiting and Done states.
-	IndexDuplicate
-
-	// IndexOutOfRange signifies that the received share has an index that is
-	// not in the set of indices that the state machine was constructed with.
-	// This can be output in both the Waiting and Done states.
-	IndexOutOfRange
-
-	// InvalidShares signifies that at least one out of the received shares
-	// is not valid with respect to the commitment for the current sharing
-	// instance. This can be output in both the Waiting and Done states.
-	InvalidShares
-
-	// SharesAdded signifies that a set of shares was valid and added to the list of
-	// set of valid shares. This can happen either in the Waiting state when there are
-	// still not enough shares for reconstruction, or in the Done state.
-	SharesAdded
-)
-
-// String implements the Stringer interface.
-func (e ShareEvent) String() string {
-	var s string
-	switch e {
-	case Done:
-		s = "Done"
-	case Ignored:
-		s = "Ignored"
-	case IndexDuplicate:
-		s = "IndexDuplicate"
-	case IndexOutOfRange:
-		s = "IndexOutOfRange"
-	case InvalidShares:
-		s = "InvalidShares"
-	case SharesAdded:
-		s = "SharesAdded"
-	default:
-		s = fmt.Sprintf("Unknown(%v)", uint8(e))
-	}
-	return s
-}
-
-// ResetEvent repesents the different outcomes that can occur when the state
-// machine processes a Reset input.
-type ResetEvent uint8
-
-const (
-	// Aborted indicates that the state machine was reset without having reached
-	// the Done state for the given sharing instance.
-	Aborted = ResetEvent(iota)
-
-	// Reset indicates that the state machine was either in the Uninitialised
-	// state or the Done state for a sharing instance when it was reset.
-	Reset
-)
-
-func (e ResetEvent) String() string {
-	var s string
-	switch e {
-	case Aborted:
-		s = "Aborted"
-	case Reset:
-		s = "Reset"
-	default:
-		s = "?"
-	}
-	return s
-}
-
 // Opener is a state machine that handles the collecting of verifiable secret
 // shares and the reconstruction (if possible) of these shares to yield the
 // underlying secret. The state machine is designed to be resettable: the same
@@ -185,73 +99,6 @@ type Opener struct {
 	h       secp256k1.Point
 }
 
-// Generate implements the quick.Generator interface.
-func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
-	b := rand.Intn(20)
-	indices := shamirutil.RandomIndices(rand.Intn(20))
-	h := secp256k1.RandomPoint()
-	return reflect.ValueOf(New(uint32(b), indices, h))
-}
-
-// SizeHint implements the surge.SizeHinter interface.
-func (opener Opener) SizeHint() int {
-	return surge.SizeHint(opener.batchSize) +
-		surge.SizeHint(opener.commitments) +
-		surge.SizeHint(opener.shareBufs) +
-		opener.h.SizeHint() +
-		surge.SizeHint(opener.indices)
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.Marshal(opener.shareBufs, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
-	}
-	buf, rem, err = surge.MarshalU32(opener.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.commitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
-	}
-	buf, rem, err = opener.h.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling h: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.Unmarshal(&opener.shareBufs, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
-	}
-	buf, rem, err = surge.UnmarshalU32(&opener.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.commitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
-	}
-	buf, rem, err = opener.h.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling h: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
-	}
-	return buf, rem, nil
-}
-
 // K returns the reconstruction threshold for the current sharing instance.
 func (opener Opener) K() int {
 	return opener.commitments[0].Len()
@@ -276,11 +123,11 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	}
 
 	return Opener{
-		shareBufs:   shareBufs,
-		batchSize:   b,
-		commitments: commitments,
-		h:           h,
-		indices:     indices,
+		shareBufs,
+		b,
+		commitments,
+		indices,
+		h,
 	}
 }
 
@@ -379,21 +226,20 @@ func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) (
 // transition. See the documentation for the different ResetEvent possiblities
 // for their significance.
 func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEvent {
-	// It is not valid for k to be less than 1
 	if len(commitments) != int(opener.batchSize) {
 		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.batchSize, len(commitments)))
 	}
 
 	// Make sure each commitment is for the same threshold
 	// and that that threshold is greater than 0
-	c0 := commitments[0]
-	for _, c := range commitments {
-		if c.Len() != c0.Len() {
+	c0Len := commitments[0].Len()
+	if c0Len < 1 {
+		panic(fmt.Sprintf("k must be greater than 0, got: %v", c0Len))
+	}
+	for _, c := range commitments[1:] {
+		if c.Len() != c0Len {
 			panic(fmt.Sprintf("k must be equal for all commitments"))
 		}
-	}
-	if c0.Len() < 1 {
-		panic(fmt.Sprintf("k must be greater than 0, got: %v", c0.Len()))
 	}
 
 	var ret ResetEvent
@@ -409,4 +255,71 @@ func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEven
 	}
 
 	return ret
+}
+
+// Generate implements the quick.Generator interface.
+func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
+	b := rand.Intn(20)
+	indices := shamirutil.RandomIndices(rand.Intn(20))
+	h := secp256k1.RandomPoint()
+	return reflect.ValueOf(New(uint32(b), indices, h))
+}
+
+// SizeHint implements the surge.SizeHinter interface.
+func (opener Opener) SizeHint() int {
+	return surge.SizeHint(opener.batchSize) +
+		surge.SizeHint(opener.commitments) +
+		surge.SizeHint(opener.shareBufs) +
+		opener.h.SizeHint() +
+		surge.SizeHint(opener.indices)
+}
+
+// Marshal implements the surge.Marshaler interface.
+func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.Marshal(opener.shareBufs, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
+	}
+	buf, rem, err = surge.MarshalU32(opener.batchSize, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
+	}
+	buf, rem, err = surge.Marshal(opener.commitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
+	}
+	buf, rem, err = opener.h.Marshal(buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling h: %v", err)
+	}
+	buf, rem, err = surge.Marshal(opener.indices, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
+	}
+	return buf, rem, nil
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := surge.Unmarshal(&opener.shareBufs, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
+	}
+	buf, rem, err = surge.UnmarshalU32(&opener.batchSize, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&opener.commitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
+	}
+	buf, rem, err = opener.h.Unmarshal(buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling h: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&opener.indices, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
+	}
+	return buf, rem, nil
 }
