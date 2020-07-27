@@ -104,8 +104,9 @@ func (rnger RNGer) SizeHint() int {
 		surge.SizeHint(rnger.threshold) +
 		rnger.opener.SizeHint() +
 		surge.SizeHint(rnger.commitments) +
-		surge.SizeHint(rnger.openingsMap)
-	// FIXME
+		surge.SizeHint(rnger.openingsMap) +
+		surge.SizeHint(rnger.secrets) +
+		surge.SizeHint(rnger.decommitments)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -142,8 +143,15 @@ func (rnger RNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling openingsMap: %v", err)
 	}
+	buf, rem, err = surge.Marshal(rnger.secrets, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.decommitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
+	}
 	return buf, rem, nil
-	// FIXME
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
@@ -180,8 +188,15 @@ func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling openingsMap: %v", err)
 	}
+	buf, rem, err = surge.Unmarshal(&rnger.secrets, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.decommitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
+	}
 	return buf, rem, nil
-	// FIXME
 }
 
 // State returns the current state of the RNGer state machine.
@@ -264,14 +279,16 @@ func New(
 	opener := open.New(b, indices, h)
 
 	return Initialised, RNGer{
-		state:       state,
-		index:       ownIndex,
-		indices:     indices,
-		batchSize:   b,
-		threshold:   k,
-		opener:      opener,
-		commitments: commitments,
-		openingsMap: openingsMap,
+		state:         state,
+		index:         ownIndex,
+		indices:       indices,
+		batchSize:     b,
+		threshold:     k,
+		opener:        opener,
+		commitments:   commitments,
+		openingsMap:   openingsMap,
+		secrets:       []secp256k1.Fn{},
+		decommitments: []secp256k1.Fn{},
 	}
 }
 
@@ -412,7 +429,6 @@ func (rnger *RNGer) TransitionShares(
 
 	// Supply the locally computed shares to the opener.
 	if !ignoreShares {
-		// TODO
 		event, secrets, decommitments := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
 
 		// This only happens when k = 1.
