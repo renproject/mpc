@@ -2,12 +2,9 @@ package rng
 
 import (
 	"fmt"
-	"math/rand"
-	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
@@ -91,6 +88,8 @@ type RNGer struct {
 
 	// openingsMap holds a map of directed openings towards a player.
 	openingsMap map[secp256k1.Fn]shamir.VerifiableShares
+
+	secrets, decommitments []secp256k1.Fn
 }
 
 // SizeHint implements the surge.SizeHinter interface.
@@ -102,7 +101,9 @@ func (rnger RNGer) SizeHint() int {
 		surge.SizeHint(rnger.threshold) +
 		rnger.opener.SizeHint() +
 		surge.SizeHint(rnger.commitments) +
-		surge.SizeHint(rnger.openingsMap)
+		surge.SizeHint(rnger.openingsMap) +
+		surge.SizeHint(rnger.secrets) +
+		surge.SizeHint(rnger.decommitments)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -138,6 +139,14 @@ func (rnger RNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	buf, rem, err = surge.Marshal(rnger.openingsMap, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling openingsMap: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.secrets, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.decommitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -175,6 +184,14 @@ func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	buf, rem, err = surge.Unmarshal(&rnger.openingsMap, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling openingsMap: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.secrets, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.decommitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -214,15 +231,39 @@ func (rnger RNGer) Commitments() []shamir.Commitment {
 }
 
 // Generate implements the quick.Generator interface.
-func (rnger RNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
+/*
+func (rnger RNGer) Generate(rand *rand.Rand, size int) reflect.Value {
+	size /= 10
+
 	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
 	ownIndex := indices[rand.Intn(len(indices))]
-	b := uint32(rand.Intn(10))
-	k := uint32(rand.Intn(20))
+	b := (rand.Uint32() % uint32(size)) + 1
+	k := uint32(size)/b + 1
 	h := secp256k1.RandomPoint()
-	_, v := New(ownIndex, indices, b, k, h)
+	setsOfCommitments := make([][]shamir.Commitment, b)
+	for i := range setsOfCommitments {
+		setsOfCommitments[i] = make([]shamir.Commitment, k)
+		for j := range setsOfCommitments[i] {
+			setsOfCommitments[i][j] = shamir.NewCommitmentWithCapacity(int(k))
+			for l := uint32(0); l < k; l++ {
+				setsOfCommitments[i][j] = append(setsOfCommitments[i][j], secp256k1.RandomPoint())
+			}
+		}
+	}
+	setsOfShares := make([]shamir.VerifiableShares, b)
+	for i := range setsOfShares {
+		setsOfShares[i] = make(shamir.VerifiableShares, k)
+		for j := range setsOfShares[i] {
+			setsOfShares[i][j].Share.Index = secp256k1.RandomFn()
+			setsOfShares[i][j].Share.Value = secp256k1.RandomFn()
+			setsOfShares[i][j].Decommitment = secp256k1.RandomFn()
+		}
+	}
+	isZero := rand.Int31()&1 == 1
+	_, v := New(ownIndex, indices, b, k, h, setsOfShares, setsOfCommitments, isZero)
 	return reflect.ValueOf(v)
 }
+*/
 
 // New creates a new RNG state machine for a given batch size.
 // - Inputs
@@ -240,6 +281,9 @@ func New(
 	indices []secp256k1.Fn,
 	b, k uint32,
 	h secp256k1.Point,
+	setsOfShares []shamir.VerifiableShares,
+	setsOfCommitments [][]shamir.Commitment,
+	isZero bool,
 ) (TransitionEvent, RNGer) {
 	state := Init
 
@@ -256,18 +300,27 @@ func New(
 
 	// Create an instance of the Opener state machine within the RNG state
 	// machine.
-	opener := open.New(b, indices, h)
+	// FIXME: Move transitionShares logic into here to avoid having to have
+	// this temporary opener.
+	commitmentBatch := []shamir.Commitment{shamir.Commitment{secp256k1.Point{}}}
+	opener := open.New(commitmentBatch, indices, h)
 
-	return Initialised, RNGer{
-		state:       state,
-		index:       ownIndex,
-		indices:     indices,
-		batchSize:   b,
-		threshold:   k,
-		opener:      opener,
-		commitments: commitments,
-		openingsMap: openingsMap,
+	rnger := RNGer{
+		state:         state,
+		index:         ownIndex,
+		indices:       indices,
+		batchSize:     b,
+		threshold:     k,
+		opener:        opener,
+		commitments:   commitments,
+		openingsMap:   openingsMap,
+		secrets:       []secp256k1.Fn{},
+		decommitments: []secp256k1.Fn{},
 	}
+
+	event := rnger.transitionShares(setsOfShares, setsOfCommitments, isZero, h)
+
+	return event, rnger
 }
 
 // TransitionShares performs the state transition for the RNG state machine
@@ -304,10 +357,11 @@ func New(
 //		 - SharesConstructed when the sets of shares were valid
 //		 - RNGsReconstructed when the RNGer was able to reconstruct the random
 //		 	shares (k = 1)
-func (rnger *RNGer) TransitionShares(
+func (rnger *RNGer) transitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
 	isZero bool,
+	h secp256k1.Point,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `Init` state.
 	if rnger.state != Init {
@@ -400,18 +454,20 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	// Reset the Opener machine with the computed commitments.
-	rnger.opener.TransitionReset(locallyComputedCommitments)
+	rnger.opener = open.New(locallyComputedCommitments, rnger.indices, h)
 
 	// Transition the machine's state.
 	rnger.state = WaitingOpen
 
 	// Supply the locally computed shares to the opener.
 	if !ignoreShares {
-		event := rnger.opener.TransitionShares(rnger.openingsMap[rnger.index])
+		event, secrets, decommitments := rnger.opener.HandleShareBatch(rnger.openingsMap[rnger.index])
 
 		// This only happens when k = 1.
 		if event == open.Done {
 			rnger.state = Done
+			rnger.secrets = secrets
+			rnger.decommitments = decommitments
 			return RNGsReconstructed
 		}
 	}
@@ -483,11 +539,13 @@ func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) TransitionE
 
 	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs.
-	event := rnger.opener.TransitionShares(openings)
+	event, secrets, decommitments := rnger.opener.HandleShareBatch(openings)
 
 	switch event {
 	case open.Done:
 		rnger.state = Done
+		rnger.secrets = secrets
+		rnger.decommitments = decommitments
 		return RNGsReconstructed
 	case open.SharesAdded:
 		return OpeningsAdded
@@ -505,13 +563,10 @@ func (rnger RNGer) ReconstructedShares() shamir.VerifiableShares {
 		return nil
 	}
 
-	secrets := rnger.opener.Secrets()
-	decommitments := rnger.opener.Decommitments()
-	vshares := make(shamir.VerifiableShares, len(secrets))
-
-	for i, secret := range secrets {
+	vshares := make(shamir.VerifiableShares, rnger.batchSize)
+	for i, secret := range rnger.secrets {
 		share := shamir.NewShare(rnger.index, secret)
-		vshares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+		vshares[i] = shamir.NewVerifiableShare(share, rnger.decommitments[i])
 	}
 
 	return vshares

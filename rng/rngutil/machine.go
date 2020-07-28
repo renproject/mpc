@@ -33,9 +33,7 @@ func NewRngMachine(
 	ownSetsOfShares []shamir.VerifiableShares,
 	ownSetsOfCommitments [][]shamir.Commitment,
 ) RngMachine {
-	_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-
-	_ = rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
+	_, rnger := rng.New(index, indices, uint32(b), uint32(k), h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 	return RngMachine{
 		id:      id,

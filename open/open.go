@@ -11,228 +11,224 @@ import (
 	"github.com/renproject/surge"
 )
 
-// ShareEvent represents the different outcomes that can occur when the state
-// machine processes a share.
-type ShareEvent uint8
-
-const (
-	// Done signifies that the state machine now has transitioned to Done
-	// because it now has enough shares to perform a reconstruction of the
-	// secret. This therefore means that the secret was reconstructed and can
-	// now be accessed for this sharing instance.
-	Done = ShareEvent(iota)
-
-	// Ignored signifies that the state machine is currently in the
-	// Uninitialised state and so the share was ignored.
-	Ignored
-
-	// IndexDuplicate signifies that the received share has an index that is
-	// the same as the index of one of the shares that is already in the list
-	// of valid shares received for the current sharing instance. This can be
-	// output in both the Waiting and Done states.
-	IndexDuplicate
-
-	// IndexOutOfRange signifies that the received share has an index that is
-	// not in the set of indices that the state machine was constructed with.
-	// This can be output in both the Waiting and Done states.
-	IndexOutOfRange
-
-	// InvalidShares signifies that at least one out of the received shares
-	// is not valid with respect to the commitment for the current sharing
-	// instance. This can be output in both the Waiting and Done states.
-	InvalidShares
-
-	// SharesAdded signifies that a set of shares was valid and added to the list of
-	// set of valid shares. This can happen either in the Waiting state when there are
-	// still not enough shares for reconstruction, or in the Done state.
-	SharesAdded
-)
-
-// String implements the Stringer interface.
-func (e ShareEvent) String() string {
-	var s string
-	switch e {
-	case Done:
-		s = "Done"
-	case Ignored:
-		s = "Ignored"
-	case IndexDuplicate:
-		s = "IndexDuplicate"
-	case IndexOutOfRange:
-		s = "IndexOutOfRange"
-	case InvalidShares:
-		s = "InvalidShares"
-	case SharesAdded:
-		s = "SharesAdded"
-	default:
-		s = fmt.Sprintf("Unknown(%v)", uint8(e))
-	}
-	return s
-}
-
-// ResetEvent repesents the different outcomes that can occur when the state
-// machine processes a Reset input.
-type ResetEvent uint8
-
-const (
-	// Aborted indicates that the state machine was reset without having reached
-	// the Done state for the given sharing instance.
-	Aborted = ResetEvent(iota)
-
-	// Reset indicates that the state machine was either in the Uninitialised
-	// state or the Done state for a sharing instance when it was reset.
-	Reset
-)
-
-func (e ResetEvent) String() string {
-	var s string
-	switch e {
-	case Aborted:
-		s = "Aborted"
-	case Reset:
-		s = "Reset"
-	default:
-		s = "?"
-	}
-	return s
-}
-
-// Opener is a state machine that handles the collecting of verifiable secret
-// shares and the reconstruction (if possible) of these shares to yield the
-// underlying secret. The state machine is designed to be resettable: the same
-// instance of a Opener can be used to open many different sharings, as opposed
-// to being one time use. However, each instance of the state machine is
-// specific to a given set of indices of the parties (i.e. the set of possible
-// indices that shares can have) and system parameter for the Pedersen
-// commitments used in the verifiable secret sharing scheme.
+// Opener is a state machine that is responsible for opening the secret value
+// for a verifiable sharing. An instance of this state machine has a specific
+// commitment used for share verification, a specific value of the Pedersen
+// parameter (known as "h"), and a specific set of indices for the participating
+// players.
 //
-// The state machine states and transitions are as follows. At a high level,
-// the states need to capture:
+// The description of the state machine is simple: the state is a buffer of
+// shares that have been validated. When a share is received, it is checked
+// against the commitment and other parameters, and if it is valid it is added
+// to the buffer. Once enough shares have been added to the buffer, the secret
+// is opened (the required number of shares is known as "k").
 //
-//	- The current sharing instance
-//	- Whether or not there are enough valid shares to perform a reconstruction
-//
-// The information needed for the sharing instance is captured by the
-// commitment `c` for the verifiable secret sharing instance, and the
-// associated reconstruction threshold `k`. The information that determines
-// whether it is possible to reconstruct is simply the number of valid shares
-// received `i`, and also `k`. The number of shares received is maintained
-// indirectly by storing all valid shares received, the latter of course need
-// to be saved in order to be able to perform a reconstruction. These three
-// variables, `c`, `k` and `i`, represent the entirety of the state needed for
-// the state transition logic. It is however convenient to group subsets of the
-// possible states into higher level states that reflect the higher level
-// operation of the state machine. The two main higher level states are Waiting
-// and Done. Additionally, there is an additional state Uninitialised that the
-// state machine is in upon construction and once moving to one of the other
-// two states will never be in this state again. To summarise, the high level
-// states (parameterised by the relevant parts of the lower level state) are
-//
-//	1. Uninitialised
-//	2. Waiting(`c`, `k`, `i`)
-//	3. Done(`c`)
-//
-// Now we consider the state transitions. There are only two triggers for state
-// transitions:
-//
-//	- Receiving a new share
-//	- Resetting for a new sharing instance
-//
-// The Opener state machine functions in batches, and has a batch size
-// associated with it. The number of shares it receives every time MUST be
-// equal to the batch size. When it has received threshold number of sets
-// of shares, it reconstructs all the secrets, a total of batch size in number.
-//
-// All of the state transitions are listed in the following and are grouped by
-// the current state. The condition Valid('c') for a share means that the share
-// is valid with repect to the commitment `c` and also that the index for the
-// share does not equal any of the indices in the current set of valid shares
-// and that it is in the list of indices that the state machine was constructed
-// with.
-//
-//	- Uninitialised
-//		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Otherwise 			-> Do nothing
-//	- Waiting(`c`, `k`, `k-1`)
-//		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Share, Valid(`c`) 		-> Done(`c`)
-//		- Otherwise 			-> Do nothing
-//	- Waiting(`c`, `k`, `i`), `i` < `k-1`
-//		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Share, Valid(`c`) 		-> Waiting(`c`, `k`, `i+1`)
-//		- Otherwise 			-> Do nothing
-//	- Done(`c`)
-//		- New instance(`c`, `k`) 	-> Waiting(`c`, `k`, `0`)
-//		- Otherwise 			-> Do nothing
-//
-// Alternatively, the state transitions can be grouped by message.
-//
-//	- New instance(`c`, `k`)
-//		- Any -> Waiting(`c`, `k`, `0`)
-//	- Share, Valid(`c`)
-//		- Waiting(`c`, `k`, `k-1`) 		-> Done(`c`)
-//		- Waiting(`c`, `k`, `i`), `i` < `k-1` 	-> Waiting(`c`, `k`, `i+1`)
+// The state machine supports batching. If several secrets need to be opened at
+// once, instead of having multiple state machines, just one can be used and the
+// incoming shares are processed in batches. This requires all of the secrets to
+// share the number of shares required to open the secrets, (b) the number of
+// participating players, the expected indices of the participating players, and
+// the Pedersen parameter (known as "h").
 type Opener struct {
-	// Event machine state
-	batchSize    uint32
-	commitments  []shamir.Commitment
-	shareBuffers []shamir.Shares
-	decomBuffers []shamir.Shares
-	// The state variable `k` in the formal description can be computed using
-	// the commitment alone.
+	// State
+	shareBufs []shamir.VerifiableShares
 
-	// Other members
-	secrets       []secp256k1.Fn
-	decommitments []secp256k1.Fn
-	h             secp256k1.Point
-	indices       []secp256k1.Fn
+	// Instance parameters
+	commitmentBatch []shamir.Commitment
+
+	// Global parameters
+	indices []secp256k1.Fn
+	h       secp256k1.Point
+}
+
+// K returns the number of shares required to open secrets. It assumes that all
+// batches require the same number of shares (this assumption is enforced by all
+// other methods).
+func (opener Opener) K() int {
+	return opener.commitmentBatch[0].Len()
+}
+
+// BatchSize of the opener.
+func (opener Opener) BatchSize() int {
+	return len(opener.commitmentBatch)
+}
+
+// I returns the current number of valid shares that the opener has received. It
+// assumes that all batches contain the same number of shares (this assumption
+// is enforced by all other methods).
+func (opener Opener) I() int {
+	return len(opener.shareBufs[0])
+}
+
+// New returns a new instance of the Opener state machine for the given
+// Pedersen commitments for the verifiable sharing(s), indices, and Pedersen
+// commitment system parameter. The length of the commitment slice determines
+// the batch size.
+//
+// Panics: This function will panic if and of the following conditions are met.
+//	- The batch size is less than 1.
+//	- The reconstruction threshold (k) is less than 1.
+//	- Not all commitments in the batch of commitments have the same
+//		reconstruction threshold (k).
+func New(commitmentBatch []shamir.Commitment, indices []secp256k1.Fn, h secp256k1.Point) Opener {
+	// The batch size must be at least 1.
+	b := uint32(len(commitmentBatch))
+	if b < 1 {
+		panic(fmt.Sprintf("b must be greater than 0, got: %v", b))
+	}
+	// Make sure each commitment is for the same threshold and that that
+	// threshold is greater than 0.
+	k := commitmentBatch[0].Len()
+	if k < 1 {
+		panic(fmt.Sprintf("k must be greater than 0, got: %v", k))
+	}
+	for _, c := range commitmentBatch[1:] {
+		if c.Len() != k {
+			panic(fmt.Sprintf("k must be equal for all commitments in the batch"))
+		}
+	}
+
+	comBatchCopy := make([]shamir.Commitment, b)
+	for i := range comBatchCopy {
+		comBatchCopy[i].Set(commitmentBatch[i])
+	}
+	shareBufs := make([]shamir.VerifiableShares, b)
+	for i := range shareBufs {
+		shareBufs[i] = shamir.VerifiableShares{}
+	}
+	indicesCopy := make([]secp256k1.Fn, len(indices))
+	copy(indicesCopy, indices)
+
+	return Opener{
+		shareBufs:       shareBufs,
+		commitmentBatch: comBatchCopy,
+		indices:         indicesCopy,
+		h:               h,
+	}
+}
+
+// HandleShareBatch handles the state transition logic upon receiving a batch
+// of shares, and returns a ShareEvent that describes the outcome of the state
+// transition. See the documentation for the different ShareEvent possiblities
+// for their significance. If enough shares have been received to reconstruct
+// the secret, then this is returned, otherwise the corresponding return value
+// is nil. Similarly, the decommitment (or hiding) value for the verifiable
+// sharing will also be returned.
+func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
+	ShareEvent,
+	[]secp256k1.Fn,
+	[]secp256k1.Fn,
+) {
+	// The number of shares should equal the batch size.
+	if len(shareBatch) != int(opener.BatchSize()) {
+		return Ignored, nil, nil
+	}
+
+	// All shares should have the same index.
+	for i := 1; i < len(shareBatch); i++ {
+		if !shareBatch[i].Share.IndexEq(&shareBatch[0].Share.Index) {
+			return InvalidShares, nil, nil
+		}
+	}
+	index := shareBatch[0].Share.Index
+
+	// The share index must be in the index set.
+	{
+		exists := false
+		for i := range opener.indices {
+			if index.Eq(&opener.indices[i]) {
+				exists = true
+			}
+		}
+		if !exists {
+			return IndexOutOfRange, nil, nil
+		}
+	}
+
+	// There should be no duplicate indices.
+	for _, s := range opener.shareBufs[0] {
+		if s.Share.IndexEq(&index) {
+			return IndexDuplicate, nil, nil
+		}
+	}
+
+	// No shares should be invalid. If even a single share is invalid, we mark
+	// the entire set of shares to be invalid.
+	for i, share := range shareBatch {
+		if !shamir.IsValid(opener.h, &opener.commitmentBatch[i], &share) {
+			return InvalidShares, nil, nil
+		}
+	}
+
+	// At this stage we know that the shares are allowed to be added to the
+	// respective buffers.
+	for i := 0; i < int(opener.BatchSize()); i++ {
+		opener.shareBufs[i] = append(opener.shareBufs[i], shareBatch[i])
+	}
+
+	// If we have just added the kth share, we can reconstruct.
+	numShares := len(opener.shareBufs[0])
+	if numShares == opener.K() {
+		secrets := make([]secp256k1.Fn, opener.BatchSize())
+		decommitments := make([]secp256k1.Fn, opener.BatchSize())
+		shareBuf := make(shamir.Shares, numShares)
+		for i := 0; i < int(opener.BatchSize()); i++ {
+			for j := range opener.shareBufs[i] {
+				shareBuf[j].Index = opener.shareBufs[i][j].Share.Index
+				shareBuf[j].Value = opener.shareBufs[i][j].Share.Value
+			}
+			secrets[i] = shamir.Open(shareBuf)
+			for j := range opener.shareBufs[i] {
+				shareBuf[j].Index = opener.shareBufs[i][j].Share.Index
+				shareBuf[j].Value = opener.shareBufs[i][j].Decommitment
+			}
+			decommitments[i] = shamir.Open(shareBuf)
+		}
+
+		return Done, secrets, decommitments
+	}
+
+	// At this stage we have added the shares to the respective buffers
+	// but we were not yet able to reconstruct the secrets.
+	return SharesAdded, nil, nil
 }
 
 // Generate implements the quick.Generator interface.
-func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
-	b := rand.Intn(20)
+func (opener Opener) Generate(_ *rand.Rand, size int) reflect.Value {
+	// A curve point is more or less 3 field elements that contain 4 uint64s.
+	size /= 12
+
+	k := rand.Intn(size) + 1
+	b := size/k + 1
+	commitmentBatch := make([]shamir.Commitment, b)
+	for i := range commitmentBatch {
+		commitmentBatch[i] = shamir.NewCommitmentWithCapacity(k)
+		for j := 0; j < k; j++ {
+			commitmentBatch[i] = append(commitmentBatch[i], secp256k1.RandomPoint())
+		}
+	}
 	indices := shamirutil.RandomIndices(rand.Intn(20))
 	h := secp256k1.RandomPoint()
-	return reflect.ValueOf(New(uint32(b), indices, h))
+	return reflect.ValueOf(New(commitmentBatch, indices, h))
 }
 
 // SizeHint implements the surge.SizeHinter interface.
 func (opener Opener) SizeHint() int {
-	return surge.SizeHint(opener.batchSize) +
-		surge.SizeHint(opener.commitments) +
-		surge.SizeHint(opener.shareBuffers) +
-		surge.SizeHint(opener.decomBuffers) +
-		surge.SizeHint(opener.secrets) +
-		surge.SizeHint(opener.decommitments) +
+	return surge.SizeHint(opener.commitmentBatch) +
+		surge.SizeHint(opener.shareBufs) +
 		opener.h.SizeHint() +
 		surge.SizeHint(opener.indices)
 }
 
 // Marshal implements the surge.Marshaler interface.
 func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.MarshalU32(opener.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.commitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.shareBuffers, buf, rem)
+	buf, rem, err := surge.Marshal(opener.shareBufs, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
 	}
-	buf, rem, err = surge.Marshal(opener.decomBuffers, buf, rem)
+	buf, rem, err = surge.Marshal(opener.commitmentBatch, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling decommitment buffers: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.secrets, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.decommitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
+		return buf, rem, fmt.Errorf("marshaling commitmentBatch: %v", err)
 	}
 	buf, rem, err = opener.h.Marshal(buf, rem)
 	if err != nil {
@@ -247,29 +243,13 @@ func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.UnmarshalU32(&opener.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.commitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.shareBuffers, buf, rem)
+	buf, rem, err := surge.Unmarshal(&opener.shareBufs, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
 	}
-	buf, rem, err = surge.Unmarshal(&opener.decomBuffers, buf, rem)
+	buf, rem, err = surge.Unmarshal(&opener.commitmentBatch, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling decommitment buffers: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.secrets, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.decommitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
+		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
 	buf, rem, err = opener.h.Unmarshal(buf, rem)
 	if err != nil {
@@ -279,218 +259,5 @@ func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
 	}
-
-	// Set the share buffer to have the correct capacity.
-	n := len(opener.indices)
-	for i := 0; i < int(opener.batchSize); i++ {
-		shareBuffer := make(shamir.Shares, n)
-		decomBuffer := make(shamir.Shares, n)
-		n := copy(shareBuffer, opener.shareBuffers[i])
-		if n < len(opener.shareBuffers[i]) {
-			return buf, rem, fmt.Errorf(
-				"invalid marshalled data: "+
-					"%v shares in the share buffer but the reconstructor is instantiated for %v players",
-				len(opener.shareBuffers[i]),
-				n,
-			)
-		}
-		n = copy(decomBuffer, opener.decomBuffers[i])
-		if n < len(opener.decomBuffers[i]) {
-			return buf, rem, fmt.Errorf(
-				"invalid marshalled data: "+
-					"%v shares in the decom buffer but the reconstructor is instantiated for %v players",
-				len(opener.decomBuffers[i]),
-				n,
-			)
-		}
-		opener.shareBuffers[i] = shareBuffer[:n]
-		opener.decomBuffers[i] = decomBuffer[:n]
-	}
-
 	return buf, rem, nil
-}
-
-// BatchSize returns the batch size of the opener machine
-// That is, the number of secrets it can reconstruct in one successful execution
-func (opener Opener) BatchSize() uint32 {
-	return opener.batchSize
-}
-
-// K returns the reconstruction threshold for the current sharing instance.
-func (opener Opener) K() int {
-	return opener.commitments[0].Len()
-}
-
-// I returns the current number of valid shares that the opener has received.
-func (opener Opener) I() int {
-	return len(opener.shareBuffers[0])
-}
-
-// Secrets returns the reconstructed secrets for the current sharing instance,
-// but only if the state is Done. Otherwise, it will return the secrets for the
-// last sharing instance that made it to state Done. If the state machine has
-// never been in the state Done, then the zero shares are returned.
-func (opener Opener) Secrets() []secp256k1.Fn {
-	return opener.secrets
-}
-
-// Decommitments returns the reconstructed decommitments for the current sharing instance,
-// but only if the state is Done. Otherwise it will return the decommitments for
-// the last sharing instance that made it to state Done. If the state machine has never
-// been in the state Done, then the zero shares are returned.
-func (opener Opener) Decommitments() []secp256k1.Fn {
-	return opener.decommitments
-}
-
-// New returns a new instance of the Opener state machine for the given set of
-// indices and the given Pedersen commitment system parameter. The state
-// machine begins in the Uninitialised state.
-func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
-	shareBuffers := make([]shamir.Shares, b)
-	decomBuffers := make([]shamir.Shares, b)
-	for i := 0; i < int(b); i++ {
-		shareBuffers[i] = make(shamir.Shares, 0, len(indices))
-		decomBuffers[i] = make(shamir.Shares, 0, len(indices))
-	}
-
-	commitments := make([]shamir.Commitment, b)
-	for i := range commitments {
-		commitments[i] = shamir.Commitment{}
-	}
-
-	secrets := make([]secp256k1.Fn, b)
-	decommitments := make([]secp256k1.Fn, b)
-
-	return Opener{
-		batchSize:     b,
-		commitments:   commitments,
-		shareBuffers:  shareBuffers,
-		decomBuffers:  decomBuffers,
-		secrets:       secrets,
-		decommitments: decommitments,
-		h:             h,
-		indices:       indices,
-	}
-}
-
-// TransitionShares handles the state transition logic upon receiving a set of shares,
-// and returns a ShareEvent that describes the outcome of the state transition.
-// See the documentation for the different ShareEvent possiblities for their
-// significance.
-func (opener *Opener) TransitionShares(shares shamir.VerifiableShares) ShareEvent {
-	// Do nothing when in the Uninitialised state. This can be checked by
-	// seeing if k is zero, as Resetting the state machine can only be done if
-	// k is greater than 0.
-	if opener.K() <= 0 {
-		return Ignored
-	}
-
-	// If the number of verifiable shares provided is not equal to the batch size
-	// of the Opener machine, ignore them
-	if len(shares) != int(opener.BatchSize()) {
-		return Ignored
-	}
-
-	for i, vshare := range shares {
-		if !vshare.Share.IndexEq(&shares[0].Share.Index) {
-			return InvalidShares
-		}
-
-		// Even if a single share is invalid, we mark the entire set of shares
-		// to be invalid
-		if !shamir.IsValid(opener.h, &opener.commitments[i], &vshare) {
-			return InvalidShares
-		}
-	}
-
-	// Check if a share with this index is already in the buffer. Note that
-	// since we have already checked that the share is valid, it is necessarily
-	// the case that if the index is a duplicate, so too will be the entire
-	// share.
-	//
-	// We already have checked that every share in the provided set of shares
-	// has the same index, so checking this constraint for just the first share
-	// buffer suffices.
-	for _, s := range opener.shareBuffers[0] {
-		if shares[0].Share.IndexEq(&s.Index) {
-			return IndexDuplicate
-		}
-	}
-
-	// If the share buffer is full and the index is not a duplicate, it must be
-	// out of range. Note that since this share has passed the above checks, it
-	// must actually be a valid share. This requires knowledge of the sharing
-	// polynomials which would imply either a malicious dealer or a malicious
-	// player that contructs new valid shares after being able to open.
-	//
-	// Since we append shares to every buffer at the same time, at every point
-	// in time the lenth of each share buffer will be the same.
-	// Again, checking this constraint for just the first share buffer suffices
-	if len(opener.shareBuffers[0]) == cap(opener.shareBuffers[0]) {
-		return IndexOutOfRange
-	}
-
-	// At this stage we know that the shares are allowed to be added to the
-	// respective buffers
-	for i := 0; i < int(opener.BatchSize()); i++ {
-		opener.shareBuffers[i] = append(opener.shareBuffers[i], shares[i].Share)
-		opener.decomBuffers[i] = append(opener.decomBuffers[i], decommitmentShare(shares[i]))
-	}
-
-	// If we have just added the kth share, we can reconstruct.
-	if len(opener.shareBuffers[0]) == opener.K() {
-		for i := 0; i < int(opener.BatchSize()); i++ {
-			opener.secrets[i] = shamir.Open(opener.shareBuffers[i])
-			opener.decommitments[i] = shamir.Open(opener.decomBuffers[i])
-		}
-
-		return Done
-	}
-
-	// At this stage we have added the shares to the respective buffers
-	// but we were not yet able to reconstruct the secrets
-	return SharesAdded
-}
-
-// TransitionReset handles the state transition logic on receiving a Reset
-// message, and returns a ResetEvent that describes the outcome of the state
-// transition. See the documentation for the different ResetEvent possiblities
-// for their significance.
-func (opener *Opener) TransitionReset(commitments []shamir.Commitment) ResetEvent {
-	// It is not valid for k to be less than 1
-	if len(commitments) != int(opener.BatchSize()) {
-		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.BatchSize(), len(commitments)))
-	}
-
-	// Make sure each commitment is for the same threshold
-	// and that that threshold is greater than 0
-	c0 := commitments[0]
-	for _, c := range commitments {
-		if c.Len() != c0.Len() {
-			panic(fmt.Sprintf("k must be equal for all commitments"))
-		}
-	}
-	if c0.Len() < 1 {
-		panic(fmt.Sprintf("k must be greater than 0, got: %v", c0.Len()))
-	}
-
-	var ret ResetEvent
-	if len(opener.shareBuffers[0]) < opener.K() {
-		ret = Aborted
-	} else {
-		ret = Reset
-	}
-
-	for i := 0; i < int(opener.BatchSize()); i++ {
-		opener.shareBuffers[i] = opener.shareBuffers[i][:0]
-		opener.decomBuffers[i] = opener.decomBuffers[i][:0]
-		opener.commitments[i].Set(commitments[i])
-	}
-
-	return ret
-}
-
-// Private functions
-func decommitmentShare(vshare shamir.VerifiableShare) shamir.Share {
-	return shamir.NewShare(vshare.Share.Index, vshare.Decommitment)
 }
