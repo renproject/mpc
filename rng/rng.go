@@ -55,9 +55,6 @@ func New(
 	// Commitments validity
 	//
 
-	if len(setsOfCommitments) != int(b) {
-		panic("invalid sets of commitments")
-	}
 
 	for _, coms := range setsOfCommitments {
 		if len(coms) != requiredBrngBatchSize {
