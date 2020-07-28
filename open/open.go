@@ -88,11 +88,13 @@ func New(commitmentBatch []shamir.Commitment, indices []secp256k1.Fn, h secp256k
 	for i := range shareBufs {
 		shareBufs[i] = shamir.VerifiableShares{}
 	}
+	indicesCopy := make([]secp256k1.Fn, len(indices))
+	copy(indicesCopy, indices)
 
 	return Opener{
 		shareBufs:       shareBufs,
 		commitmentBatch: comBatchCopy,
-		indices:         indices,
+		indices:         indicesCopy,
 		h:               h,
 	}
 }
