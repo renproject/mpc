@@ -19,7 +19,7 @@ type PullConsensus struct {
 	honestSubset []secp256k1.Fn
 	threshold    int32
 	table        table.Table
-	checker      shamir.VSSChecker
+	h            secp256k1.Point
 }
 
 // SizeHint implements the surge.SizeHinter interface.
@@ -29,7 +29,7 @@ func (pc PullConsensus) SizeHint() int {
 		surge.SizeHint(pc.honestSubset) +
 		surge.SizeHint(pc.threshold) +
 		pc.table.SizeHint() +
-		pc.checker.SizeHint()
+		pc.h.SizeHint()
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -54,9 +54,9 @@ func (pc PullConsensus) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("error marshaling table: %v", err)
 	}
-	buf, rem, err = pc.checker.Marshal(buf, rem)
+	buf, rem, err = pc.h.Marshal(buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("error marshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("error marshaling h: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -83,9 +83,9 @@ func (pc PullConsensus) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("error unmarshaling table: %v", err)
 	}
-	buf, rem, err = pc.checker.Unmarshal(buf, rem)
+	buf, rem, err = pc.h.Unmarshal(buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("error unmarshaling checker: %v", err)
+		return buf, rem, fmt.Errorf("error unmarshaling h: %v", err)
 	}
 	return buf, rem, nil
 }
@@ -99,7 +99,6 @@ func NewPullConsensus(inds, honestIndices []secp256k1.Fn, advCount int, h secp25
 
 	done := false
 	threshold := int32(advCount) + 1
-	checker := shamir.NewVSSChecker(h)
 	indices := make([]secp256k1.Fn, len(inds))
 	copy(indices, inds)
 
@@ -118,7 +117,7 @@ func NewPullConsensus(inds, honestIndices []secp256k1.Fn, advCount int, h secp25
 		honestSubset,
 		threshold,
 		table,
-		checker,
+		h,
 	}
 }
 
@@ -156,7 +155,7 @@ func (pc *PullConsensus) HandleRow(row table.Row) bool {
 			}
 
 			c := sharing.Commitment()
-			if !pc.checker.IsValid(&c, &share) {
+			if !shamir.IsValid(pc.h, &c, &share) {
 				return pc.done
 			}
 		}

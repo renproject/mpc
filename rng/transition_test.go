@@ -381,12 +381,11 @@ var _ = Describe("RNG/RZG state transitions", func() {
 				// The reconstructed verifiable shares of the batch of unbiased
 				// random numbers should be valid against the commitments for
 				// those unbiased random numbers.
-				vssChecker := shamir.NewVSSChecker(h)
 				commitments := rnger.Commitments()
 				vshares := rnger.ReconstructedShares()
 
 				for i, c := range commitments {
-					Expect(vssChecker.IsValid(&c, &vshares[i])).To(BeTrue())
+					Expect(shamir.IsValid(h, &c, &vshares[i])).To(BeTrue())
 				}
 			})
 		})

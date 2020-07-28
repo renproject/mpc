@@ -1,6 +1,7 @@
 package table
 
 import (
+	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/surge"
 )
@@ -47,11 +48,11 @@ func (slice Slice) HasValidForm() bool {
 }
 
 // Faults returns a list of faults (if any) that exist in the given slice.
-func (slice Slice) Faults(checker *shamir.VSSChecker) []Element {
+func (slice Slice) Faults(h secp256k1.Point) []Element {
 	var faults []Element
 	for _, c := range slice {
 		for _, e := range c {
-			if !checker.IsValid(&e.commitment, &e.share) {
+			if !shamir.IsValid(h, &e.commitment, &e.share) {
 				var fault Element
 				fault.Set(e)
 				faults = append(faults, fault)

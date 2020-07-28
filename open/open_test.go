@@ -44,7 +44,6 @@ var _ = Describe("Opener", func() {
 			secrets      []secp256k1.Fn
 			setsOfShares []shamir.VerifiableShares
 			commitments  []shamir.Commitment
-			sharer       shamir.VSSharer
 		)
 
 		Setup := func() (
@@ -53,15 +52,12 @@ var _ = Describe("Opener", func() {
 			[]secp256k1.Fn,
 			[]shamir.VerifiableShares,
 			[]shamir.Commitment,
-			shamir.VSSharer,
 		) {
 			indices := shamirutil.SequentialIndices(n)
 			secrets := make([]secp256k1.Fn, b)
 			for i := 0; i < b; i++ {
 				secrets[i] = secp256k1.RandomFn()
 			}
-
-			sharer := shamir.NewVSSharer(indices, h)
 
 			setsOfShares := make([]shamir.VerifiableShares, b)
 			for i := 0; i < b; i++ {
@@ -71,16 +67,16 @@ var _ = Describe("Opener", func() {
 			commitments := make([]shamir.Commitment, b)
 			for i := 0; i < b; i++ {
 				commitments[i] = shamir.NewCommitmentWithCapacity(k)
-				sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
+				shamir.VShareSecret(&setsOfShares[i], &commitments[i], indices, h, secrets[i], k)
 			}
 
 			opener = open.New(uint32(b), indices, h)
 
-			return indices, opener, secrets, setsOfShares, commitments, sharer
+			return indices, opener, secrets, setsOfShares, commitments
 		}
 
 		JustBeforeEach(func() {
-			indices, opener, secrets, setsOfShares, commitments, sharer = Setup()
+			indices, opener, secrets, setsOfShares, commitments = Setup()
 		})
 
 		InStateWaitingCK0 := func(k int) bool {
@@ -417,10 +413,9 @@ var _ = Describe("Opener", func() {
 						// out of the normal range of indices. We thus need to
 						// utilise the sharer to do this.
 						indices = shamirutil.SequentialIndices(n + 1)
-						sharer = shamir.NewVSSharer(indices, h)
 						for i := 0; i < b; i++ {
 							setsOfShares[i] = make(shamir.VerifiableShares, n+1)
-							sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
+							shamir.VShareSecret(&setsOfShares[i], &commitments[i], indices, h, secrets[i], k)
 						}
 
 						// Perform the test
@@ -447,13 +442,12 @@ var _ = Describe("Opener", func() {
 		setsOfShares := make([]shamir.VerifiableShares, b)
 		commitments := make([]shamir.Commitment, b)
 		machines := make([]Machine, n)
-		sharer := shamir.NewVSSharer(indices, h)
 		secrets := make([]secp256k1.Fn, b)
 		for i := 0; i < b; i++ {
 			setsOfShares[i] = make(shamir.VerifiableShares, n)
 			commitments[i] = shamir.NewCommitmentWithCapacity(k)
 			secrets[i] = secp256k1.RandomFn()
-			sharer.Share(&setsOfShares[i], &commitments[i], secrets[i], k)
+			shamir.VShareSecret(&setsOfShares[i], &commitments[i], indices, h, secrets[i], k)
 		}
 
 		ids := make([]ID, n)

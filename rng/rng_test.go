@@ -133,8 +133,6 @@ var _ = Describe("RNG", func() {
 			referenceRNShares := machines[i].(*rngutil.RngMachine).RandomNumbersShares()
 			referenceCommitments := machines[i].(*rngutil.RngMachine).Commitments()
 
-			vssChecker := shamir.NewVSSChecker(h)
-
 			for j := i + 1; j < len(machines); j++ {
 				// Ignore if that machine is offline
 				if isOffline[machines[j].ID()] {
@@ -153,13 +151,12 @@ var _ = Describe("RNG", func() {
 				// Verify that each machine's share is valid with respect to
 				// the reference commitments
 				for l, vshare := range rnShares {
-					Expect(vssChecker.IsValid(&rnCommitments[l], &vshare)).To(BeTrue())
+					Expect(shamir.IsValid(h, &rnCommitments[l], &vshare)).To(BeTrue())
 				}
 			}
 
 			// For every batch in batch size, the shares that every player has
 			// should be consistent
-			reconstructor := shamir.NewReconstructor(indices)
 			for i := 0; i < b; i++ {
 				shares := make(shamir.Shares, 0, len(machines))
 
@@ -169,11 +166,11 @@ var _ = Describe("RNG", func() {
 					}
 
 					vshare := machines[j].(*rngutil.RngMachine).RandomNumbersShares()[i]
-					shares = append(shares, vshare.Share())
+					shares = append(shares, vshare.Share)
 				}
 
-				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k-1)).ToNot(BeTrue())
-				Expect(shamirutil.SharesAreConsistent(shares, &reconstructor, k)).To(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, k-1)).ToNot(BeTrue())
+				Expect(shamirutil.SharesAreConsistent(shares, k)).To(BeTrue())
 			}
 		}
 

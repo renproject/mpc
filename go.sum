@@ -123,6 +123,8 @@ github.com/renproject/secp256k1 v0.0.0-20200702062750-43cb0b3fed27 h1:sOfJHVu301
 github.com/renproject/secp256k1 v0.0.0-20200702062750-43cb0b3fed27/go.mod h1:KPbbvwaU8dmK2eqr+xccakbFA11EfOQU9gB8jPT0zDs=
 github.com/renproject/shamir v0.0.0-20200714060738-6f2f6544a8a2 h1:R+6Vrc7J6tLXuIjRFq6xqdtR/pOLQILIQdlblhJ8L+4=
 github.com/renproject/shamir v0.0.0-20200714060738-6f2f6544a8a2/go.mod h1:XhsCmIdNZpa7+Ph+/xQ3x0lz8nOZxatEubAkH1KkPOk=
+github.com/renproject/shamir v0.0.0-20200723234417-b5514e4134f6 h1:fMw+0NlRqeIHwIRCyeADN0lMff3EMIGCYHUjpc9/nEE=
+github.com/renproject/shamir v0.0.0-20200723234417-b5514e4134f6/go.mod h1:XhsCmIdNZpa7+Ph+/xQ3x0lz8nOZxatEubAkH1KkPOk=
 github.com/renproject/surge v1.2.3 h1:M2NQ/NhoJgppE8WlxMqMDUJBVOgjzAOUt5tiSiw47XA=
 github.com/renproject/surge v1.2.3/go.mod h1:jNVsKCM3/2PAllkc2cx7g2saG9NrHRX5x20I/TDMXOs=
 github.com/renproject/surge v1.2.5 h1:P2qKZxWiKrC8hw7in/hXVtic+dGkhd1M0H/1Lj+fJnw=
