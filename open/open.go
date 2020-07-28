@@ -52,8 +52,16 @@ func (opener Opener) I() int {
 	return len(opener.shareBufs[0])
 }
 
-// New returns a new instance of the Opener state machine for the given set of
-// indices and the given Pedersen commitment system parameter.
+// New returns a new instance of the Opener state machine for the given
+// Pedersen commitments for the verifiable sharing(s), indices, and Pedersen
+// commitment system parameter. The length of the commitment slice determines
+// the batch size.
+//
+// Panics: This function will panic if and of the following conditions are met.
+//	- The batch size is less than 1.
+//	- The reconstruction threshold (k) is less than 1.
+//	- Not all commitments in the batch of commitments have the same
+//		reconstruction threshold (k).
 func New(commitmentBatch []shamir.Commitment, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	// The batch size must be at least 1.
 	b := uint32(len(commitmentBatch))
