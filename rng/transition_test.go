@@ -256,12 +256,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					_, _, openingsByPlayer = TransitionToWaitingOpen(&rnger, isZero)
 				})
 
-				Specify("Reset -> Init", func() {
-					event := rnger.Reset()
-
-					Expect(event).To(Equal(rng.Reset))
-				})
-
 				/*
 					Specify("BRNG shares and commitments -> do nothing", func() {
 						setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)

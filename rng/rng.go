@@ -391,21 +391,6 @@ func (rnger RNGer) ReconstructedShares() shamir.VerifiableShares {
 	return vshares
 }
 
-// Reset transitions the RNG state machine back to the Init state. Note that
-// the Opener state machine is not reset at this point in time. It is reset
-// when the RNG receives its BRNG outputs again.
-func (rnger *RNGer) Reset() TransitionEvent {
-	for i := 0; i < int(rnger.batchSize); i++ {
-		rnger.commitments = rnger.commitments[:0]
-	}
-
-	for _, index := range rnger.indices {
-		rnger.openingsMap[index] = rnger.openingsMap[index][:0]
-	}
-
-	return Reset
-}
-
 // SizeHint implements the surge.SizeHinter interface.
 func (rnger RNGer) SizeHint() int {
 	return rnger.index.SizeHint() +
