@@ -83,7 +83,7 @@ var _ = Describe("Opener", func() {
 			var secrets, decommitments []secp256k1.Fn
 			for j := 0; j < i; j++ {
 				shares := openutil.GetSharesAt(setsOfShares, j)
-				_, secrets, decommitments = opener.HandleShareBatch(shares)
+				secrets, decommitments, _ = opener.HandleShareBatch(shares)
 			}
 			return secrets, decommitments
 		}
@@ -225,8 +225,8 @@ var _ = Describe("Opener", func() {
 					shares := openutil.GetSharesAt(setsOfShares, i)
 					for j := 0; j < len(shares); j++ {
 						shares = append(shares[:j], shares[j+1:]...)
-						event, _, _ := opener.HandleShareBatch(shares)
-						Expect(event).To(Equal(open.Ignored))
+						_, _, err := opener.HandleShareBatch(shares)
+						Expect(err).To(Equal(open.ErrIncorrectBatchSize))
 					}
 				})
 
@@ -235,24 +235,24 @@ var _ = Describe("Opener", func() {
 					ProgressToWaitingI(i)
 
 					shares := openutil.GetSharesAt(setsOfShares, i)
-					event, _, _ := opener.HandleShareBatch(shares)
-					Expect(event).To(Equal(open.SharesAdded))
+					_, _, err := opener.HandleShareBatch(shares)
+					Expect(err).ToNot(HaveOccurred())
 				})
 
 				Specify("Done -> ShareAdded", func() {
 					ProgressToDone()
 					for i := k; i < n; i++ {
 						shares := openutil.GetSharesAt(setsOfShares, i)
-						event, _, _ := opener.HandleShareBatch(shares)
-						Expect(event).To(Equal(open.SharesAdded))
+						_, _, err := opener.HandleShareBatch(shares)
+						Expect(err).ToNot(HaveOccurred())
 					}
 				})
 
 				Specify("Waiting, i = k-1 -> Done", func() {
 					ProgressToWaitingI(k - 1)
 					shares := openutil.GetSharesAt(setsOfShares, k-1)
-					event, _, _ := opener.HandleShareBatch(shares)
-					Expect(event).To(Equal(open.Done))
+					_, _, err := opener.HandleShareBatch(shares)
+					Expect(err).ToNot(HaveOccurred())
 				})
 
 				Context("Invalid shares", func() {
@@ -262,18 +262,18 @@ var _ = Describe("Opener", func() {
 						// Index
 						sharesAt0 := openutil.GetSharesAt(setsOfShares, 0)
 						shamirutil.PerturbIndex(&sharesAt0[0])
-						event, _, _ := opener.HandleShareBatch(sharesAt0)
-						Expect(event).To(Equal(open.InvalidShares))
+						_, _, err := opener.HandleShareBatch(sharesAt0)
+						Expect(err).To(Equal(open.ErrInvalidShares))
 
 						// Value
 						shamirutil.PerturbValue(&sharesAt0[0])
-						event, _, _ = opener.HandleShareBatch(sharesAt0)
-						Expect(event).To(Equal(open.InvalidShares))
+						_, _, err = opener.HandleShareBatch(sharesAt0)
+						Expect(err).To(Equal(open.ErrInvalidShares))
 
 						// Decommitment
 						shamirutil.PerturbDecommitment(&sharesAt0[0])
-						event, _, _ = opener.HandleShareBatch(sharesAt0)
-						Expect(event).To(Equal(open.InvalidShares))
+						_, _, err = opener.HandleShareBatch(sharesAt0)
+						Expect(err).To(Equal(open.ErrInvalidShares))
 
 						for i := 0; i < n; i++ {
 							shares := openutil.GetSharesAt(setsOfShares, i)
@@ -282,18 +282,18 @@ var _ = Describe("Opener", func() {
 							// Index
 							j := rand.Intn(b)
 							shamirutil.PerturbIndex(&shares[j])
-							event, _, _ := opener.HandleShareBatch(shares)
-							Expect(event).To(Equal(open.InvalidShares))
+							_, _, err := opener.HandleShareBatch(shares)
+							Expect(err).To(Equal(open.ErrInvalidShares))
 
 							// Value
 							shamirutil.PerturbValue(&shares[j])
-							event, _, _ = opener.HandleShareBatch(shares)
-							Expect(event).To(Equal(open.InvalidShares))
+							_, _, err = opener.HandleShareBatch(shares)
+							Expect(err).To(Equal(open.ErrInvalidShares))
 
 							// Decommitment
 							shamirutil.PerturbDecommitment(&shares[j])
-							event, _, _ = opener.HandleShareBatch(shares)
-							Expect(event).To(Equal(open.InvalidShares))
+							_, _, err = opener.HandleShareBatch(shares)
+							Expect(err).To(Equal(open.ErrInvalidShares))
 						}
 					})
 
@@ -305,8 +305,8 @@ var _ = Describe("Opener", func() {
 
 							for j := 0; j <= i; j++ {
 								duplicateShares := openutil.GetSharesAt(setsOfShares, j)
-								event, _, _ := opener.HandleShareBatch(duplicateShares)
-								Expect(event).To(Equal(open.IndexDuplicate))
+								_, _, err := opener.HandleShareBatch(duplicateShares)
+								Expect(err).To(Equal(open.ErrDuplicateIndex))
 							}
 						}
 					})
@@ -324,8 +324,8 @@ var _ = Describe("Opener", func() {
 						// Perform the test
 						ProgressToWaitingI(n)
 						sharesAtN := openutil.GetSharesAt(setsOfShares, n)
-						event, _, _ := opener.HandleShareBatch(sharesAtN)
-						Expect(event).To(Equal(open.IndexOutOfRange))
+						_, _, err := opener.HandleShareBatch(sharesAtN)
+						Expect(err).To(Equal(open.ErrIndexOutOfRange))
 					})
 				})
 			})
@@ -438,8 +438,6 @@ type openMachine struct {
 	commitments            []shamir.Commitment
 	opener                 open.Opener
 	secrets, decommitments []secp256k1.Fn
-
-	lastE open.ShareEvent
 }
 
 func (om openMachine) SizeHint() int {
@@ -503,9 +501,8 @@ func newMachine(
 	commitments []shamir.Commitment,
 	opener open.Opener,
 ) openMachine {
-	_, secrets, decommitments := opener.HandleShareBatch(shares)
-	lastE := open.ShareEvent(0)
-	return openMachine{id, n, shares, commitments, opener, secrets, decommitments, lastE}
+	secrets, decommitments, _ := opener.HandleShareBatch(shares)
+	return openMachine{id, n, shares, commitments, opener, secrets, decommitments}
 }
 
 func (om openMachine) Secrets() []secp256k1.Fn {
@@ -538,7 +535,7 @@ func (om openMachine) InitialMessages() []Message {
 func (om *openMachine) Handle(msg Message) []Message {
 	switch msg := msg.(type) {
 	case *shareMsg:
-		om.lastE, om.secrets, om.decommitments = om.opener.HandleShareBatch(msg.shares)
+		om.secrets, om.decommitments, _ = om.opener.HandleShareBatch(msg.shares)
 		return nil
 
 	default:
