@@ -19,5 +19,7 @@ var (
 	// instance. This can be output in both the Waiting and Done states.
 	ErrInvalidShares = errors.New("invalid shares")
 
+	// ErrIncorrectBatchSize signifies that the batch size of the received
+	// shares is different to that specified by the opener instance.
 	ErrIncorrectBatchSize = errors.New("incorrect batch size")
 )
