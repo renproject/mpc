@@ -14,17 +14,21 @@ import (
 // Opener is a state machine that is responsible for opening the secret value
 // for a verifiable sharing. An instance of this state machine has a specific
 // commitment used for share verification, a specific value of the Pedersen
-// parameter (h), and a specific set of indices for the participating players.
+// parameter (known as "h"), and a specific set of indices for the participating
+// players.
 //
 // The description of the state machine is simple: the state is a buffer of
-// shares that have been validated, and each time a share is received, it is
-// checked against the commitment and other parameters, and if it is valid it
-// is added to the buffer. Once enough shares have been added to the buffer for
-// reconstruction, the reconstructed secret is returned.
+// shares that have been validated. When a share is received, it is checked
+// against the commitment and other parameters, and if it is valid it is added
+// to the buffer. Once enough shares have been added to the buffer, the secret
+// is opened (the required number of shares is known as "k").
 //
-// The state machine is set up to enable batching. If several secrets need to
-// be opened at once, instead of having multiple state machines, just the one
-// is used and the incoming shares are processed in batches.
+// The state machine supports batching. If several secrets need to be opened at
+// once, instead of having multiple state machines, just one can be used and the
+// incoming shares are processed in batches. This requires all of the secrets to
+// share the number of shares required to open the secrets, (b) the number of
+// participating players, the expected indices of the participating players, and
+// the Pedersen parameter (known as "h").
 type Opener struct {
 	// State
 	shareBufs []shamir.VerifiableShares
@@ -37,17 +41,21 @@ type Opener struct {
 	h       secp256k1.Point
 }
 
-// K returns the reconstruction threshold for the current sharing instance.
+// K returns the number of shares required to open secrets. It assumes that all
+// batches require the same number of shares (this assumption is enforced by all
+// other methods).
 func (opener Opener) K() int {
 	return opener.commitmentBatch[0].Len()
 }
 
-// BatchSize of the current opener instance.
+// BatchSize of the opener.
 func (opener Opener) BatchSize() int {
 	return len(opener.commitmentBatch)
 }
 
-// I returns the current number of valid shares that the opener has received.
+// I returns the current number of valid shares that the opener has received. It
+// assumes that all batches contain the same number of shares (this assumption
+// is enforced by all other methods).
 func (opener Opener) I() int {
 	return len(opener.shareBufs[0])
 }
