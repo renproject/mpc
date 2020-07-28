@@ -115,19 +115,19 @@ func New(commitmentBatch []shamir.Commitment, indices []secp256k1.Fn, h secp256k
 // is nil. Similarly, the decommitment (or hiding) value for the verifiable
 // sharing will also be returned.
 func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
-	ShareEvent,
 	[]secp256k1.Fn,
 	[]secp256k1.Fn,
+	error,
 ) {
 	// The number of shares should equal the batch size.
 	if len(shareBatch) != int(opener.BatchSize()) {
-		return Ignored, nil, nil
+		return nil, nil, ErrIncorrectBatchSize
 	}
 
 	// All shares should have the same index.
 	for i := 1; i < len(shareBatch); i++ {
 		if !shareBatch[i].Share.IndexEq(&shareBatch[0].Share.Index) {
-			return InvalidShares, nil, nil
+			return nil, nil, ErrInvalidShares
 		}
 	}
 	index := shareBatch[0].Share.Index
@@ -141,14 +141,14 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 			}
 		}
 		if !exists {
-			return IndexOutOfRange, nil, nil
+			return nil, nil, ErrIndexOutOfRange
 		}
 	}
 
 	// There should be no duplicate indices.
 	for _, s := range opener.shareBufs[0] {
 		if s.Share.IndexEq(&index) {
-			return IndexDuplicate, nil, nil
+			return nil, nil, ErrDuplicateIndex
 		}
 	}
 
@@ -156,7 +156,7 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 	// the entire set of shares to be invalid.
 	for i, share := range shareBatch {
 		if !shamir.IsValid(opener.h, &opener.commitmentBatch[i], &share) {
-			return InvalidShares, nil, nil
+			return nil, nil, ErrInvalidShares
 		}
 	}
 
@@ -185,12 +185,12 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 			decommitments[i] = shamir.Open(shareBuf)
 		}
 
-		return Done, secrets, decommitments
+		return secrets, decommitments, nil
 	}
 
 	// At this stage we have added the shares to the respective buffers
 	// but we were not yet able to reconstruct the secrets.
-	return SharesAdded, nil, nil
+	return nil, nil, nil
 }
 
 // Generate implements the quick.Generator interface.
