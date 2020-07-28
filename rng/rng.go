@@ -2,12 +2,9 @@ package rng
 
 import (
 	"fmt"
-	"math/rand"
-	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/open"
@@ -234,6 +231,7 @@ func (rnger RNGer) Commitments() []shamir.Commitment {
 }
 
 // Generate implements the quick.Generator interface.
+/*
 func (rnger RNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
 	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
 	ownIndex := indices[rand.Intn(len(indices))]
@@ -243,6 +241,7 @@ func (rnger RNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
 	_, v := New(ownIndex, indices, b, k, h)
 	return reflect.ValueOf(v)
 }
+*/
 
 // New creates a new RNG state machine for a given batch size.
 // - Inputs
@@ -260,6 +259,9 @@ func New(
 	indices []secp256k1.Fn,
 	b, k uint32,
 	h secp256k1.Point,
+	setsOfShares []shamir.VerifiableShares,
+	setsOfCommitments [][]shamir.Commitment,
+	isZero bool,
 ) (TransitionEvent, RNGer) {
 	state := Init
 
@@ -276,9 +278,11 @@ func New(
 
 	// Create an instance of the Opener state machine within the RNG state
 	// machine.
-	opener := open.New(b, indices, h)
+	// FIXME: Compute the commitments here.
+	commitmentBatch := []shamir.Commitment{shamir.Commitment{secp256k1.Point{}}}
+	opener := open.New(commitmentBatch, indices, h)
 
-	return Initialised, RNGer{
+	rnger := RNGer{
 		state:         state,
 		index:         ownIndex,
 		indices:       indices,
@@ -290,6 +294,10 @@ func New(
 		secrets:       []secp256k1.Fn{},
 		decommitments: []secp256k1.Fn{},
 	}
+
+	event := rnger.transitionShares(setsOfShares, setsOfCommitments, isZero, h)
+
+	return event, rnger
 }
 
 // TransitionShares performs the state transition for the RNG state machine
@@ -326,10 +334,11 @@ func New(
 //		 - SharesConstructed when the sets of shares were valid
 //		 - RNGsReconstructed when the RNGer was able to reconstruct the random
 //		 	shares (k = 1)
-func (rnger *RNGer) TransitionShares(
+func (rnger *RNGer) transitionShares(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
 	isZero bool,
+	h secp256k1.Point,
 ) TransitionEvent {
 	// Simply ignore if the RNG state machine is not in the `Init` state.
 	if rnger.state != Init {
@@ -422,7 +431,8 @@ func (rnger *RNGer) TransitionShares(
 	}
 
 	// Reset the Opener machine with the computed commitments.
-	rnger.opener.NewInstance(locallyComputedCommitments)
+	// FIXME: This should happen in the constructor.
+	rnger.opener = open.New(locallyComputedCommitments, rnger.indices, h)
 
 	// Transition the machine's state.
 	rnger.state = WaitingOpen

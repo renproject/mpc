@@ -70,7 +70,7 @@ var _ = Describe("Opener", func() {
 				shamir.VShareSecret(&setsOfShares[i], &commitments[i], indices, h, secrets[i], k)
 			}
 
-			opener = open.New(uint32(b), indices, h)
+			opener = open.New(commitments, indices, h)
 
 			return indices, opener, secrets, setsOfShares, commitments
 		}
@@ -79,13 +79,8 @@ var _ = Describe("Opener", func() {
 			indices, opener, secrets, setsOfShares, commitments = Setup()
 		})
 
-		InStateWaitingCK0 := func(k int) bool {
-			return opener.K() == k && opener.I() == 0
-		}
-
 		ProgressToWaitingI := func(i int) ([]secp256k1.Fn, []secp256k1.Fn) {
 			var secrets, decommitments []secp256k1.Fn
-			_ = opener.NewInstance(commitments)
 			for j := 0; j < i; j++ {
 				shares := openutil.GetSharesAt(setsOfShares, j)
 				_, secrets, decommitments = opener.HandleShareBatch(shares)
@@ -100,32 +95,7 @@ var _ = Describe("Opener", func() {
 		//
 
 		Context("State transitions (1)", func() {
-			Context("Uninitalised State", func() {
-				It("should be in the Uninitalised state after construction", func() {
-					Expect(opener.K() < 1).To(BeTrue())
-				})
-
-				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
-					_ = opener.NewInstance(commitments)
-					Expect(InStateWaitingCK0(k)).To(BeTrue())
-				})
-
-				Specify("Share -> Do nothing", func() {
-					shares := openutil.GetSharesAt(setsOfShares, rand.Intn(b))
-					_, _, _ = opener.HandleShareBatch(shares)
-					Expect(opener.K() < 1).To(BeTrue())
-				})
-			})
-
 			Context("Waiting State", func() {
-				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
-					for i := 0; i < k; i++ {
-						ProgressToWaitingI(i)
-						_ = opener.NewInstance(commitments)
-						Expect(InStateWaitingCK0(k)).To(BeTrue())
-					}
-				})
-
 				Specify("(i < k-1) Share, Valid(c) -> Waiting(c, k, i+1)", func() {
 					i := rand.Intn(k - 1)
 					ProgressToWaitingI(i)
@@ -179,14 +149,6 @@ var _ = Describe("Opener", func() {
 			})
 
 			Context("Done State", func() {
-				Specify("Reset(c, k) -> Waiting(c, k, 0)", func() {
-					for i := 0; i < k; i++ {
-						ProgressToWaitingI(i)
-						_ = opener.NewInstance(commitments)
-						Expect(InStateWaitingCK0(k)).To(BeTrue())
-					}
-				})
-
 				Specify("Share, Valid(c) -> Do Nothing", func() {
 					ProgressToDone()
 					shares := openutil.GetSharesAt(setsOfShares, k)
@@ -254,65 +216,7 @@ var _ = Describe("Opener", func() {
 		//
 
 		Context("Events (3)", func() {
-			Context("Reset events", func() {
-				Specify("Not yet done in a sharing instance -> Aborted", func() {
-					ProgressToWaitingI(rand.Intn(k - 1))
-					event := opener.NewInstance(commitments)
-					Expect(event).To(Equal(open.Aborted))
-				})
-
-				Specify("Length of commitments not equal to the batch size", func() {
-					ProgressToWaitingI(rand.Intn(k - 1))
-
-					for j := 0; j < len(commitments); j++ {
-						commitments = append(commitments[:j], commitments[j+1:]...)
-						Expect(func() { opener.NewInstance(commitments) }).To(Panic())
-					}
-				})
-
-				Specify("If not all commitments are for the same threshold", func() {
-					ProgressToWaitingI(rand.Intn(k - 1))
-
-					for j := 0; j < len(commitments); j++ {
-						// commitment threshold is changed to < k
-						commitments[j] = shamir.NewCommitmentWithCapacity(1 + rand.Intn(k-1))
-						Expect(func() { opener.NewInstance(commitments) }).To(Panic())
-					}
-				})
-
-				Specify("If the commitment is for a threshold of 0", func() {
-					ProgressToWaitingI(rand.Intn(k - 1))
-
-					for j := 0; j < len(commitments); j++ {
-						commitments[j] = shamir.NewCommitmentWithCapacity(0)
-					}
-
-					Expect(func() { opener.NewInstance(commitments) }).To(Panic())
-				})
-
-				Specify("Otherwise -> Reset", func() {
-					// Uninitialised
-					event := opener.NewInstance(commitments)
-					Expect(event).To(Equal(open.Reset))
-
-					// Done
-					ProgressToDone()
-					for i := 0; i < rand.Intn(n-k); i++ {
-						shares := openutil.GetSharesAt(setsOfShares, i+k)
-						_, _, _ = opener.HandleShareBatch(shares)
-					}
-					event = opener.NewInstance(commitments)
-					Expect(event).To(Equal(open.Reset))
-				})
-			})
-
 			Context("Share events", func() {
-				Specify("Uninitialised -> Ignored", func() {
-					sharesAt0 := openutil.GetSharesAt(setsOfShares, 0)
-					event, _, _ := opener.HandleShareBatch(sharesAt0)
-					Expect(event).To(Equal(open.Ignored))
-				})
-
 				Specify("Waiting -> Ignored", func() {
 					i := rand.Intn(k - 1)
 					ProgressToWaitingI(i)
@@ -453,7 +357,7 @@ var _ = Describe("Opener", func() {
 		for i := range indices {
 			id := ID(i)
 			sharesAtI := openutil.GetSharesAt(setsOfShares, i)
-			machine := newMachine(id, n, sharesAtI, commitments, open.New(uint32(b), indices, h))
+			machine := newMachine(id, n, sharesAtI, commitments, open.New(commitments, indices, h))
 			machines[i] = &machine
 			ids[i] = id
 		}
@@ -599,7 +503,6 @@ func newMachine(
 	commitments []shamir.Commitment,
 	opener open.Opener,
 ) openMachine {
-	opener.NewInstance(commitments)
 	_, secrets, decommitments := opener.HandleShareBatch(shares)
 	lastE := open.ShareEvent(0)
 	return openMachine{id, n, shares, commitments, opener, secrets, decommitments, lastE}
