@@ -134,24 +134,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 			*/
 
 			Context("Init state transitions", func() {
-				/*
-					Specify("Reset -> Init", func() {
-						_, rnger := rng.New(index, indices, uint32(b), uint32(k), h, nil, nil, false)
-						event := rnger.Reset()
-
-						Expect(event).To(Equal(rng.Reset))
-						Expect(rnger.State()).To(Equal(rng.Init))
-						Expect(rnger.N()).To(Equal(n))
-						Expect(rnger.BatchSize()).To(Equal(uint32(b)))
-						Expect(rnger.Threshold()).To(Equal(uint32(k)))
-						Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
-
-						for _, index := range indices {
-							Expect(rnger.DirectedOpenings(index)).To(BeNil())
-						}
-					})
-				*/
-
 				Specify("valid BRNG shares and commitments -> WaitingOpen", func() {
 					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
 					event, rnger := rng.New(index, indices, uint32(b), uint32(k), h, setsOfShares, setsOfCommitments, isZero)
@@ -235,17 +217,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 						_, _ = rng.New(index, indices, uint32(b), uint32(k), h, []shamir.VerifiableShares{}, wrongK, isZero)
 					}).To(Panic())
 				})
-
-				/*
-					Specify("directed opening -> do nothing", func() {
-						_, rnger := rng.New(index, indices, uint32(b), uint32(k), h)
-						event := rnger.TransitionOpen(shamir.VerifiableShares{})
-
-						Expect(event).To(Equal(rng.OpeningsIgnored))
-						Expect(rnger.State()).To(Equal(rng.Init))
-						Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
-					})
-				*/
 			})
 
 			Context("WaitingOpen state transitions", func() {
@@ -255,16 +226,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 				JustBeforeEach(func() {
 					_, _, openingsByPlayer = TransitionToWaitingOpen(&rnger, isZero)
 				})
-
-				/*
-					Specify("BRNG shares and commitments -> do nothing", func() {
-						setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
-						event := rnger.TransitionShares(setsOfShares, setsOfCommitments, isZero)
-
-						Expect(event).To(Equal(rng.SharesIgnored))
-						Expect(rnger.State()).To(Equal(rng.WaitingOpen))
-					})
-				*/
 
 				Specify("invalid directed opening -> do nothing", func() {
 					from := otherIndices[rand.Intn(len(otherIndices))]
