@@ -74,7 +74,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 	) {
 		ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
 			rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
-		_, *rnger, _, _ = rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
+		*rnger, _, _ = rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 		return ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer
 	}
@@ -89,11 +89,11 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
 			rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
 		var commitments []shamir.Commitment
-		_, *rnger, _, commitments = rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
+		*rnger, _, commitments = rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 		var shares shamir.VerifiableShares
 		for _, from := range otherIndices[:k-1] {
-			_, shares = rnger.TransitionOpen(openingsByPlayer[from])
+			shares, _ = rnger.TransitionOpen(openingsByPlayer[from])
 		}
 
 		return ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, shares, commitments
@@ -140,9 +140,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 			Context("Init state transitions", func() {
 				Specify("valid BRNG shares and commitments -> WaitingOpen", func() {
 					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
-					event, _, directedOpenings, _ := rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
-
-					Expect(event).To(Equal(rng.SharesConstructed))
+					_, directedOpenings, _ := rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
 
 					// With valid shares, the shares for the directed opens
 					// should be computed.
@@ -156,9 +154,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 				Specify("empty sets of shares and valid commitments -> WaitingOpen", func() {
 					_, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
-					event, _, directedOpenings, _ := rng.New(index, indices, h, []shamir.VerifiableShares{}, setsOfCommitments, isZero)
-
-					Expect(event).To(Equal(rng.CommitmentsConstructed))
+					_, directedOpenings, _ := rng.New(index, indices, h, []shamir.VerifiableShares{}, setsOfCommitments, isZero)
 
 					// With empty shares, the shares for the directed opens
 					// should not be computed.
@@ -172,9 +168,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 				Specify("shares with incorrect batch size -> WaitingOpen", func() {
 					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
-					event, _, directedOpenings, _ := rng.New(index, indices, h, setsOfShares[1:], setsOfCommitments, isZero)
-
-					Expect(event).To(Equal(rng.CommitmentsConstructed))
+					_, directedOpenings, _ := rng.New(index, indices, h, setsOfShares[1:], setsOfCommitments, isZero)
 
 					// With invalid shares, the shares for the directed opens
 					// should not be computed.
@@ -192,7 +186,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					// Make the number of shares be incorrect.
 					setsOfShares[0] = setsOfShares[0][1:]
 					Expect(func() {
-						_, _, _, _ = rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
+						_, _, _ = rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
 					}).To(Panic())
 				})
 
@@ -204,10 +198,10 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					wrongK := setsOfCommitments
 					wrongK[0] = append(wrongK[0][:j], wrongK[0][j+1:]...)
 					Expect(func() {
-						_, _, _, _ = rng.New(index, indices, h, setsOfShares, wrongK, isZero)
+						_, _, _ = rng.New(index, indices, h, setsOfShares, wrongK, isZero)
 					}).To(Panic())
 					Expect(func() {
-						_, _, _, _ = rng.New(index, indices, h, []shamir.VerifiableShares{}, wrongK, isZero)
+						_, _, _ = rng.New(index, indices, h, []shamir.VerifiableShares{}, wrongK, isZero)
 					}).To(Panic())
 				})
 			})
@@ -224,23 +218,22 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					from := otherIndices[rand.Intn(len(otherIndices))]
 
 					// Openings length not equal to batch size
-					event, _ := rnger.TransitionOpen(openingsByPlayer[from][1:])
+					_, err := rnger.TransitionOpen(openingsByPlayer[from][1:])
 
-					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(err).To(HaveOccurred())
 
 					// Sender index is randomly chosen, so does not exist in
 					// the initial player indices
 					shamirutil.PerturbIndex(&openingsByPlayer[from][rand.Intn(b)])
-					event, _ = rnger.TransitionOpen(openingsByPlayer[from])
+					_, err = rnger.TransitionOpen(openingsByPlayer[from])
 
-					Expect(event).To(Equal(rng.OpeningsIgnored))
+					Expect(err).To(HaveOccurred())
 				})
 
 				Specify("directed opening (not yet k) -> WaitingOpen", func() {
 					from := otherIndices[rand.Intn(len(otherIndices))]
-					event, _ := rnger.TransitionOpen(openingsByPlayer[from])
-
-					Expect(event).To(Equal(rng.OpeningsAdded))
+					_, err := rnger.TransitionOpen(openingsByPlayer[from])
+					Expect(err).ToNot(HaveOccurred())
 				})
 
 				Specify("kth directed open -> Done", func() {
@@ -249,15 +242,13 @@ var _ = Describe("RNG/RZG state transitions", func() {
 						// processed.
 						count := i + 1
 
-						event, shares := rnger.TransitionOpen(openingsByPlayer[from])
+						shares, err := rnger.TransitionOpen(openingsByPlayer[from])
+						Expect(err).ToNot(HaveOccurred())
 
 						if count == k-1 {
-							Expect(event).To(Equal(rng.RNGsReconstructed))
 							Expect(len(shares)).To(Equal(b))
 							break
 						}
-
-						Expect(event).To(Equal(rng.OpeningsAdded))
 					}
 				})
 			})
@@ -267,7 +258,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 			It("should correctly compute the shares and commitments", func() {
 				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
 					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
-				_, _, directedOpenings, _ := rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
+				_, directedOpenings, _ := rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 				selfOpenings := directedOpenings[index]
 				for i, share := range selfOpenings {

@@ -37,7 +37,7 @@ func NewRngMachine(
 	ownSetsOfShares []shamir.VerifiableShares,
 	ownSetsOfCommitments [][]shamir.Commitment,
 ) RngMachine {
-	_, rnger, directedOpenings, commitments := rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
+	rnger, directedOpenings, commitments := rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 	return RngMachine{
 		id:      id,
@@ -101,7 +101,7 @@ func (machine RngMachine) InitialMessages() []mpcutil.Message {
 func (machine *RngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	switch msg := msg.(type) {
 	case *RngMessage:
-		_, shares := machine.rnger.TransitionOpen(msg.openings)
+		shares, _ := machine.rnger.TransitionOpen(msg.openings)
 		if shares != nil {
 			machine.outputShares = shares
 		}

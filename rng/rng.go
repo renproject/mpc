@@ -30,7 +30,7 @@ func New(
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
 	isZero bool,
-) (TransitionEvent, RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
+) (RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
 	b := uint32(len(setsOfCommitments))
 	if b < 1 {
 		panic(fmt.Sprintf("b must be greater than 0, got: %v", b))
@@ -54,7 +54,6 @@ func New(
 	//
 	// Commitments validity
 	//
-
 
 	for _, coms := range setsOfCommitments {
 		if len(coms) != requiredBrngBatchSize {
@@ -86,9 +85,7 @@ func New(
 		}
 	}
 
-	// Declare variable to hold commitments to initialize the opener.
 	locallyComputedCommitments := make([]shamir.Commitment, b)
-
 	commitments := make([]shamir.Commitment, b)
 	for i, setOfCommitments := range setsOfCommitments {
 		// Compute the output commitment.
@@ -113,8 +110,9 @@ func New(
 
 	// If the sets of shares are valid, construct the directed openings to
 	// other players in the network.
-	openingsMap := make(map[secp256k1.Fn]shamir.VerifiableShares, b)
+	var openingsMap map[secp256k1.Fn]shamir.VerifiableShares = nil
 	if !ignoreShares {
+		openingsMap = make(map[secp256k1.Fn]shamir.VerifiableShares, b)
 		for _, j := range indices {
 			for _, setOfShares := range setsOfShares {
 				accShare := compute.ShareOfShare(j, setOfShares)
@@ -126,13 +124,8 @@ func New(
 		}
 	}
 
-	// Reset the Opener machine with the computed commitments.
 	opener := open.New(locallyComputedCommitments, indices, h)
-
-	var event TransitionEvent
-	if ignoreShares {
-		event = CommitmentsConstructed
-	} else {
+	if !ignoreShares {
 		// Handle own share.
 		secrets, decommitments, _ := opener.HandleShareBatch(openingsMap[ownIndex])
 
@@ -143,9 +136,6 @@ func New(
 				share := shamir.NewShare(ownIndex, secret)
 				shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
 			}
-			event = RNGsReconstructed
-		} else {
-			event = SharesConstructed
 		}
 	}
 
@@ -154,18 +144,18 @@ func New(
 		opener: opener,
 	}
 
-	return event, rnger, openingsMap, commitments
+	return rnger, openingsMap, commitments
 }
 
 func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) (
-	TransitionEvent, shamir.VerifiableShares,
+	shamir.VerifiableShares, error,
 ) {
 	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs.
 	secrets, decommitments, err := rnger.opener.HandleShareBatch(openings)
 
 	if err != nil {
-		return OpeningsIgnored, nil
+		return nil, err
 	}
 
 	if secrets != nil {
@@ -174,9 +164,9 @@ func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) (
 			share := shamir.NewShare(rnger.index, secret)
 			shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
 		}
-		return RNGsReconstructed, shares
+		return shares, nil
 	}
-	return OpeningsAdded, nil
+	return nil, nil
 }
 
 // SizeHint implements the surge.SizeHinter interface.

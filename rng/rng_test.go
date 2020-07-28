@@ -12,92 +12,11 @@ import (
 	"github.com/renproject/shamir/shamirutil"
 
 	"github.com/renproject/mpc/mpcutil"
-	"github.com/renproject/mpc/rng"
 	"github.com/renproject/mpc/rng/rngutil"
 )
 
 var _ = Describe("RNG", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
-
-	Describe("RNG Properties", func() {
-		var b, k int
-		var indices []secp256k1.Fn
-		var index secp256k1.Fn
-		var h secp256k1.Point
-		var isZero bool
-
-		// Setup is run before every test. It randomises the test parameters
-		Setup := func() (
-			[]secp256k1.Fn,
-			secp256k1.Fn,
-			int,
-			int,
-			secp256k1.Point,
-			bool,
-		) {
-			// n is the number of players participating in the RNG protocol
-			// n ∈ [5, 10]
-			n := 5 + rand.Intn(6)
-
-			// indices represent the list of index for each player
-			// They are Secp256k1N representations of sequential n values
-			indices := shamirutil.RandomIndices(n)
-
-			// index denotes the current player's index
-			// This is a randomly chosen index from indices
-			index := indices[rand.Intn(len(indices))]
-
-			// b is the total number of random numbers to be generated in one
-			// execution of RNG protocol, i.e. the batch number
-			b := 3 + rand.Intn(3)
-
-			// k is the threshold for random number generation, or the minimum
-			// number of shares required to reconstruct the secret in the
-			// secret sharing scheme. Based on our BRNG to RNG scheme, k is
-			// also the number of times BRNG needs to be run before using their
-			// outputs to generate an unbiased random number
-			k := 3 + rand.Intn(n-3)
-
-			// h is the elliptic curve point, used as the Pedersen Commitment
-			// Scheme Parameter
-			h := secp256k1.RandomPoint()
-
-			return indices, index, b, k, h, false
-		}
-
-		BeforeEach(func() {
-			indices, index, b, k, h, isZero = Setup()
-		})
-
-		Context("State Transitions and Events", func() {
-			Context("When in Init state", func() {
-				Specify("Supply valid BRNG shares/commitments when k = 1", func() {
-					k = 1
-					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k, h)
-					event, _, _, _ := rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
-
-					Expect(event).To(Equal(rng.RNGsReconstructed))
-				})
-
-				Specify("Special scenario when k = 1", func() {
-					// If an RNG machine in the Init state is supplied with
-					// valid sets of shares and commitments from its own BRNG
-					// outputs it transitions to the WaitingOpen state.  But if
-					// the reconstruction threshold is k = 1, then in that
-					// trivial case, a single machine can construct the entire
-					// secret just by itself.  This should not be the scenario
-					// ideally, but we will cover it nonetheless
-					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, 1, h)
-
-					// Once we have `b` sets of shares and commitments we are
-					// ready to transition the RNG machine
-					event, _, _, _ := rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
-
-					Expect(event).To(Equal(rng.RNGsReconstructed))
-				})
-			})
-		})
-	})
 
 	Describe("Network Simulation", func() {
 		var n, b, k, nOffline int
