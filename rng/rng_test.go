@@ -74,7 +74,7 @@ var _ = Describe("RNG", func() {
 				Specify("Supply valid BRNG shares/commitments when k = 1", func() {
 					k = 1
 					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, k, h)
-					event, _, _, _ := rng.New(index, indices, uint32(b), uint32(k), h, setsOfShares, setsOfCommitments, isZero)
+					event, _, _, _ := rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.RNGsReconstructed))
 				})
@@ -91,7 +91,7 @@ var _ = Describe("RNG", func() {
 
 					// Once we have `b` sets of shares and commitments we are
 					// ready to transition the RNG machine
-					event, _, _, _ := rng.New(index, indices, uint32(b), uint32(1), h, setsOfShares, setsOfCommitments, isZero)
+					event, _, _, _ := rng.New(index, indices, h, setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.RNGsReconstructed))
 				})

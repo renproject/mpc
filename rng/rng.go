@@ -38,12 +38,23 @@ type RNGer struct {
 func New(
 	ownIndex secp256k1.Fn,
 	indices []secp256k1.Fn,
-	b, k uint32,
 	h secp256k1.Point,
 	setsOfShares []shamir.VerifiableShares,
 	setsOfCommitments [][]shamir.Commitment,
 	isZero bool,
 ) (TransitionEvent, RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
+	b := uint32(len(setsOfCommitments))
+	if b < 1 {
+		panic(fmt.Sprintf("b must be greater than 0, got: %v", b))
+	}
+	k := uint32(len(setsOfCommitments[0]))
+	if isZero {
+		k++
+	}
+	if k < 1 {
+		panic(fmt.Sprintf("k must be greater than 0, got: %v", k))
+	}
+
 	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
 	var requiredBrngBatchSize int
 	if isZero {
