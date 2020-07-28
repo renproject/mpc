@@ -157,8 +157,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event, rnger := rng.New(index, indices, uint32(b), uint32(k), h, setsOfShares, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.SharesConstructed))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
-					Expect(rnger.HasConstructedShares()).To(BeTrue())
 
 					// With valid shares, the shares for the directed opens
 					// should be computed.
@@ -175,8 +173,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event, rnger := rng.New(index, indices, uint32(b), uint32(k), h, []shamir.VerifiableShares{}, setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.CommitmentsConstructed))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
-					Expect(rnger.HasConstructedShares()).To(BeTrue())
 
 					// With empty shares, the shares for the directed opens
 					// should not be computed.
@@ -193,8 +189,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event, rnger := rng.New(index, indices, uint32(b), uint32(k), h, setsOfShares[1:], setsOfCommitments, isZero)
 
 					Expect(event).To(Equal(rng.CommitmentsConstructed))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
-					Expect(rnger.HasConstructedShares()).To(BeTrue())
 
 					// With invalid shares, the shares for the directed opens
 					// should not be computed.
@@ -266,8 +260,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event := rnger.Reset()
 
 					Expect(event).To(Equal(rng.Reset))
-					Expect(rnger.State()).To(Equal(rng.Init))
-					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
 				})
 
 				/*
@@ -287,7 +279,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event := rnger.TransitionOpen(openingsByPlayer[from][1:])
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 
 					// Sender index is randomly chosen, so does not exist in
 					// the initial player indices
@@ -295,7 +286,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event = rnger.TransitionOpen(openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsIgnored))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
 
 				Specify("directed opening (not yet k) -> WaitingOpen", func() {
@@ -303,7 +293,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					event := rnger.TransitionOpen(openingsByPlayer[from])
 
 					Expect(event).To(Equal(rng.OpeningsAdded))
-					Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 				})
 
 				Specify("kth directed open -> Done", func() {
@@ -316,13 +305,11 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 						if count == k-1 {
 							Expect(event).To(Equal(rng.RNGsReconstructed))
-							Expect(rnger.State()).To(Equal(rng.Done))
 							Expect(len(rnger.ReconstructedShares())).To(Equal(b))
 							break
 						}
 
 						Expect(event).To(Equal(rng.OpeningsAdded))
-						Expect(rnger.State()).To(Equal(rng.WaitingOpen))
 					}
 				})
 
@@ -330,43 +317,6 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					// The chance that a random index is valid is negligible.
 					invalidIndex := secp256k1.RandomFn()
 					Expect(rnger.DirectedOpenings(invalidIndex)).To(BeNil())
-				})
-			})
-
-			Context("Done state transitions", func() {
-				var rnger rng.RNGer
-				var openingsByPlayer map[secp256k1.Fn]shamir.VerifiableShares
-				// var ownSetsOfShares []shamir.VerifiableShares
-				// var ownSetsOfCommitments [][]shamir.Commitment
-
-				JustBeforeEach(func() {
-					_, _, openingsByPlayer = TransitionToDone(&rnger, isZero)
-				})
-
-				/*
-					Specify("BRNG shares -> do nothing", func() {
-						event := rnger.TransitionShares(ownSetsOfShares, ownSetsOfCommitments, isZero)
-
-						Expect(event).To(Equal(rng.SharesIgnored))
-						Expect(rnger.State()).To(Equal(rng.Done))
-					})
-				*/
-
-				Specify("directed opening -> do nothing", func() {
-					from := rngutil.RandomOtherIndex(indices, &index)
-					event := rnger.TransitionOpen(openingsByPlayer[from])
-
-					Expect(event).To(Equal(rng.OpeningsIgnored))
-					Expect(rnger.State()).To(Equal(rng.Done))
-				})
-
-				Specify("Reset -> Init", func() {
-					event := rnger.Reset()
-
-					Expect(event).To(Equal(rng.Reset))
-					Expect(rnger.State()).To(Equal(rng.Init))
-					Expect(rnger.HasConstructedShares()).ToNot(BeTrue())
-					Expect(rnger.ReconstructedShares()).To(BeNil())
 				})
 			})
 		})

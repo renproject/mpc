@@ -57,9 +57,6 @@ import (
 //			|
 //			|__ Any --> event(Reset) --> state(Init)
 type RNGer struct {
-	// state signifies the current state of the RNG state machine.
-	state State
-
 	// index signifies the given RNG state machine's index.
 	index secp256k1.Fn
 
@@ -92,115 +89,6 @@ type RNGer struct {
 	secrets, decommitments []secp256k1.Fn
 }
 
-// SizeHint implements the surge.SizeHinter interface.
-func (rnger RNGer) SizeHint() int {
-	return rnger.state.SizeHint() +
-		rnger.index.SizeHint() +
-		surge.SizeHint(rnger.indices) +
-		surge.SizeHint(rnger.batchSize) +
-		surge.SizeHint(rnger.threshold) +
-		rnger.opener.SizeHint() +
-		surge.SizeHint(rnger.commitments) +
-		surge.SizeHint(rnger.openingsMap) +
-		surge.SizeHint(rnger.secrets) +
-		surge.SizeHint(rnger.decommitments)
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (rnger RNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := rnger.state.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling state: %v", err)
-	}
-	buf, rem, err = rnger.index.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling index: %v", err)
-	}
-	buf, rem, err = surge.Marshal(rnger.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
-	}
-	buf, rem, err = surge.MarshalU32(uint32(rnger.batchSize), buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.MarshalU32(uint32(rnger.threshold), buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling threshold: %v", err)
-	}
-	buf, rem, err = rnger.opener.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling opener: %v", err)
-	}
-	buf, rem, err = surge.Marshal(rnger.commitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
-	}
-	buf, rem, err = surge.Marshal(rnger.openingsMap, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling openingsMap: %v", err)
-	}
-	buf, rem, err = surge.Marshal(rnger.secrets, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
-	}
-	buf, rem, err = surge.Marshal(rnger.decommitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := rnger.state.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling state: %v", err)
-	}
-	buf, rem, err = rnger.index.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling index: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&rnger.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
-	}
-	buf, rem, err = surge.UnmarshalU32(&rnger.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.UnmarshalU32(&rnger.threshold, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling threshold: %v", err)
-	}
-	buf, rem, err = rnger.opener.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling opener: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&rnger.commitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling commitments: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&rnger.openingsMap, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling openingsMap: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&rnger.secrets, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&rnger.decommitments, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// State returns the current state of the RNGer state machine.
-func (rnger RNGer) State() State {
-	return rnger.state
-}
-
 // N returns the number of machine replicas participating in the RNG protocol.
 func (rnger RNGer) N() int {
 	return len(rnger.indices)
@@ -230,41 +118,6 @@ func (rnger RNGer) Commitments() []shamir.Commitment {
 	return commitmentsCopy
 }
 
-// Generate implements the quick.Generator interface.
-/*
-func (rnger RNGer) Generate(rand *rand.Rand, size int) reflect.Value {
-	size /= 10
-
-	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
-	ownIndex := indices[rand.Intn(len(indices))]
-	b := (rand.Uint32() % uint32(size)) + 1
-	k := uint32(size)/b + 1
-	h := secp256k1.RandomPoint()
-	setsOfCommitments := make([][]shamir.Commitment, b)
-	for i := range setsOfCommitments {
-		setsOfCommitments[i] = make([]shamir.Commitment, k)
-		for j := range setsOfCommitments[i] {
-			setsOfCommitments[i][j] = shamir.NewCommitmentWithCapacity(int(k))
-			for l := uint32(0); l < k; l++ {
-				setsOfCommitments[i][j] = append(setsOfCommitments[i][j], secp256k1.RandomPoint())
-			}
-		}
-	}
-	setsOfShares := make([]shamir.VerifiableShares, b)
-	for i := range setsOfShares {
-		setsOfShares[i] = make(shamir.VerifiableShares, k)
-		for j := range setsOfShares[i] {
-			setsOfShares[i][j].Share.Index = secp256k1.RandomFn()
-			setsOfShares[i][j].Share.Value = secp256k1.RandomFn()
-			setsOfShares[i][j].Decommitment = secp256k1.RandomFn()
-		}
-	}
-	isZero := rand.Int31()&1 == 1
-	_, v := New(ownIndex, indices, b, k, h, setsOfShares, setsOfCommitments, isZero)
-	return reflect.ValueOf(v)
-}
-*/
-
 // New creates a new RNG state machine for a given batch size.
 // - Inputs
 // 	 - ownIndex is the current machine's index
@@ -285,8 +138,6 @@ func New(
 	setsOfCommitments [][]shamir.Commitment,
 	isZero bool,
 ) (TransitionEvent, RNGer) {
-	state := Init
-
 	// Declare variable to hold RNG machine's computed shares and commitments
 	// and allocate necessary memory.
 	commitments := make([]shamir.Commitment, b)
@@ -306,7 +157,6 @@ func New(
 	opener := open.New(commitmentBatch, indices, h)
 
 	rnger := RNGer{
-		state:         state,
 		index:         ownIndex,
 		indices:       indices,
 		batchSize:     b,
@@ -363,11 +213,6 @@ func (rnger *RNGer) transitionShares(
 	isZero bool,
 	h secp256k1.Point,
 ) TransitionEvent {
-	// Simply ignore if the RNG state machine is not in the `Init` state.
-	if rnger.state != Init {
-		return SharesIgnored
-	}
-
 	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
 	var requiredBrngBatchSize int
 	if isZero {
@@ -456,16 +301,12 @@ func (rnger *RNGer) transitionShares(
 	// Reset the Opener machine with the computed commitments.
 	rnger.opener = open.New(locallyComputedCommitments, rnger.indices, h)
 
-	// Transition the machine's state.
-	rnger.state = WaitingOpen
-
 	// Supply the locally computed shares to the opener.
 	if !ignoreShares {
 		event, secrets, decommitments := rnger.opener.HandleShareBatch(rnger.openingsMap[rnger.index])
 
 		// This only happens when k = 1.
 		if event == open.Done {
-			rnger.state = Done
 			rnger.secrets = secrets
 			rnger.decommitments = decommitments
 			return RNGsReconstructed
@@ -479,20 +320,9 @@ func (rnger *RNGer) transitionShares(
 	return SharesConstructed
 }
 
-// HasConstructedShares returns `true` if the RNG machine has received its `b`
-// sets of verifiable shares, and upon that constructed its shares. It returns
-// false otherwise.
-func (rnger RNGer) HasConstructedShares() bool {
-	return rnger.state != Init
-}
-
 // DirectedOpenings returns the openings from the RNG state machine to other
 // RNG state machines.
 func (rnger RNGer) DirectedOpenings(to secp256k1.Fn) shamir.VerifiableShares {
-	if rnger.state == Init {
-		return nil
-	}
-
 	shares, ok := rnger.openingsMap[to]
 	if !ok {
 		return nil
@@ -531,19 +361,12 @@ func (rnger RNGer) DirectedOpenings(to secp256k1.Fn) shamir.VerifiableShares {
 // 			hence the RNGer could reconstruct its shares for the unbiased
 // 			random numbers
 func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) TransitionEvent {
-	// Simply ignore if the RNG state machine is not in the `WaitingOpen`
-	// state.
-	if rnger.state != WaitingOpen {
-		return OpeningsIgnored
-	}
-
 	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs.
 	event, secrets, decommitments := rnger.opener.HandleShareBatch(openings)
 
 	switch event {
 	case open.Done:
-		rnger.state = Done
 		rnger.secrets = secrets
 		rnger.decommitments = decommitments
 		return RNGsReconstructed
@@ -559,10 +382,6 @@ func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) TransitionE
 // share for each random number). This also means that the RNG machine is in
 // the `Done` state. If it isn't in the Done state this function returns `nil`.
 func (rnger RNGer) ReconstructedShares() shamir.VerifiableShares {
-	if rnger.state != Done {
-		return nil
-	}
-
 	vshares := make(shamir.VerifiableShares, rnger.batchSize)
 	for i, secret := range rnger.secrets {
 		share := shamir.NewShare(rnger.index, secret)
@@ -584,7 +403,135 @@ func (rnger *RNGer) Reset() TransitionEvent {
 		rnger.openingsMap[index] = rnger.openingsMap[index][:0]
 	}
 
-	rnger.state = Init
-
 	return Reset
 }
+
+// SizeHint implements the surge.SizeHinter interface.
+func (rnger RNGer) SizeHint() int {
+	return rnger.index.SizeHint() +
+		surge.SizeHint(rnger.indices) +
+		surge.SizeHint(rnger.batchSize) +
+		surge.SizeHint(rnger.threshold) +
+		rnger.opener.SizeHint() +
+		surge.SizeHint(rnger.commitments) +
+		surge.SizeHint(rnger.openingsMap) +
+		surge.SizeHint(rnger.secrets) +
+		surge.SizeHint(rnger.decommitments)
+}
+
+// Marshal implements the surge.Marshaler interface.
+func (rnger RNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := rnger.index.Marshal(buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling index: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.indices, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
+	}
+	buf, rem, err = surge.MarshalU32(uint32(rnger.batchSize), buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
+	}
+	buf, rem, err = surge.MarshalU32(uint32(rnger.threshold), buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling threshold: %v", err)
+	}
+	buf, rem, err = rnger.opener.Marshal(buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling opener: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.commitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.openingsMap, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling openingsMap: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.secrets, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling secrets: %v", err)
+	}
+	buf, rem, err = surge.Marshal(rnger.decommitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("marshaling decommitments: %v", err)
+	}
+	return buf, rem, nil
+}
+
+// Unmarshal implements the surge.Unmarshaler interface.
+func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
+	buf, rem, err := rnger.index.Unmarshal(buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling index: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.indices, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
+	}
+	buf, rem, err = surge.UnmarshalU32(&rnger.batchSize, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
+	}
+	buf, rem, err = surge.UnmarshalU32(&rnger.threshold, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling threshold: %v", err)
+	}
+	buf, rem, err = rnger.opener.Unmarshal(buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling opener: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.commitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling commitments: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.openingsMap, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling openingsMap: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.secrets, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling secrets: %v", err)
+	}
+	buf, rem, err = surge.Unmarshal(&rnger.decommitments, buf, rem)
+	if err != nil {
+		return buf, rem, fmt.Errorf("unmarshaling decommitments: %v", err)
+	}
+	return buf, rem, nil
+}
+
+// Generate implements the quick.Generator interface.
+/*
+func (rnger RNGer) Generate(rand *rand.Rand, size int) reflect.Value {
+	size /= 10
+
+	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
+	ownIndex := indices[rand.Intn(len(indices))]
+	b := (rand.Uint32() % uint32(size)) + 1
+	k := uint32(size)/b + 1
+	h := secp256k1.RandomPoint()
+	setsOfCommitments := make([][]shamir.Commitment, b)
+	for i := range setsOfCommitments {
+		setsOfCommitments[i] = make([]shamir.Commitment, k)
+		for j := range setsOfCommitments[i] {
+			setsOfCommitments[i][j] = shamir.NewCommitmentWithCapacity(int(k))
+			for l := uint32(0); l < k; l++ {
+				setsOfCommitments[i][j] = append(setsOfCommitments[i][j], secp256k1.RandomPoint())
+			}
+		}
+	}
+	setsOfShares := make([]shamir.VerifiableShares, b)
+	for i := range setsOfShares {
+		setsOfShares[i] = make(shamir.VerifiableShares, k)
+		for j := range setsOfShares[i] {
+			setsOfShares[i][j].Share.Index = secp256k1.RandomFn()
+			setsOfShares[i][j].Share.Value = secp256k1.RandomFn()
+			setsOfShares[i][j].Decommitment = secp256k1.RandomFn()
+		}
+	}
+	isZero := rand.Int31()&1 == 1
+	_, v := New(ownIndex, indices, b, k, h, setsOfShares, setsOfCommitments, isZero)
+	return reflect.ValueOf(v)
+}
+*/
