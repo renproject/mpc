@@ -91,8 +91,8 @@ type Opener struct {
 	shareBufs []shamir.VerifiableShares
 
 	// Instance parameters
-	batchSize   uint32
-	commitments []shamir.Commitment
+	batchSize       uint32
+	commitmentBatch []shamir.Commitment
 
 	// Global parameters
 	indices []secp256k1.Fn
@@ -101,7 +101,7 @@ type Opener struct {
 
 // K returns the reconstruction threshold for the current sharing instance.
 func (opener Opener) K() int {
-	return opener.commitments[0].Len()
+	return opener.commitmentBatch[0].Len()
 }
 
 // I returns the current number of valid shares that the opener has received.
@@ -117,17 +117,17 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 	for i := range shareBufs {
 		shareBufs[i] = shamir.VerifiableShares{}
 	}
-	commitments := make([]shamir.Commitment, b)
-	for i := range commitments {
-		commitments[i] = shamir.Commitment{}
+	commitmentBatch := make([]shamir.Commitment, b)
+	for i := range commitmentBatch {
+		commitmentBatch[i] = shamir.Commitment{}
 	}
 
 	return Opener{
-		shareBufs,
-		b,
-		commitments,
-		indices,
-		h,
+		shareBufs:       shareBufs,
+		batchSize:       b,
+		commitmentBatch: commitmentBatch,
+		indices:         indices,
+		h:               h,
 	}
 }
 
@@ -135,7 +135,7 @@ func New(b uint32, indices []secp256k1.Fn, h secp256k1.Point) Opener {
 // shares, and returns a ShareEvent that describes the outcome of the state
 // transition.  See the documentation for the different ShareEvent possiblities
 // for their significance.
-func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
+func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 	ShareEvent,
 	[]secp256k1.Fn,
 	[]secp256k1.Fn,
@@ -148,17 +148,17 @@ func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
 	}
 
 	// The number of shares should equal the batch size.
-	if len(shares) != int(opener.batchSize) {
+	if len(shareBatch) != int(opener.batchSize) {
 		return Ignored, nil, nil
 	}
 
 	// All shares should have the same index.
-	for i := 1; i < len(shares); i++ {
-		if !shares[i].Share.IndexEq(&shares[0].Share.Index) {
+	for i := 1; i < len(shareBatch); i++ {
+		if !shareBatch[i].Share.IndexEq(&shareBatch[0].Share.Index) {
 			return InvalidShares, nil, nil
 		}
 	}
-	index := shares[0].Share.Index
+	index := shareBatch[0].Share.Index
 
 	// The share index must be in the index set.
 	{
@@ -182,8 +182,8 @@ func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
 
 	// No shares should be invalid. If even a single share is invalid, we mark
 	// the entire set of shares to be invalid.
-	for i, share := range shares {
-		if !shamir.IsValid(opener.h, &opener.commitments[i], &share) {
+	for i, share := range shareBatch {
+		if !shamir.IsValid(opener.h, &opener.commitmentBatch[i], &share) {
 			return InvalidShares, nil, nil
 		}
 	}
@@ -191,7 +191,7 @@ func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
 	// At this stage we know that the shares are allowed to be added to the
 	// respective buffers.
 	for i := 0; i < int(opener.batchSize); i++ {
-		opener.shareBufs[i] = append(opener.shareBufs[i], shares[i])
+		opener.shareBufs[i] = append(opener.shareBufs[i], shareBatch[i])
 	}
 
 	// If we have just added the kth share, we can reconstruct.
@@ -224,20 +224,23 @@ func (opener *Opener) HandleShareBatch(shares shamir.VerifiableShares) (
 // NewInstance initialises the opener for a new instance of the open algorithm,
 // corresponding to the given Pedersen commitments. See the documentation for
 // the different ResetEvent possiblities for their significance.
-func (opener *Opener) NewInstance(commitments []shamir.Commitment) ResetEvent {
-	if len(commitments) != int(opener.batchSize) {
-		panic(fmt.Sprintf("length of commitments should be: %v, got: %v", opener.batchSize, len(commitments)))
+func (opener *Opener) NewInstance(commitmentBatch []shamir.Commitment) ResetEvent {
+	if len(commitmentBatch) != int(opener.batchSize) {
+		panic(fmt.Sprintf(
+			"length of commitmentBatch should be: %v, got: %v",
+			opener.batchSize, len(commitmentBatch),
+		))
 	}
 
-	// Make sure each commitment is for the same threshold
-	// and that that threshold is greater than 0
-	c0Len := commitments[0].Len()
+	// Make sure each commitment is for the same threshold and that that
+	// threshold is greater than 0
+	c0Len := commitmentBatch[0].Len()
 	if c0Len < 1 {
 		panic(fmt.Sprintf("k must be greater than 0, got: %v", c0Len))
 	}
-	for _, c := range commitments[1:] {
+	for _, c := range commitmentBatch[1:] {
 		if c.Len() != c0Len {
-			panic(fmt.Sprintf("k must be equal for all commitments"))
+			panic(fmt.Sprintf("k must be equal for all commitments in the batch"))
 		}
 	}
 
@@ -250,7 +253,7 @@ func (opener *Opener) NewInstance(commitments []shamir.Commitment) ResetEvent {
 
 	for i := 0; i < int(opener.batchSize); i++ {
 		opener.shareBufs[i] = opener.shareBufs[i][:0]
-		opener.commitments[i].Set(commitments[i])
+		opener.commitmentBatch[i].Set(commitmentBatch[i])
 	}
 
 	return ret
@@ -267,7 +270,7 @@ func (opener Opener) Generate(_ *rand.Rand, _ int) reflect.Value {
 // SizeHint implements the surge.SizeHinter interface.
 func (opener Opener) SizeHint() int {
 	return surge.SizeHint(opener.batchSize) +
-		surge.SizeHint(opener.commitments) +
+		surge.SizeHint(opener.commitmentBatch) +
 		surge.SizeHint(opener.shareBufs) +
 		opener.h.SizeHint() +
 		surge.SizeHint(opener.indices)
@@ -283,9 +286,9 @@ func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
 	}
-	buf, rem, err = surge.Marshal(opener.commitments, buf, rem)
+	buf, rem, err = surge.Marshal(opener.commitmentBatch, buf, rem)
 	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling commitments: %v", err)
+		return buf, rem, fmt.Errorf("marshaling commitmentBatch: %v", err)
 	}
 	buf, rem, err = opener.h.Marshal(buf, rem)
 	if err != nil {
@@ -308,7 +311,7 @@ func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
 	}
-	buf, rem, err = surge.Unmarshal(&opener.commitments, buf, rem)
+	buf, rem, err = surge.Unmarshal(&opener.commitmentBatch, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
 	}
