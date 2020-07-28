@@ -232,13 +232,35 @@ func (rnger RNGer) Commitments() []shamir.Commitment {
 
 // Generate implements the quick.Generator interface.
 /*
-func (rnger RNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
+func (rnger RNGer) Generate(rand *rand.Rand, size int) reflect.Value {
+	size /= 10
+
 	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
 	ownIndex := indices[rand.Intn(len(indices))]
-	b := uint32(rand.Intn(10))
-	k := uint32(rand.Intn(20))
+	b := (rand.Uint32() % uint32(size)) + 1
+	k := uint32(size)/b + 1
 	h := secp256k1.RandomPoint()
-	_, v := New(ownIndex, indices, b, k, h)
+	setsOfCommitments := make([][]shamir.Commitment, b)
+	for i := range setsOfCommitments {
+		setsOfCommitments[i] = make([]shamir.Commitment, k)
+		for j := range setsOfCommitments[i] {
+			setsOfCommitments[i][j] = shamir.NewCommitmentWithCapacity(int(k))
+			for l := uint32(0); l < k; l++ {
+				setsOfCommitments[i][j] = append(setsOfCommitments[i][j], secp256k1.RandomPoint())
+			}
+		}
+	}
+	setsOfShares := make([]shamir.VerifiableShares, b)
+	for i := range setsOfShares {
+		setsOfShares[i] = make(shamir.VerifiableShares, k)
+		for j := range setsOfShares[i] {
+			setsOfShares[i][j].Share.Index = secp256k1.RandomFn()
+			setsOfShares[i][j].Share.Value = secp256k1.RandomFn()
+			setsOfShares[i][j].Decommitment = secp256k1.RandomFn()
+		}
+	}
+	isZero := rand.Int31()&1 == 1
+	_, v := New(ownIndex, indices, b, k, h, setsOfShares, setsOfCommitments, isZero)
 	return reflect.ValueOf(v)
 }
 */
@@ -278,7 +300,8 @@ func New(
 
 	// Create an instance of the Opener state machine within the RNG state
 	// machine.
-	// FIXME: Compute the commitments here.
+	// FIXME: Move transitionShares logic into here to avoid having to have
+	// this temporary opener.
 	commitmentBatch := []shamir.Commitment{shamir.Commitment{secp256k1.Point{}}}
 	opener := open.New(commitmentBatch, indices, h)
 
@@ -431,7 +454,6 @@ func (rnger *RNGer) transitionShares(
 	}
 
 	// Reset the Opener machine with the computed commitments.
-	// FIXME: This should happen in the constructor.
 	rnger.opener = open.New(locallyComputedCommitments, rnger.indices, h)
 
 	// Transition the machine's state.
