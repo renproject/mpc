@@ -137,10 +137,10 @@ func New(
 		event = CommitmentsConstructed
 	} else {
 		// Handle own share.
-		openEvent, secrets, decommitments := opener.HandleShareBatch(openingsMap[ownIndex])
+		secrets, decommitments, _ := opener.HandleShareBatch(openingsMap[ownIndex])
 
 		// This only happens when k = 1.
-		if openEvent == open.Done {
+		if secrets != nil {
 			shares := make(shamir.VerifiableShares, b)
 			for i, secret := range secrets {
 				share := shamir.NewShare(ownIndex, secret)
@@ -165,21 +165,21 @@ func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) (
 ) {
 	// Pass these openings to the Opener state machine now that we have already
 	// received valid commitments from BRNG outputs.
-	event, secrets, decommitments := rnger.opener.HandleShareBatch(openings)
+	secrets, decommitments, err := rnger.opener.HandleShareBatch(openings)
 
-	switch event {
-	case open.Done:
+	if err != nil {
+		return OpeningsIgnored, nil
+	}
+
+	if secrets != nil {
 		shares := make(shamir.VerifiableShares, len(secrets))
 		for i, secret := range secrets {
 			share := shamir.NewShare(rnger.index, secret)
 			shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
 		}
 		return RNGsReconstructed, shares
-	case open.SharesAdded:
-		return OpeningsAdded, nil
-	default:
-		return OpeningsIgnored, nil
 	}
+	return OpeningsAdded, nil
 }
 
 // SizeHint implements the surge.SizeHinter interface.
