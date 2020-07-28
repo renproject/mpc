@@ -16,7 +16,7 @@ import (
 	"github.com/renproject/mpc/rng/rngutil"
 )
 
-var _ = FDescribe("RNG/RZG state transitions", func() {
+var _ = Describe("RNG/RZG state transitions", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	var n, b, c, k int
