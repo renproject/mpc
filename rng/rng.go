@@ -2,6 +2,8 @@ package rng
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
@@ -213,36 +215,8 @@ func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 }
 
 // Generate implements the quick.Generator interface.
-/*
 func (rnger RNGer) Generate(rand *rand.Rand, size int) reflect.Value {
-	size /= 10
-
-	indices := shamirutil.RandomIndices(rand.Intn(20) + 1)
-	ownIndex := indices[rand.Intn(len(indices))]
-	b := (rand.Uint32() % uint32(size)) + 1
-	k := uint32(size)/b + 1
-	h := secp256k1.RandomPoint()
-	setsOfCommitments := make([][]shamir.Commitment, b)
-	for i := range setsOfCommitments {
-		setsOfCommitments[i] = make([]shamir.Commitment, k)
-		for j := range setsOfCommitments[i] {
-			setsOfCommitments[i][j] = shamir.NewCommitmentWithCapacity(int(k))
-			for l := uint32(0); l < k; l++ {
-				setsOfCommitments[i][j] = append(setsOfCommitments[i][j], secp256k1.RandomPoint())
-			}
-		}
-	}
-	setsOfShares := make([]shamir.VerifiableShares, b)
-	for i := range setsOfShares {
-		setsOfShares[i] = make(shamir.VerifiableShares, k)
-		for j := range setsOfShares[i] {
-			setsOfShares[i][j].Share.Index = secp256k1.RandomFn()
-			setsOfShares[i][j].Share.Value = secp256k1.RandomFn()
-			setsOfShares[i][j].Decommitment = secp256k1.RandomFn()
-		}
-	}
-	isZero := rand.Int31()&1 == 1
-	_, v := New(ownIndex, indices, b, k, h, setsOfShares, setsOfCommitments, isZero)
-	return reflect.ValueOf(v)
+	index := secp256k1.RandomFn()
+	opener := open.Opener{}.Generate(rand, size).Interface().(open.Opener)
+	return reflect.ValueOf(RNGer{index, opener})
 }
-*/
