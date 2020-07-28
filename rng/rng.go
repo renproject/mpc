@@ -11,51 +11,6 @@ import (
 	"github.com/renproject/mpc/rng/compute"
 )
 
-// RNGer describes the structure of the Random Number Generation machine. The
-// machine can be used for an arbitrary number of invocations of RNG, however
-// each instance is specific to the set of machine indices it was constructed
-// with, as well as the batch size, reconstruction threshold and Pedersen
-// Commitment Scheme Parameter.
-//
-// RNGer can exist in one of the following states:
-// - Init
-// - WaitingOpen
-// - Done
-//
-// A new instance of RNGer can be created by calling:
-// - New(index, indices, b, k, h)
-//
-// State transitions can be triggered by three different functions:
-// - TransitionShares(setsOfShares, setsOfCommitments)
-// - TransitionOpen(openings)
-// - Reset
-//
-// Every state transition function returns a transition event, depending on how
-// the inputs were processed. The various state transitions are as follows:
-// - state(Init)
-//	 - TransitionShares
-//			|
-//			|__ Invalid Shares --> event(CommitmentsConstructed) --> state(WaitingOpen)
-//			|__ Valid Shares   --> event(SharesConstructed)      --> state(WaitingOpen)
-//	 - TransitionOpen
-//			|
-//			|__ Invalid/Valid Openings --> event(OpeningsIgnored) --> state(Init)
-//	 - Reset
-//			|
-//			|__ Any --> event(Reset) --> state(Init)
-//
-// - state(WaitingOpen)
-//	 - TransitionShares
-//			|
-//			|__ Invalid/Valid Shares --> event(SharesIgnored) --> state(WaitingOpen)
-//	 - TransitionOpen
-//			|
-//			|__ Invalid Openings     --> event(OpeningsIgnored)      --> state(WaitingOpen)
-//			|__ Valid Openings       --> event(OpeningsAdded)        --> state(WaitingOpen)
-//			|__ Valid Openings (kth) --> event(RNGsReconstructed)    --> state(Done)
-//	 - Reset
-//			|
-//			|__ Any --> event(Reset) --> state(Init)
 type RNGer struct {
 	// index signifies the given RNG state machine's index.
 	index secp256k1.Fn
@@ -80,36 +35,6 @@ type RNGer struct {
 	opener open.Opener
 }
 
-// N returns the number of machine replicas participating in the RNG protocol.
-func (rnger RNGer) N() int {
-	return len(rnger.indices)
-}
-
-// BatchSize returns the batch size of the RNGer state machine.  This also
-// denotes the number of random numbers that can possibly be generated after a
-// successful execution of all state transitions.
-func (rnger RNGer) BatchSize() uint32 {
-	return rnger.batchSize
-}
-
-// Threshold returns the reconstruction threshold for every set of shares.
-// This is the same as `k`, or the minimum number of openings required to be
-// able to reconstruct the random numbers.
-func (rnger RNGer) Threshold() uint32 {
-	return rnger.threshold
-}
-
-// New creates a new RNG state machine for a given batch size.
-// - Inputs
-// 	 - ownIndex is the current machine's index
-// 	 - indices is the set of player indices
-// 	 - b is the number of random numbers generated in one invocation of the protocol
-// 	 - k is the reconstruction threshold for every random number
-// 	 - h is the Pedersen Commitment Parameter, a point on elliptic curve
-//
-// - Returns
-//	 - TransitionEvent is the `Initialised` event emitted on creation
-//	 - RNGer the newly created RNGer instance
 func New(
 	ownIndex secp256k1.Fn,
 	indices []secp256k1.Fn,
@@ -119,95 +44,19 @@ func New(
 	setsOfCommitments [][]shamir.Commitment,
 	isZero bool,
 ) (TransitionEvent, RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
-	// Declare variable to hold RNG machine's computed shares and commitments
-	// and allocate necessary memory.
-	commitments := make([]shamir.Commitment, b)
-	for i := range commitments {
-		commitments[i] = shamir.Commitment{}
-	}
-	openingsMap := make(map[secp256k1.Fn]shamir.VerifiableShares)
-	for _, index := range indices {
-		openingsMap[index] = make(shamir.VerifiableShares, 0, b)
-	}
-
-	// Create an instance of the Opener state machine within the RNG state
-	// machine.
-	// FIXME: Move transitionShares logic into here to avoid having to have
-	// this temporary opener.
-	commitmentBatch := []shamir.Commitment{shamir.Commitment{secp256k1.Point{}}}
-	opener := open.New(commitmentBatch, indices, h)
-
-	rnger := RNGer{
-		index:     ownIndex,
-		indices:   indices,
-		batchSize: b,
-		threshold: k,
-		opener:    opener,
-	}
-
-	event, openingsMap, _, commitments := rnger.transitionShares(setsOfShares, setsOfCommitments, isZero, h)
-
-	return event, rnger, openingsMap, commitments
-}
-
-// TransitionShares performs the state transition for the RNG state machine
-// from `Init` to `WaitingOpen`, upon receiving `b` sets of verifiable shares
-// and their respective commitments. The machine should locally compute its
-// own shares from the received sets of shares.
-//
-// - Inputs
-//   - setsOfShares are the b sets of verifiable shares from the player's BRNG
-//   	outputs
-//  	 - MUST be of length equal to the batch size to be valid
-//  	 - For invalid sets of shares, a nil slice []shamir.VerifiableShares{}
-//  	 	MUST be supplied
-//  	 - If the above checks are met, we assume that every set of verifiable
-//  	 	shares is valid
-//  		 - We assume it has a length equal to the RNG's reconstruction
-//  		 	threshold
-//		 - For sets of shares of length not equal to the batch size, we ignore
-//		 	those shares while simply computing the commitments
-//   - setsOfCommitments are the b sets of commitments from the player's BRNG
-//   	outputs
-//  	 - We assume that the commitments are correct and valid (even if the
-//  	 	shares may not be)
-//  	 - MUST be of length equal to the batch size
-//  	 - In case the sets of shares are invalid, we simply proceed with
-//  	 	locally computing the Open commitments, since we assume the
-//  	 	supplied sets of commitments are correct
-//	 - isZero is a boolean indicating whether this is a Random Zero Generator or not
-//
-// - Returns
-//   - TransitionEvent
-//		 - SharesIgnored when the RNGer is not in `Init` state
-//		 - CommitmentsConstructed when the sets of shares were invalid
-//		 - SharesConstructed when the sets of shares were valid
-//		 - RNGsReconstructed when the RNGer was able to reconstruct the random
-//		 	shares (k = 1)
-func (rnger *RNGer) transitionShares(
-	setsOfShares []shamir.VerifiableShares,
-	setsOfCommitments [][]shamir.Commitment,
-	isZero bool,
-	h secp256k1.Point,
-) (
-	TransitionEvent,
-	map[secp256k1.Fn]shamir.VerifiableShares,
-	shamir.VerifiableShares,
-	[]shamir.Commitment,
-) {
 	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
 	var requiredBrngBatchSize int
 	if isZero {
-		requiredBrngBatchSize = int(rnger.threshold - 1)
+		requiredBrngBatchSize = int(k - 1)
 	} else {
-		requiredBrngBatchSize = int(rnger.threshold)
+		requiredBrngBatchSize = int(k)
 	}
 
 	//
 	// Commitments validity
 	//
 
-	if len(setsOfCommitments) != int(rnger.batchSize) {
+	if len(setsOfCommitments) != int(b) {
 		panic("invalid sets of commitments")
 	}
 
@@ -242,13 +91,12 @@ func (rnger *RNGer) transitionShares(
 	}
 
 	// Declare variable to hold commitments to initialize the opener.
-	locallyComputedCommitments := make([]shamir.Commitment, rnger.batchSize)
+	locallyComputedCommitments := make([]shamir.Commitment, b)
 
-	// Construct the commitments for the batch of unbiased random numbers.
-	commitments := make([]shamir.Commitment, rnger.batchSize)
+	commitments := make([]shamir.Commitment, b)
 	for i, setOfCommitments := range setsOfCommitments {
 		// Compute the output commitment.
-		commitments[i] = shamir.NewCommitmentWithCapacity(int(rnger.threshold))
+		commitments[i] = shamir.NewCommitmentWithCapacity(int(k))
 		if isZero {
 			commitments[i].Append(secp256k1.NewPointInfinity())
 		}
@@ -259,19 +107,19 @@ func (rnger *RNGer) transitionShares(
 
 		// Compute the share commitment and add it to the local set of
 		// commitments.
-		accCommitment := compute.ShareCommitment(rnger.index, setOfCommitments)
+		accCommitment := compute.ShareCommitment(ownIndex, setOfCommitments)
 		if isZero {
-			accCommitment.Scale(accCommitment, &rnger.index)
+			accCommitment.Scale(accCommitment, &ownIndex)
 		}
 
 		locallyComputedCommitments[i].Set(accCommitment)
 	}
 
-	// If the sets of shares are valid, we must construct the directed openings
-	// to other players in the network.
-	openingsMap := make(map[secp256k1.Fn]shamir.VerifiableShares, rnger.batchSize)
+	// If the sets of shares are valid, construct the directed openings to
+	// other players in the network.
+	openingsMap := make(map[secp256k1.Fn]shamir.VerifiableShares, b)
 	if !ignoreShares {
-		for _, j := range rnger.indices {
+		for _, j := range indices {
 			for _, setOfShares := range setsOfShares {
 				accShare := compute.ShareOfShare(j, setOfShares)
 				if isZero {
@@ -283,26 +131,37 @@ func (rnger *RNGer) transitionShares(
 	}
 
 	// Reset the Opener machine with the computed commitments.
-	rnger.opener = open.New(locallyComputedCommitments, rnger.indices, h)
+	opener := open.New(locallyComputedCommitments, indices, h)
 
+	var event TransitionEvent
 	if ignoreShares {
-		return CommitmentsConstructed, openingsMap, nil, commitments
-	}
+		event = CommitmentsConstructed
+	} else {
+		// Handle own share.
+		openEvent, secrets, decommitments := opener.HandleShareBatch(openingsMap[ownIndex])
 
-	// Supply the locally computed shares to the opener.
-	event, secrets, decommitments := rnger.opener.HandleShareBatch(openingsMap[rnger.index])
-
-	// This only happens when k = 1.
-	if event == open.Done {
-		shares := make(shamir.VerifiableShares, rnger.batchSize)
-		for i, secret := range secrets {
-			share := shamir.NewShare(rnger.index, secret)
-			shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+		// This only happens when k = 1.
+		if openEvent == open.Done {
+			shares := make(shamir.VerifiableShares, b)
+			for i, secret := range secrets {
+				share := shamir.NewShare(ownIndex, secret)
+				shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+			}
+			event = RNGsReconstructed
+		} else {
+			event = SharesConstructed
 		}
-		return RNGsReconstructed, openingsMap, shares, commitments
 	}
 
-	return SharesConstructed, openingsMap, nil, commitments
+	rnger := RNGer{
+		index:     ownIndex,
+		indices:   indices,
+		batchSize: b,
+		threshold: k,
+		opener:    opener,
+	}
+
+	return event, rnger, openingsMap, commitments
 }
 
 // TransitionOpen performs the state transition for the RNG state machine upon
