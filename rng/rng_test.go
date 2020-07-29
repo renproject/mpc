@@ -152,7 +152,7 @@ var _ = Describe("RNG", func() {
 					break
 				}
 
-				setsOfSharesByPlayer[index] = []shamir.VerifiableShares{}
+				setsOfSharesByPlayer[index] = nil
 				idleCount++
 			}
 

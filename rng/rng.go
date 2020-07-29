@@ -27,6 +27,8 @@ func New(
 	ownIndex secp256k1.Fn,
 	indices []secp256k1.Fn,
 	h secp256k1.Point,
+	// TODO: The documentation needs to point out that if this argument is not
+	// nil, then it is assumed to be valid.
 	brngShareBatch []shamir.VerifiableShares,
 	brngCommitmentBatch [][]shamir.Commitment,
 	isZero bool,
@@ -52,30 +54,16 @@ func New(
 		requiredBrngBatchSize = int(k)
 	}
 
-	//
-	// Commitments validity
-	//
-
 	for _, coms := range brngCommitmentBatch {
 		if len(coms) != requiredBrngBatchSize {
 			panic("invalid sets of commitments")
 		}
 	}
 
-	// Boolean to keep a track of whether shares computation should be ignored
-	// or not. This is set to true if the sets of shares are invalid in any
-	// way.
-	ignoreShares := false
-
-	// Ignore the shares if their number of sets does not match the number of
-	// sets of commitments.
-	if len(brngShareBatch) != len(brngCommitmentBatch) {
-		ignoreShares = true
-	}
-
-	//
-	// Shares validity
-	//
+	// If the supplied shares are nil, they are to be ignored (this means that
+	// the output from BRNG was not valid for this player). Any non-nil slice
+	// of shares is assumed to be valid.
+	ignoreShares := brngShareBatch == nil
 
 	if !ignoreShares {
 		// Each set of shares in the batch should have the correct length.
@@ -108,6 +96,7 @@ func New(
 
 		ownCommitments[i].Set(accCommitment)
 	}
+	opener := open.New(ownCommitments, indices, h)
 
 	// If the sets of shares are valid, construct the directed openings to
 	// other players in the network.
@@ -123,10 +112,7 @@ func New(
 				directedOpenings[j] = append(directedOpenings[j], accShare)
 			}
 		}
-	}
 
-	opener := open.New(ownCommitments, indices, h)
-	if !ignoreShares {
 		// Handle own share.
 		secrets, decommitments, err := opener.HandleShareBatch(directedOpenings[ownIndex])
 		if err != nil {
