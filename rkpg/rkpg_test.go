@@ -80,18 +80,18 @@ var _ = Describe("RKPG", func() {
 			threshold := n - k + 1
 			errThreshold := n - 2
 			for i := 0; i < threshold-1; i++ {
-				res, e := rkpger.HandleShareBatch(shares[i])
-				Expect(e).To(Equal(ShareAdded))
+				res, err := rkpger.HandleShareBatch(shares[i])
+				Expect(err).ToNot(HaveOccurred())
 				Expect(res).To(BeNil())
 			}
 			for i := threshold - 1; i < errThreshold-1; i++ {
-				res, e := rkpger.HandleShareBatch(shares[i])
-				Expect(e).To(Equal(TooManyErrors))
+				res, err := rkpger.HandleShareBatch(shares[i])
+				Expect(err).To(Equal(ErrTooManyErrors))
 				Expect(res).To(BeNil())
 			}
-			res, e := rkpger.HandleShareBatch(shares[errThreshold-1])
+			res, err := rkpger.HandleShareBatch(shares[errThreshold-1])
 			Expect(res).ToNot(BeNil())
-			Expect(e).To(Equal(Reconstructed))
+			Expect(err).ToNot(HaveOccurred())
 		}
 
 		Specify("shares with invalid batch size", func() {
@@ -100,9 +100,9 @@ var _ = Describe("RKPG", func() {
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
 				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
-				res, e := rkpger.HandleShareBatch(make(shamir.Shares, b-1))
+				res, err := rkpger.HandleShareBatch(make(shamir.Shares, b-1))
 				Expect(res).To(BeNil())
-				Expect(e).To(Equal(WrongBatchSize))
+				Expect(err).To(Equal(ErrWrongBatchSize))
 			}
 		})
 
@@ -115,9 +115,9 @@ var _ = Describe("RKPG", func() {
 				// As it is an uninitialised slice, all of the shares in
 				// `shares` should have index zero, which should not be in the
 				// set `indices` with overwhelming probability.
-				res, e := rkpger.HandleShareBatch(make(shamir.Shares, b))
+				res, err := rkpger.HandleShareBatch(make(shamir.Shares, b))
 				Expect(res).To(BeNil())
-				Expect(e).To(Equal(InvalidIndex))
+				Expect(err).To(Equal(ErrInvalidIndex))
 			}
 		})
 
@@ -133,9 +133,9 @@ var _ = Describe("RKPG", func() {
 				}
 
 				_, _ = rkpger.HandleShareBatch(shares)
-				res, e := rkpger.HandleShareBatch(shares)
+				res, err := rkpger.HandleShareBatch(shares)
 				Expect(res).To(BeNil())
-				Expect(e).To(Equal(DuplicateIndex))
+				Expect(err).To(Equal(ErrDuplicateIndex))
 			}
 		})
 
@@ -151,9 +151,9 @@ var _ = Describe("RKPG", func() {
 					shares[j] = shamir.NewShare(indices[1], secp256k1.Fn{})
 				}
 
-				res, e := rkpger.HandleShareBatch(shares)
+				res, err := rkpger.HandleShareBatch(shares)
 				Expect(res).To(BeNil())
-				Expect(e).To(Equal(InconsistentShares))
+				Expect(err).To(Equal(ErrInconsistentShares))
 			}
 		})
 
@@ -172,12 +172,12 @@ var _ = Describe("RKPG", func() {
 
 				threshold := n - k + 1
 				for j := 0; j < threshold-1; j++ {
-					res, e := rkpger.HandleShareBatch(shares[j])
-					Expect(e).To(Equal(ShareAdded))
+					res, err := rkpger.HandleShareBatch(shares[j])
+					Expect(err).ToNot(HaveOccurred())
 					Expect(res).To(BeNil())
 				}
-				pubkeys, e := rkpger.HandleShareBatch(shares[threshold-1])
-				Expect(e).To(Equal(Reconstructed))
+				pubkeys, err := rkpger.HandleShareBatch(shares[threshold-1])
+				Expect(err).ToNot(HaveOccurred())
 				for j := range pubkeys {
 					var expected secp256k1.Point
 					expected.BaseExpUnsafe(&secrets[j])

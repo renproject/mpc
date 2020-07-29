@@ -75,13 +75,14 @@ func New(
 // public key batch is computed and returned. If not enough shares have been
 // received, the return value will be nil.
 func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
-	[]secp256k1.Point, TransitionEvent,
+	[]secp256k1.Point, error,
 ) {
 	n := len(rkpger.indices)
 	b := len(rkpger.points)
 	if len(shares) != int(b) {
-		return nil, WrongBatchSize
+		return nil, ErrWrongBatchSize
 	}
+	// Check that the index of the first share is in the list of indices.
 	ind := -1
 	index := shares[0].Index()
 	for i := range rkpger.indices {
@@ -90,16 +91,16 @@ func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
 		}
 	}
 	if ind < 0 {
-		return nil, InvalidIndex
+		return nil, ErrInvalidIndex
 	}
 
 	if rkpger.state.shareReceived[ind] {
-		return nil, DuplicateIndex
+		return nil, ErrDuplicateIndex
 	}
 	// Check that all indices in the share batch are the same.
 	for i := 1; i < len(shares); i++ {
 		if !shares[i].IndexEq(&index) {
-			return nil, InconsistentShares
+			return nil, ErrInconsistentShares
 		}
 	}
 
@@ -112,7 +113,7 @@ func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
 
 	if int(rkpger.state.count) < n-int(rkpger.k)+1 {
 		// Not enough shares have been received for reconstruction.
-		return nil, ShareAdded
+		return nil, nil
 	}
 	secrets := make([]secp256k1.Fn, b)
 	for i, buf := range rkpger.state.buffers {
@@ -120,7 +121,7 @@ func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
 		if !ok {
 			// The RS decoder was not able to reconstruct the polynomial
 			// because there are too many incorrect shares.
-			return nil, TooManyErrors
+			return nil, ErrTooManyErrors
 		}
 		secrets[i] = *poly.Coefficient(0)
 	}
@@ -132,5 +133,5 @@ func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
 		pubKeys[i].Scale(&rkpger.h, &secret)
 		pubKeys[i].Add(&pubKeys[i], &rkpger.points[i])
 	}
-	return pubKeys, Reconstructed
+	return pubKeys, nil
 }
