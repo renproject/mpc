@@ -32,15 +32,15 @@ func New(
 	isZero bool,
 ) (RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
 	b := uint32(len(setsOfCommitments))
-	if b < 1 {
+	if b <= 0 {
 		panic(fmt.Sprintf("b must be greater than 0, got: %v", b))
 	}
 	k := uint32(len(setsOfCommitments[0]))
 	if isZero {
 		k++
 	}
-	if k < 1 {
-		panic(fmt.Sprintf("k must be greater than 0, got: %v", k))
+	if k <= 1 {
+		panic(fmt.Sprintf("k must be greater than 1, got: %v", k))
 	}
 
 	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
@@ -127,15 +127,12 @@ func New(
 	opener := open.New(locallyComputedCommitments, indices, h)
 	if !ignoreShares {
 		// Handle own share.
-		secrets, decommitments, _ := opener.HandleShareBatch(openingsMap[ownIndex])
-
-		// This only happens when k = 1.
-		if secrets != nil {
-			shares := make(shamir.VerifiableShares, b)
-			for i, secret := range secrets {
-				share := shamir.NewShare(ownIndex, secret)
-				shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
-			}
+		secrets, decommitments, err := opener.HandleShareBatch(openingsMap[ownIndex])
+		if err != nil {
+			panic(fmt.Sprintf("unexpected error: %v", err))
+		}
+		if secrets != nil || decommitments != nil {
+			panic("opener should not have reconstructed after one share")
 		}
 	}
 
