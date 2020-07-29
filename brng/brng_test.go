@@ -41,23 +41,20 @@ var _ = Describe("BRNG", func() {
 
 	var (
 		brnger  BRNGer
+		row     table.Row
 		indices []secp256k1.Fn
 		b, t    int
 		to      secp256k1.Fn
 	)
 
-	Setup := func() (BRNGer, int, int, secp256k1.Fn, []secp256k1.Fn) {
+	Setup := func() (BRNGer, table.Row, int, int, secp256k1.Fn, []secp256k1.Fn) {
 		b := 5
 		t := k - 1
 		indices := shamirutil.RandomIndices(n)
 		to := indices[0]
-		brnger := New(indices, h)
+		brnger, row := New(uint32(b), uint32(k), indices, h)
 
-		return brnger, t, b, to, indices
-	}
-
-	TransitionToWaiting := func(brnger *BRNGer, k, b int) table.Row {
-		return brnger.TransitionStart(k, b)
+		return brnger, row, t, b, to, indices
 	}
 
 	TransitionToOk := func(
@@ -66,7 +63,6 @@ var _ = Describe("BRNG", func() {
 		indices []secp256k1.Fn,
 		k, b int,
 	) {
-		_ = TransitionToWaiting(brnger, k, b)
 		slice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
@@ -77,61 +73,23 @@ var _ = Describe("BRNG", func() {
 		indices []secp256k1.Fn,
 		k, t, b int,
 	) {
-		_ = TransitionToWaiting(brnger, k, b)
 		slice, _ := brngutil.RandomInvalidSlice(to, indices, h, n, k, b, k)
 		_, _, _ = brnger.TransitionSlice(slice)
 	}
 
 	BeforeEach(func() {
-		brnger, t, b, to, indices = Setup()
+		brnger, row, t, b, to, indices = Setup()
 	})
 
 	Context("State transitions (1)", func() {
-		// Given that the BRNGer is in a particular state, it should transition
-		// to the appropriate state or continue being in the same state
-		// depending on the message supplied to it
-		Context("Init state", func() {
-			Specify("Start -> Waiting", func() {
-				Expect(brnger.BatchSize()).To(Equal(uint32(0)))
-
-				brnger.TransitionStart(k, b)
-
-				Expect(brnger.State()).To(Equal(Waiting))
-				Expect(brnger.BatchSize()).To(Equal(uint32(b)))
-			})
-
-			Specify("Slice -> Do nothing", func() {
-				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-
-				brnger.TransitionSlice(validSlice)
-
-				Expect(brnger.State()).To(Equal(Init))
-			})
-
-			Specify("Reset -> Init", func() {
-				brnger.Reset()
-
-				Expect(brnger.State()).To(Equal(Init))
-			})
-		})
-
 		Context("Waiting state", func() {
-			JustBeforeEach(func() {
-				TransitionToWaiting(&brnger, k, b)
-			})
-
 			Specify("Start -> Do nothing", func() {
-				brnger.TransitionStart(k, b)
-
-				Expect(brnger.State()).To(Equal(Waiting))
 				Expect(brnger.BatchSize()).To(Equal(uint32(b)))
 			})
 
 			Specify("Valid Slice -> Ok", func() {
 				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-				brnger.TransitionSlice(validSlice)
-
-				Expect(brnger.State()).To(Equal(Ok))
+				_, _, _ = brnger.TransitionSlice(validSlice)
 			})
 
 			Context("Invalid Slice -> Error", func() {
@@ -151,16 +109,8 @@ var _ = Describe("BRNG", func() {
 
 				Specify("Slice with faults", func() {
 					invalidSlice, _ := brngutil.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
-					brnger.TransitionSlice(invalidSlice)
-
-					Expect(brnger.State()).To(Equal(Error))
+					_, _, _ = brnger.TransitionSlice(invalidSlice)
 				})
-			})
-
-			Specify("Reset -> Init", func() {
-				brnger.Reset()
-
-				Expect(brnger.State()).To(Equal(Init))
 			})
 		})
 
@@ -169,23 +119,9 @@ var _ = Describe("BRNG", func() {
 				TransitionToOk(&brnger, to, indices, k, b)
 			})
 
-			Specify("Start -> Do nothing", func() {
-				brnger.TransitionStart(k, b)
-
-				Expect(brnger.State()).To(Equal(Ok))
-			})
-
 			Specify("Slice -> Do nothing", func() {
 				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-				brnger.TransitionSlice(validSlice)
-
-				Expect(brnger.State()).To(Equal(Ok))
-			})
-
-			Specify("Reset -> Init", func() {
-				brnger.Reset()
-
-				Expect(brnger.State()).To(Equal(Init))
+				_, _, _ = brnger.TransitionSlice(validSlice)
 			})
 		})
 
@@ -194,23 +130,9 @@ var _ = Describe("BRNG", func() {
 				TransitionToError(&brnger, to, indices, k, t, b)
 			})
 
-			Specify("Start -> Do nothing", func() {
-				brnger.TransitionStart(k, b)
-
-				Expect(brnger.State()).To(Equal(Error))
-			})
-
 			Specify("Slice -> Do nothing", func() {
 				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-				brnger.TransitionSlice(validSlice)
-
-				Expect(brnger.State()).To(Equal(Error))
-			})
-
-			Specify("Reset -> Init", func() {
-				brnger.Reset()
-
-				Expect(brnger.State()).To(Equal(Init))
+				_, _, _ = brnger.TransitionSlice(validSlice)
 			})
 		})
 	})
@@ -219,21 +141,15 @@ var _ = Describe("BRNG", func() {
 		// On receiving a start message in the Init state, the state machine
 		// should return a valid Row.
 		Specify("the returned row should be valid", func() {
-			row := brnger.TransitionStart(k, b)
-
 			Expect(brngutil.RowIsValid(row, k, indices, h)).To(BeTrue())
 		})
 
 		Specify("the reconstruction threshold is correct", func() {
-			row := brnger.TransitionStart(k, b)
-
 			Expect(brngutil.RowIsValid(row, k-1, indices, h)).To(BeFalse())
 			Expect(brngutil.RowIsValid(row, k, indices, h)).To(BeTrue())
 		})
 
 		Specify("the returned row should have the correct batch size", func() {
-			row := brnger.TransitionStart(k, b)
-
 			Expect(row.BatchSize()).To(Equal(b))
 			Expect(brnger.BatchSize()).To(Equal(uint32(b)))
 		})
@@ -244,8 +160,6 @@ var _ = Describe("BRNG", func() {
 		// should return the correct shares and commitment that correspond to
 		// the slice.
 		It("should correctly process a valid slice", func() {
-			brnger.TransitionStart(k, b)
-
 			expectedShares := make(shamir.VerifiableShares, b)
 			expectedCommitments := make([]shamir.Commitment, b)
 			validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
@@ -274,8 +188,6 @@ var _ = Describe("BRNG", func() {
 		// machine should return a list of faults that correctly identifies the
 		// invalid shares. The commitment should still be returned.
 		It("should correctly identify faulty elements", func() {
-			brnger.TransitionStart(k, b)
-
 			invalidSlice, expectedFaults := brngutil.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
 
 			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)

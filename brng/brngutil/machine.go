@@ -240,8 +240,7 @@ func NewMachine(
 	k, b int,
 ) BrngMachine {
 	if machineType == BrngTypePlayer {
-		brnger := brng.New(indices, h)
-		row := brnger.TransitionStart(k, b)
+		brnger, row := brng.New(uint32(b), uint32(k), indices, h)
 
 		pmachine := PlayerMachine{
 			id:          id,
