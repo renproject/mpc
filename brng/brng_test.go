@@ -64,7 +64,7 @@ var _ = Describe("BRNG", func() {
 		k, b int,
 	) {
 		slice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-		_, _, _ = brnger.TransitionSlice(slice)
+		_, _, _ = brnger.HandleSlice(slice)
 	}
 
 	TransitionToError := func(
@@ -74,7 +74,7 @@ var _ = Describe("BRNG", func() {
 		k, t, b int,
 	) {
 		slice, _ := brngutil.RandomInvalidSlice(to, indices, h, n, k, b, k)
-		_, _, _ = brnger.TransitionSlice(slice)
+		_, _, _ = brnger.HandleSlice(slice)
 	}
 
 	BeforeEach(func() {
@@ -83,19 +83,15 @@ var _ = Describe("BRNG", func() {
 
 	Context("State transitions (1)", func() {
 		Context("Waiting state", func() {
-			Specify("Start -> Do nothing", func() {
-				Expect(brnger.BatchSize()).To(Equal(uint32(b)))
-			})
-
 			Specify("Valid Slice -> Ok", func() {
 				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-				_, _, _ = brnger.TransitionSlice(validSlice)
+				_, _, _ = brnger.HandleSlice(validSlice)
 			})
 
 			Context("Invalid Slice -> Error", func() {
 				Specify("Slice with wrong batch size", func() {
 					invalidSlice := brngutil.RandomValidSlice(to, indices, h, k, rand.Intn(b-1)+1, k-1)
-					Expect(func() { brnger.TransitionSlice(invalidSlice) }).To(Panic())
+					Expect(func() { brnger.HandleSlice(invalidSlice) }).To(Panic())
 				})
 
 				Specify("Slice with invalid form", func() {
@@ -104,12 +100,12 @@ var _ = Describe("BRNG", func() {
 					// The slice will have an invalid form if any of the
 					// columns have a different length than the others.
 					invalidSlice[0] = make([]table.Element, k)
-					Expect(func() { brnger.TransitionSlice(invalidSlice) }).To(Panic())
+					Expect(func() { brnger.HandleSlice(invalidSlice) }).To(Panic())
 				})
 
 				Specify("Slice with faults", func() {
 					invalidSlice, _ := brngutil.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
-					_, _, _ = brnger.TransitionSlice(invalidSlice)
+					_, _, _ = brnger.HandleSlice(invalidSlice)
 				})
 			})
 		})
@@ -121,7 +117,7 @@ var _ = Describe("BRNG", func() {
 
 			Specify("Slice -> Do nothing", func() {
 				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-				_, _, _ = brnger.TransitionSlice(validSlice)
+				_, _, _ = brnger.HandleSlice(validSlice)
 			})
 		})
 
@@ -132,7 +128,7 @@ var _ = Describe("BRNG", func() {
 
 			Specify("Slice -> Do nothing", func() {
 				validSlice := brngutil.RandomValidSlice(to, indices, h, k, b, k)
-				_, _, _ = brnger.TransitionSlice(validSlice)
+				_, _, _ = brnger.HandleSlice(validSlice)
 			})
 		})
 	})
@@ -151,7 +147,6 @@ var _ = Describe("BRNG", func() {
 
 		Specify("the returned row should have the correct batch size", func() {
 			Expect(row.BatchSize()).To(Equal(b))
-			Expect(brnger.BatchSize()).To(Equal(uint32(b)))
 		})
 	})
 
@@ -168,7 +163,7 @@ var _ = Describe("BRNG", func() {
 				expectedShares[i], expectedCommitments[i] = col.Sum()
 			}
 
-			shares, commitments, _ := brnger.TransitionSlice(validSlice)
+			shares, commitments, _ := brnger.HandleSlice(validSlice)
 
 			Expect(len(shares)).To(Equal(b))
 			Expect(len(commitments)).To(Equal(b))
@@ -190,7 +185,7 @@ var _ = Describe("BRNG", func() {
 		It("should correctly identify faulty elements", func() {
 			invalidSlice, expectedFaults := brngutil.RandomInvalidSlice(to, indices, h, k, k, b, k-1)
 
-			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)
+			shares, commitments, faults := brnger.HandleSlice(invalidSlice)
 
 			Expect(len(shares)).To(Equal(0))
 			Expect(len(commitments)).To(Equal(b))
