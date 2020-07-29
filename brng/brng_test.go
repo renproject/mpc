@@ -137,9 +137,7 @@ var _ = Describe("BRNG", func() {
 			Context("Invalid Slice -> Error", func() {
 				Specify("Slice with wrong batch size", func() {
 					invalidSlice := brngutil.RandomValidSlice(to, indices, h, k, rand.Intn(b-1)+1, k-1)
-					brnger.TransitionSlice(invalidSlice)
-
-					Expect(brnger.State()).To(Equal(Error))
+					Expect(func() { brnger.TransitionSlice(invalidSlice) }).To(Panic())
 				})
 
 				Specify("Slice with invalid form", func() {
@@ -148,9 +146,7 @@ var _ = Describe("BRNG", func() {
 					// The slice will have an invalid form if any of the
 					// columns have a different length than the others.
 					invalidSlice[0] = make([]table.Element, k)
-					brnger.TransitionSlice(invalidSlice)
-
-					Expect(brnger.State()).To(Equal(Error))
+					Expect(func() { brnger.TransitionSlice(invalidSlice) }).To(Panic())
 				})
 
 				Specify("Slice with faults", func() {

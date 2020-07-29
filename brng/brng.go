@@ -208,7 +208,10 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 
 	if brnger.batchSize != uint32(slice.BatchSize()) {
 		brnger.state = Error
-		return nil, nil, nil
+		panic(fmt.Sprintf(
+			"slice has the wrong batch size: expected %v, got %v",
+			brnger.batchSize, slice.BatchSize(),
+		))
 	}
 
 	// Higher level checks ensure that the Element's within a slice have
@@ -216,7 +219,7 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 	// proceed without checking them
 	if !slice.HasValidForm() {
 		brnger.state = Error
-		return nil, nil, nil
+		panic("slice has invalid form")
 	}
 
 	commitments := make([]shamir.Commitment, brnger.batchSize)
