@@ -219,22 +219,23 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 		return nil, nil, nil
 	}
 
+	commitments := make([]shamir.Commitment, brnger.batchSize)
+	for i, col := range slice {
+		commitments[i] = col.CommitmentSum()
+	}
+
 	// This checks the validity of every element in every column of the slice
 	// Faults are an array of elements that fail the validity check
 	faults := slice.Faults(brnger.h)
 	if faults != nil {
 		brnger.state = Error
-
-		// TODO: This is incorrect; even if there are fualts in the shares, we
-		// still need to return the commitment.
-		return nil, nil, faults
+		return nil, commitments, faults
 	}
 
 	// Construct the output share(s).
 	shares := make(shamir.VerifiableShares, brnger.batchSize)
-	commitments := make([]shamir.Commitment, brnger.batchSize)
 	for i, col := range slice {
-		shares[i], commitments[i] = col.Sum()
+		shares[i] = col.ShareSum()
 	}
 
 	brnger.state = Ok

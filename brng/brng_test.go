@@ -276,7 +276,7 @@ var _ = Describe("BRNG", func() {
 	Context("Invalid slice processing (4)", func() {
 		// On receiving an invalid slice in the Waiting state, the state
 		// machine should return a list of faults that correctly identifies the
-		// invalid shares.
+		// invalid shares. The commitment should still be returned.
 		It("should correctly identify faulty elements", func() {
 			brnger.TransitionStart(k, b)
 
@@ -285,7 +285,7 @@ var _ = Describe("BRNG", func() {
 			shares, commitments, faults := brnger.TransitionSlice(invalidSlice)
 
 			Expect(len(shares)).To(Equal(0))
-			Expect(len(commitments)).To(Equal(0))
+			Expect(len(commitments)).To(Equal(b))
 			Expect(len(faults)).To(Equal(len(expectedFaults)))
 			for i, expectedFault := range expectedFaults {
 				Expect(faults[i]).To(Equal(expectedFault))
