@@ -42,3 +42,27 @@ func (col Col) Sum() (shamir.VerifiableShare, shamir.Commitment) {
 
 	return share, commitment
 }
+
+func (col Col) ShareSum() shamir.VerifiableShare {
+	var share shamir.VerifiableShare
+	if len(col) == 0 {
+		return share
+	}
+	share = col[0].Share()
+	for i := 1; i < len(col); i++ {
+		share.Add(&share, &col[i].share)
+	}
+	return share
+}
+
+func (col Col) CommitmentSum() shamir.Commitment {
+	var commitment shamir.Commitment
+	if len(col) == 0 {
+		return commitment
+	}
+	commitment.Set(col[0].Commitment())
+	for i := 1; i < len(col); i++ {
+		commitment.Add(commitment, col[i].commitment)
+	}
+	return commitment
+}

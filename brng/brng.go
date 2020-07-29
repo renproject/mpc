@@ -208,7 +208,10 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 
 	if brnger.batchSize != uint32(slice.BatchSize()) {
 		brnger.state = Error
-		return nil, nil, nil
+		panic(fmt.Sprintf(
+			"slice has the wrong batch size: expected %v, got %v",
+			brnger.batchSize, slice.BatchSize(),
+		))
 	}
 
 	// Higher level checks ensure that the Element's within a slice have
@@ -216,7 +219,12 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 	// proceed without checking them
 	if !slice.HasValidForm() {
 		brnger.state = Error
-		return nil, nil, nil
+		panic("slice has invalid form")
+	}
+
+	commitments := make([]shamir.Commitment, brnger.batchSize)
+	for i, col := range slice {
+		commitments[i] = col.CommitmentSum()
 	}
 
 	// This checks the validity of every element in every column of the slice
@@ -224,17 +232,13 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 	faults := slice.Faults(brnger.h)
 	if faults != nil {
 		brnger.state = Error
-
-		// TODO: This is incorrect; even if there are fualts in the shares, we
-		// still need to return the commitment.
-		return nil, nil, faults
+		return nil, commitments, faults
 	}
 
 	// Construct the output share(s).
 	shares := make(shamir.VerifiableShares, brnger.batchSize)
-	commitments := make([]shamir.Commitment, brnger.batchSize)
 	for i, col := range slice {
-		shares[i], commitments[i] = col.Sum()
+		shares[i] = col.ShareSum()
 	}
 
 	brnger.state = Ok
