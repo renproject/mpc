@@ -7,7 +7,6 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
 	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/table"
@@ -33,7 +32,6 @@ func New(batchSize, k uint32, indices []secp256k1.Fn, h secp256k1.Point) (BRNGer
 		pointerToCommitment := row[i].BorrowCommitment()
 		shamir.VShareSecret(pointerToShares, pointerToCommitment, indices, h, r, int(k))
 	}
-
 	brnger := BRNGer{batchSize, h}
 	return brnger, row
 }
@@ -77,13 +75,10 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 }
 
 // Generate implements the quick.Generator interface.
-func (brnger BRNGer) Generate(_ *rand.Rand, size int) reflect.Value {
-	batchSize := (rand.Uint32() % uint32(size/2)) + 1
-	k := (rand.Uint32() % uint32(size/2)) + 1
-	indices := shamirutil.RandomIndices((size / 4) + 1)
+func (brnger BRNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
+	batchSize := rand.Uint32()
 	h := secp256k1.RandomPoint()
-	b, _ := New(batchSize, k, indices, h)
-	return reflect.ValueOf(b)
+	return reflect.ValueOf(BRNGer{batchSize, h})
 }
 
 // SizeHint implements the surge.SizeHinter interface.
