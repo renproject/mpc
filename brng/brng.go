@@ -55,7 +55,12 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 
 	commitments := make([]shamir.Commitment, brnger.batchSize)
 	for i, col := range slice {
-		commitments[i] = col.CommitmentSum()
+		var commitment shamir.Commitment
+		commitment.Set(col[0].Commitment())
+		for _, e := range col[1:] {
+			commitment.Add(commitment, e.Commitment())
+		}
+		commitments[i].Set(commitment)
 	}
 
 	// This checks the validity of every element in every column of the slice
@@ -68,7 +73,12 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 	// Construct the output share(s).
 	shares := make(shamir.VerifiableShares, brnger.batchSize)
 	for i, col := range slice {
-		shares[i] = col.ShareSum()
+		share := col[0].Share()
+		for _, e := range col[1:] {
+			summand := e.Share()
+			share.Add(&share, &summand)
+		}
+		shares[i] = share
 	}
 
 	return shares, commitments, nil
