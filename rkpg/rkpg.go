@@ -26,7 +26,7 @@ func New(
 	h secp256k1.Point,
 	rngShares, rzgShares shamir.VerifiableShares,
 	rngComs []shamir.Commitment,
-) (RKPGer, shamir.Shares, error) {
+) (RKPGer, shamir.Shares) {
 	n := len(indices)
 	b := len(rngShares)
 	if len(rzgShares) != b {
@@ -66,7 +66,7 @@ func New(
 		h:       h,
 	}
 
-	return rkpger, shares, nil
+	return rkpger, shares
 }
 
 // HandleShareBatch applies a state transition to the given state upon

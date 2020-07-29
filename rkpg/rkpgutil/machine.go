@@ -63,7 +63,7 @@ func NewHonestMachine(
 	coms []shamir.Commitment,
 	rngShares, rzgShares shamir.VerifiableShares,
 ) HonestMachine {
-	rkpger, shares, _ := rkpg.New(indices, h, rngShares, rzgShares, coms)
+	rkpger, shares := rkpg.New(indices, h, rngShares, rzgShares, coms)
 	messages := make([]mpcutil.Message, len(ids))
 	for i, to := range ids {
 		msgShares := make(shamir.Shares, len(shares))

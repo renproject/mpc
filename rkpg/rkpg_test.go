@@ -96,7 +96,7 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				res, err := rkpger.HandleShareBatch(make(shamir.Shares, b-1))
 				Expect(res).To(BeNil())
@@ -108,7 +108,7 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				// As it is an uninitialised slice, all of the shares in
 				// `shares` should have index zero, which should not be in the
@@ -123,7 +123,7 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				shares := make(shamir.Shares, b)
 				for j := range shares {
@@ -141,7 +141,7 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				shares := make(shamir.Shares, b)
 				shares[0] = shamir.NewShare(indices[0], secp256k1.Fn{})
@@ -159,13 +159,12 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < 1; i++ {
 				n, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, secrets := RXGOutputs(k, b, indices, h)
-				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				var err error
 				shares := make([]shamir.Shares, n)
 				for j := range shares {
-					_, shares[j], err = New(indices, h, rngShares[j], rzgShares[j], rngComs)
-					Expect(err).ToNot(HaveOccurred())
+					_, shares[j] = New(indices, h, rngShares[j], rzgShares[j], rngComs)
 				}
 
 				threshold := n - k + 1
@@ -188,7 +187,7 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				n, k, t, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				shares := CreateInvalidShares(t, indices, h, rngShares, rzgShares, rngComs)
 				CheckAgainstInvalidShares(n, k, &rkpger, shares, rngComs)
