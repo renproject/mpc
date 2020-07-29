@@ -45,11 +45,9 @@ func New(
 
 	shares := make(shamir.Shares, len(rngShares))
 	for i := range shares {
-		rzShare := rzgShares[i].Share()
-		ind := rzShare.Index()
-		dRnShare := shamir.NewShare(ind, rngShares[i].Decommitment())
-		RzShare := rzgShares[i].Share()
-		shares[i].Add(&dRnShare, &RzShare)
+		ind := rzgShares[i].Share.Index
+		dRnShare := shamir.NewShare(ind, rngShares[i].Decommitment)
+		shares[i].Add(&dRnShare, &rzgShares[i].Share)
 	}
 
 	state := NewState(n, b)
@@ -86,7 +84,7 @@ func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
 	}
 	// Check that the index of the first share is in the list of indices.
 	ind := -1
-	index := shares[0].Index()
+	index := shares[0].Index
 	for i := range rkpger.indices {
 		if index.Eq(&rkpger.indices[i]) {
 			ind = i
@@ -108,7 +106,7 @@ func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
 
 	// Checks have passed so we update the rkpger.state.
 	for i, buf := range rkpger.state.buffers {
-		buf[ind] = shares[i].Value()
+		buf[ind] = shares[i].Value
 	}
 	rkpger.state.shareReceived[ind] = true
 	rkpger.state.count++

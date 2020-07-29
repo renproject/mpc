@@ -69,7 +69,6 @@ func RXGOutput(
 ) (shamir.VerifiableShares, shamir.Commitment) {
 	shares := make(shamir.VerifiableShares, len(indices))
 	com := shamir.NewCommitmentWithCapacity(k)
-	sharer := shamir.NewVSSharer(indices, h)
-	sharer.Share(&shares, &com, x, k)
+	shamir.VShareSecret(&shares, &com, indices, h, x, k)
 	return shares, com
 }

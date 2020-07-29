@@ -55,17 +55,15 @@ var _ = Describe("RKPG", func() {
 			for i := range shares {
 				shares[i] = make(shamir.Shares, len(rngShares[i]))
 				for j := range shares[i] {
-					rzShare := rzgShares[i][j].Share()
-					ind := rzShare.Index()
-					dRnShare := shamir.NewShare(ind, rngShares[i][j].Decommitment())
-					RzShare := rzgShares[i][j].Share()
-					shares[i][j].Add(&dRnShare, &RzShare)
+					ind := rzgShares[i][j].Share.Index
+					dRnShare := shamir.NewShare(ind, rngShares[i][j].Decommitment)
+					shares[i][j].Add(&dRnShare, &rzgShares[i][j].Share)
 				}
 			}
 
 			badBuf := rand.Intn(b)
 			for i := 0; i < t; i++ {
-				shares[i][badBuf] = shamir.NewShare(shares[i][badBuf].Index(), secp256k1.NewFnFromU16(0))
+				shares[i][badBuf] = shamir.NewShare(shares[i][badBuf].Index, secp256k1.NewFnFromU16(0))
 			}
 
 			return shares
