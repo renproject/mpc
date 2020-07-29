@@ -206,12 +206,9 @@ var _ = Describe("RKPG", func() {
 				rzgShares := make(shamir.VerifiableShares, b)
 				rngComs := make([]shamir.Commitment, b)
 
-				_, _, err := New(indices, h, rngShares[:b-1], rzgShares, rngComs)
-				Expect(err).To(HaveOccurred())
-				_, _, err = New(indices, h, rngShares, rzgShares[:b-1], rngComs)
-				Expect(err).To(HaveOccurred())
-				_, _, err = New(indices, h, rngShares[:b-1], rzgShares[:b-1], rngComs)
-				Expect(err).To(HaveOccurred())
+				Expect(func() { New(indices, h, rngShares[:b-1], rzgShares, rngComs) }).To(Panic())
+				Expect(func() { New(indices, h, rngShares, rzgShares[:b-1], rngComs) }).To(Panic())
+				Expect(func() { New(indices, h, rngShares, rzgShares[:b-1], rngComs[:b-1]) }).To(Panic())
 			}
 		})
 
@@ -226,20 +223,7 @@ var _ = Describe("RKPG", func() {
 					shamir.NewShare(secp256k1.RandomFn(), secp256k1.Fn{}),
 					secp256k1.Fn{},
 				)
-				_, _, err := New(indices, h, rngShares, rzgShares, rngComs)
-				Expect(err).To(HaveOccurred())
-			}
-		})
-
-		Specify("shares with invalid indices", func() {
-			for i := 0; i < trials; i++ {
-				_, _, _, b, h, indices := RandomTestParams()
-				rngShares := make(shamir.VerifiableShares, b)
-				rzgShares := make(shamir.VerifiableShares, b)
-				rngComs := make([]shamir.Commitment, b)
-
-				_, _, err := New(indices, h, rngShares, rzgShares, rngComs)
-				Expect(err).To(HaveOccurred())
+				Expect(func() { New(indices, h, rngShares, rzgShares, rngComs) }).To(Panic())
 			}
 		})
 	})

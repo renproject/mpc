@@ -15,7 +15,6 @@ var _ = Describe("Surge marshalling", func() {
 	trials := 10
 	ts := []reflect.Type{
 		reflect.TypeOf(rkpg.State{}),
-		reflect.TypeOf(rkpg.Params{}),
 	}
 
 	for _, t := range ts {

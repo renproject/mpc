@@ -1,7 +1,7 @@
 package rkpg
 
 func (rkpger RKPGer) SizeHint() int {
-	return rkpger.state.SizeHint() + rkpger.params.SizeHint()
+	return rkpger.state.SizeHint()
 }
 
 func (rkpger RKPGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
@@ -9,7 +9,7 @@ func (rkpger RKPGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	return rkpger.params.Marshal(buf, rem)
+	return buf, rem, err
 }
 
 func (rkpger *RKPGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
@@ -17,5 +17,5 @@ func (rkpger *RKPGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	return rkpger.params.Unmarshal(buf, rem)
+	return buf, rem, err
 }
