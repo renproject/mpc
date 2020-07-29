@@ -225,6 +225,8 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 	if faults != nil {
 		brnger.state = Error
 
+		// TODO: This is incorrect; even if there are fualts in the shares, we
+		// still need to return the commitment.
 		return nil, nil, faults
 	}
 

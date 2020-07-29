@@ -152,9 +152,9 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					}
 				})
 
-				Specify("empty sets of shares and valid commitments -> WaitingOpen", func() {
+				Specify("nil sets of shares and valid commitments -> WaitingOpen", func() {
 					_, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
-					_, directedOpenings, _ := rng.New(index, indices, h, []shamir.VerifiableShares{}, setsOfCommitments, isZero)
+					_, directedOpenings, _ := rng.New(index, indices, h, nil, setsOfCommitments, isZero)
 
 					// With empty shares, the shares for the directed opens
 					// should not be computed.
@@ -166,18 +166,11 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					}
 				})
 
-				Specify("shares with incorrect batch size -> WaitingOpen", func() {
+				Specify("shares with incorrect batch size -> panic", func() {
 					setsOfShares, setsOfCommitments := rngutil.BRNGOutputBatch(index, b, c, h)
-					_, directedOpenings, _ := rng.New(index, indices, h, setsOfShares[1:], setsOfCommitments, isZero)
-
-					// With invalid shares, the shares for the directed opens
-					// should not be computed.
-					for _, j := range indices {
-						shares := directedOpenings[j]
-						for _, share := range shares {
-							Expect(share).To(Equal(shamir.VerifiableShares{}))
-						}
-					}
+					Expect(func() {
+						rng.New(index, indices, h, setsOfShares[1:], setsOfCommitments, isZero)
+					}).To(Panic())
 				})
 
 				Specify("shares with incorrect threshold size -> panic", func() {
