@@ -15,7 +15,6 @@ import (
 
 type BRNGer struct {
 	batchSize uint32
-	indices   []secp256k1.Fn
 	h         secp256k1.Point
 }
 
@@ -27,18 +26,15 @@ func (brnger BRNGer) BatchSize() uint32 {
 // New creates a new BRNG state machine for the given indices and pedersen
 // parameter h.
 func New(batchSize, k uint32, indices []secp256k1.Fn, h secp256k1.Point) (BRNGer, table.Row) {
-	indicesCopy := make([]secp256k1.Fn, len(indices))
-	copy(indicesCopy, indices)
-
 	row := table.MakeRow(len(indices), int(k), int(batchSize))
 	for i := range row {
 		r := secp256k1.RandomFn()
 		pointerToShares := row[i].BorrowShares()
 		pointerToCommitment := row[i].BorrowCommitment()
-		shamir.VShareSecret(pointerToShares, pointerToCommitment, indicesCopy, h, r, int(k))
+		shamir.VShareSecret(pointerToShares, pointerToCommitment, indices, h, r, int(k))
 	}
 
-	brnger := BRNGer{batchSize, indices, h}
+	brnger := BRNGer{batchSize, h}
 	return brnger, row
 }
 
@@ -93,7 +89,6 @@ func (brnger BRNGer) Generate(_ *rand.Rand, size int) reflect.Value {
 // SizeHint implements the surge.SizeHinter interface.
 func (brnger BRNGer) SizeHint() int {
 	return surge.SizeHint(brnger.batchSize) +
-		surge.SizeHint(brnger.indices) +
 		brnger.h.SizeHint()
 }
 
@@ -102,10 +97,6 @@ func (brnger BRNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	buf, rem, err := surge.MarshalU32(uint32(brnger.batchSize), buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.Marshal(brnger.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
 	}
 	buf, rem, err = brnger.h.Marshal(buf, rem)
 	if err != nil {
@@ -119,10 +110,6 @@ func (brnger *BRNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	buf, rem, err := surge.UnmarshalU32(&brnger.batchSize, buf, rem)
 	if err != nil {
 		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&brnger.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
 	}
 	buf, rem, err = brnger.h.Unmarshal(buf, rem)
 	if err != nil {
