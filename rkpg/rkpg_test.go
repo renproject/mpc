@@ -208,7 +208,7 @@ var _ = Describe("RKPG", func() {
 
 				Expect(func() { New(indices, h, rngShares[:b-1], rzgShares, rngComs) }).To(Panic())
 				Expect(func() { New(indices, h, rngShares, rzgShares[:b-1], rngComs) }).To(Panic())
-				Expect(func() { New(indices, h, rngShares, rzgShares[:b-1], rngComs[:b-1]) }).To(Panic())
+				Expect(func() { New(indices, h, rngShares, rzgShares, rngComs[:b-1]) }).To(Panic())
 			}
 		})
 

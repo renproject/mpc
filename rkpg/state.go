@@ -32,20 +32,6 @@ func NewState(n, b int) State {
 	}
 }
 
-// Clear the state object. It will then be ready to use for a new isntance of
-// RKPG.
-func (state *State) Clear() {
-	state.count = 0
-	for i := range state.shareReceived {
-		state.shareReceived[i] = false
-	}
-	for _, buf := range state.buffers {
-		for i := range buf {
-			buf[i].Clear()
-		}
-	}
-}
-
 // Generate implements the quick.Generator interface.
 func (state State) Generate(_ *rand.Rand, size int) reflect.Value {
 	b := rand.Intn(size + 1)

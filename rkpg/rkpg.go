@@ -11,10 +11,12 @@ import (
 type RKPGer struct {
 	state State
 
+	// Instance parameters
 	k       int32
 	points  []secp256k1.Point
 	decoder rs.Decoder
 
+	// Global parameters
 	indices []secp256k1.Fn
 	h       secp256k1.Point
 }
