@@ -93,7 +93,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 		var shares shamir.VerifiableShares
 		for _, from := range otherIndices[:k-1] {
-			shares, _ = rnger.TransitionOpen(openingsByPlayer[from])
+			shares, _ = rnger.HandleShareBatch(openingsByPlayer[from])
 		}
 
 		return ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, shares, commitments
@@ -218,21 +218,21 @@ var _ = Describe("RNG/RZG state transitions", func() {
 					from := otherIndices[rand.Intn(len(otherIndices))]
 
 					// Openings length not equal to batch size
-					_, err := rnger.TransitionOpen(openingsByPlayer[from][1:])
+					_, err := rnger.HandleShareBatch(openingsByPlayer[from][1:])
 
 					Expect(err).To(HaveOccurred())
 
 					// Sender index is randomly chosen, so does not exist in
 					// the initial player indices
 					shamirutil.PerturbIndex(&openingsByPlayer[from][rand.Intn(b)])
-					_, err = rnger.TransitionOpen(openingsByPlayer[from])
+					_, err = rnger.HandleShareBatch(openingsByPlayer[from])
 
 					Expect(err).To(HaveOccurred())
 				})
 
 				Specify("directed opening (not yet k) -> WaitingOpen", func() {
 					from := otherIndices[rand.Intn(len(otherIndices))]
-					_, err := rnger.TransitionOpen(openingsByPlayer[from])
+					_, err := rnger.HandleShareBatch(openingsByPlayer[from])
 					Expect(err).ToNot(HaveOccurred())
 				})
 
@@ -242,7 +242,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 						// processed.
 						count := i + 1
 
-						shares, err := rnger.TransitionOpen(openingsByPlayer[from])
+						shares, err := rnger.HandleShareBatch(openingsByPlayer[from])
 						Expect(err).ToNot(HaveOccurred())
 
 						if count == k-1 {

@@ -101,7 +101,7 @@ func (machine RngMachine) InitialMessages() []mpcutil.Message {
 func (machine *RngMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	switch msg := msg.(type) {
 	case *RngMessage:
-		shares, _ := machine.rnger.TransitionOpen(msg.openings)
+		shares, _ := machine.rnger.HandleShareBatch(msg.openings)
 		if shares != nil {
 			machine.outputShares = shares
 		}

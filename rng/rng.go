@@ -27,15 +27,15 @@ func New(
 	ownIndex secp256k1.Fn,
 	indices []secp256k1.Fn,
 	h secp256k1.Point,
-	setsOfShares []shamir.VerifiableShares,
-	setsOfCommitments [][]shamir.Commitment,
+	brngShareBatch []shamir.VerifiableShares,
+	brngCommitmentBatch [][]shamir.Commitment,
 	isZero bool,
 ) (RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
-	b := uint32(len(setsOfCommitments))
+	b := uint32(len(brngCommitmentBatch))
 	if b <= 0 {
 		panic(fmt.Sprintf("b must be greater than 0, got: %v", b))
 	}
-	k := uint32(len(setsOfCommitments[0]))
+	k := uint32(len(brngCommitmentBatch[0]))
 	if isZero {
 		k++
 	}
@@ -43,9 +43,10 @@ func New(
 		panic(fmt.Sprintf("k must be greater than 1, got: %v", k))
 	}
 
-	// The required batch size for the BRNG outputs is k for RNG and k-1 for RZG
 	var requiredBrngBatchSize int
 	if isZero {
+		// The constant term of the polynomial is zero so we don't need a share
+		// for it.
 		requiredBrngBatchSize = int(k - 1)
 	} else {
 		requiredBrngBatchSize = int(k)
@@ -55,7 +56,7 @@ func New(
 	// Commitments validity
 	//
 
-	for _, coms := range setsOfCommitments {
+	for _, coms := range brngCommitmentBatch {
 		if len(coms) != requiredBrngBatchSize {
 			panic("invalid sets of commitments")
 		}
@@ -68,7 +69,7 @@ func New(
 
 	// Ignore the shares if their number of sets does not match the number of
 	// sets of commitments.
-	if len(setsOfShares) != len(setsOfCommitments) {
+	if len(brngShareBatch) != len(brngCommitmentBatch) {
 		ignoreShares = true
 	}
 
@@ -78,56 +79,56 @@ func New(
 
 	if !ignoreShares {
 		// Each set of shares in the batch should have the correct length.
-		for _, shares := range setsOfShares {
+		for _, shares := range brngShareBatch {
 			if len(shares) != requiredBrngBatchSize {
 				panic("invalid set of shares")
 			}
 		}
 	}
 
-	locallyComputedCommitments := make([]shamir.Commitment, b)
-	commitments := make([]shamir.Commitment, b)
-	for i, setOfCommitments := range setsOfCommitments {
+	ownCommitments := make([]shamir.Commitment, b)
+	outputCommitments := make([]shamir.Commitment, b)
+	for i, setOfCommitments := range brngCommitmentBatch {
 		// Compute the output commitment.
-		commitments[i] = shamir.NewCommitmentWithCapacity(int(k))
+		outputCommitments[i] = shamir.NewCommitmentWithCapacity(int(k))
 		if isZero {
-			commitments[i].Append(secp256k1.NewPointInfinity())
+			outputCommitments[i].Append(secp256k1.NewPointInfinity())
 		}
 
 		for _, c := range setOfCommitments {
-			commitments[i].Append(c[0])
+			outputCommitments[i].Append(c[0])
 		}
 
 		// Compute the share commitment and add it to the local set of
-		// commitments.
+		// outputCommitments.
 		accCommitment := compute.ShareCommitment(ownIndex, setOfCommitments)
 		if isZero {
 			accCommitment.Scale(accCommitment, &ownIndex)
 		}
 
-		locallyComputedCommitments[i].Set(accCommitment)
+		ownCommitments[i].Set(accCommitment)
 	}
 
 	// If the sets of shares are valid, construct the directed openings to
 	// other players in the network.
-	var openingsMap map[secp256k1.Fn]shamir.VerifiableShares = nil
+	var directedOpenings map[secp256k1.Fn]shamir.VerifiableShares = nil
 	if !ignoreShares {
-		openingsMap = make(map[secp256k1.Fn]shamir.VerifiableShares, b)
+		directedOpenings = make(map[secp256k1.Fn]shamir.VerifiableShares, b)
 		for _, j := range indices {
-			for _, setOfShares := range setsOfShares {
+			for _, setOfShares := range brngShareBatch {
 				accShare := compute.ShareOfShare(j, setOfShares)
 				if isZero {
 					accShare.Scale(&accShare, &j)
 				}
-				openingsMap[j] = append(openingsMap[j], accShare)
+				directedOpenings[j] = append(directedOpenings[j], accShare)
 			}
 		}
 	}
 
-	opener := open.New(locallyComputedCommitments, indices, h)
+	opener := open.New(ownCommitments, indices, h)
 	if !ignoreShares {
 		// Handle own share.
-		secrets, decommitments, err := opener.HandleShareBatch(openingsMap[ownIndex])
+		secrets, decommitments, err := opener.HandleShareBatch(directedOpenings[ownIndex])
 		if err != nil {
 			panic(fmt.Sprintf("unexpected error: %v", err))
 		}
@@ -141,29 +142,23 @@ func New(
 		opener: opener,
 	}
 
-	return rnger, openingsMap, commitments
+	return rnger, directedOpenings, outputCommitments
 }
 
-func (rnger *RNGer) TransitionOpen(openings shamir.VerifiableShares) (
-	shamir.VerifiableShares, error,
-) {
-	// Pass these openings to the Opener state machine now that we have already
-	// received valid commitments from BRNG outputs.
-	secrets, decommitments, err := rnger.opener.HandleShareBatch(openings)
-
+func (rnger *RNGer) HandleShareBatch(shareBatch shamir.VerifiableShares) (shamir.VerifiableShares, error) {
+	secrets, decommitments, err := rnger.opener.HandleShareBatch(shareBatch)
 	if err != nil {
 		return nil, err
 	}
-
-	if secrets != nil {
-		shares := make(shamir.VerifiableShares, len(secrets))
-		for i, secret := range secrets {
-			share := shamir.NewShare(rnger.index, secret)
-			shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
-		}
-		return shares, nil
+	if secrets == nil {
+		return nil, nil
 	}
-	return nil, nil
+	shares := make(shamir.VerifiableShares, len(secrets))
+	for i, secret := range secrets {
+		share := shamir.NewShare(rnger.index, secret)
+		shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
+	}
+	return shares, nil
 }
 
 // SizeHint implements the surge.SizeHinter interface.
