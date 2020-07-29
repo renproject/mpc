@@ -1,8 +1,6 @@
 package rkpgutil
 
 import (
-	"fmt"
-
 	"github.com/renproject/mpc/mpcutil"
 	"github.com/renproject/mpc/rkpg"
 	"github.com/renproject/secp256k1"
@@ -49,10 +47,9 @@ type HonestMachine struct {
 	OwnID mpcutil.ID
 	IDs   []mpcutil.ID
 
-	Params rkpg.Params
-	State  rkpg.State
-	Coms   []shamir.Commitment
-	Points []secp256k1.Point
+	RKPGer   rkpg.RKPGer
+	Messages []mpcutil.Message
+	Points   []secp256k1.Point
 
 	RNGShares, RZGShares shamir.VerifiableShares
 }
@@ -61,19 +58,29 @@ type HonestMachine struct {
 func NewHonestMachine(
 	ownID mpcutil.ID,
 	ids []mpcutil.ID,
-	params rkpg.Params,
-	state rkpg.State,
+	indices []secp256k1.Fn,
+	h secp256k1.Point,
 	coms []shamir.Commitment,
 	rngShares, rzgShares shamir.VerifiableShares,
 ) HonestMachine {
+	rkpger, shares, _ := rkpg.New(indices, h, rngShares, rzgShares, coms)
+	messages := make([]mpcutil.Message, len(ids))
+	for i, to := range ids {
+		msgShares := make(shamir.Shares, len(shares))
+		copy(msgShares, shares)
+		messages[i] = &Message{
+			ToID:       to,
+			FromID:     ownID,
+			ShareBatch: msgShares,
+		}
+	}
 	return HonestMachine{
 		OwnID: ownID,
 		IDs:   ids,
 
-		Params: params,
-		State:  state,
-		Coms:   coms,
-		Points: []secp256k1.Point{},
+		RKPGer:   rkpger,
+		Messages: messages,
+		Points:   []secp256k1.Point{},
 
 		RNGShares: rngShares, RZGShares: rzgShares,
 	}
@@ -84,27 +91,13 @@ func (m HonestMachine) ID() mpcutil.ID { return m.OwnID }
 
 // InitialMessages implements the mpcutil.Machine interface.
 func (m HonestMachine) InitialMessages() []mpcutil.Message {
-	shares, err := rkpg.InitialMessages(&m.Params, m.RNGShares, m.RZGShares)
-	if err != nil {
-		panic(fmt.Sprintf("could not construct initial messages: %v", err))
-	}
-	messages := make([]mpcutil.Message, len(m.IDs))
-	for i, to := range m.IDs {
-		msgShares := make(shamir.Shares, len(shares))
-		copy(msgShares, shares)
-		messages[i] = &Message{
-			ToID:       to,
-			FromID:     m.OwnID,
-			ShareBatch: msgShares,
-		}
-	}
-	return messages
+	return m.Messages
 }
 
 // Handle implements the mpcutil.Machine interface.
 func (m *HonestMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	message := msg.(*Message)
-	points, _ := rkpg.HandleShareBatch(&m.State, &m.Params, m.Coms, message.ShareBatch)
+	points, _ := m.RKPGer.HandleShareBatch(message.ShareBatch)
 	if points != nil {
 		m.Points = points
 	}
@@ -176,9 +169,8 @@ func (m *MaliciousMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 func (m HonestMachine) SizeHint() int {
 	return m.OwnID.SizeHint() +
 		surge.SizeHint(m.IDs) +
-		m.Params.SizeHint() +
-		m.State.SizeHint() +
-		surge.SizeHint(m.Coms) +
+		m.RKPGer.SizeHint() +
+		surge.SizeHint(m.Messages) +
 		surge.SizeHint(m.Points) +
 		m.RNGShares.SizeHint() +
 		m.RZGShares.SizeHint()
@@ -194,15 +186,11 @@ func (m HonestMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = m.Params.Marshal(buf, rem)
+	buf, rem, err = m.RKPGer.Marshal(buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = m.State.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, err
-	}
-	buf, rem, err = surge.Marshal(m.Coms, buf, rem)
+	buf, rem, err = surge.Marshal(m.Messages, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -227,15 +215,11 @@ func (m *HonestMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = m.Params.Unmarshal(buf, rem)
+	buf, rem, err = m.RKPGer.Unmarshal(buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = m.State.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, err
-	}
-	buf, rem, err = surge.Unmarshal(&m.Coms, buf, rem)
+	buf, rem, err = surge.Unmarshal(&m.Messages, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}

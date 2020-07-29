@@ -7,15 +7,26 @@ import (
 	"github.com/renproject/shamir"
 )
 
-// InitialMessages creates the share batch for the open performed in the RKPG
-// protocol.
-func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShares) (shamir.Shares, error) {
-	if len(rngShares) != int(params.b) || len(rzgShares) != int(params.b) {
-		return nil, fmt.Errorf(
-			"invalid share batch size: expected both %v (rng) and %v (rzg) to be %v",
-			len(rngShares), len(rzgShares), params.b,
+type RKPGer struct {
+	state  State
+	points []secp256k1.Point
+	params Params
+}
+
+func New(indices []secp256k1.Fn, h secp256k1.Point, rngShares, rzgShares shamir.VerifiableShares, rngComs []shamir.Commitment) (RKPGer, shamir.Shares, error) {
+	n := len(indices)
+	b := len(rngShares)
+	if len(rngShares) != len(rzgShares) {
+		return RKPGer{}, nil, fmt.Errorf(
+			"rng and rzg shares have different batch sizes: expected %v (rng) to equal %v (rzg)",
+			len(rngShares), len(rzgShares),
 		)
 	}
+	if len(rngComs) != b {
+		// TODO
+	}
+	k := rngComs[0].Len()
+	params := CreateParams(k, b, h, indices)
 
 	shares := make(shamir.Shares, len(rngShares))
 	for i := range shares {
@@ -23,10 +34,10 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 		rzShare := rzgShares[i].Share()
 		ind := rzShare.Index()
 		if !rnShare.IndexEq(&ind) {
-			return nil, fmt.Errorf("mismatched indices: expected %v to equal %v", rnShare.Index(), ind)
+			return RKPGer{}, nil, fmt.Errorf("mismatched indices: expected %v to equal %v", rnShare.Index(), ind)
 		}
 		if _, ok := params.arrIndex[ind]; !ok {
-			return nil, fmt.Errorf("indices out of range: index %v not in index set", ind)
+			return RKPGer{}, nil, fmt.Errorf("indices out of range: index %v not in index set", ind)
 		}
 
 		dRnShare := shamir.NewShare(ind, rngShares[i].Decommitment())
@@ -35,7 +46,15 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 		shares[i].Add(&dRnShare, &RzShare)
 	}
 
-	return shares, nil
+	state := NewState(n, b)
+	points := make([]secp256k1.Point, len(rngComs))
+	for i := range points {
+		points[i] = rngComs[i][0]
+	}
+
+	rkpger := RKPGer{state: state, points: points, params: params}
+
+	return rkpger, shares, nil
 }
 
 // HandleShareBatch applies a state transition to the given state upon
@@ -44,21 +63,18 @@ func InitialMessages(params *Params, rngShares, rzgShares shamir.VerifiableShare
 // for RKPG. Once enough shares have been received to reconstruct, the
 // commitments are used to compute and return the output public key batch. If
 // not enough shares have been received, the return value will be nil.
-func HandleShareBatch(
-	state *State,
-	params *Params,
-	coms []shamir.Commitment,
-	shares shamir.Shares,
-) ([]secp256k1.Point, TransitionEvent) {
-	if len(shares) != int(params.b) {
+func (rkpger *RKPGer) HandleShareBatch(shares shamir.Shares) (
+	[]secp256k1.Point, TransitionEvent,
+) {
+	if len(shares) != int(rkpger.params.b) {
 		return nil, WrongBatchSize
 	}
 	index := shares[0].Index()
-	ind, ok := params.arrIndex[index]
+	ind, ok := rkpger.params.arrIndex[index]
 	if !ok {
 		return nil, InvalidIndex
 	}
-	if state.shareReceived[ind] {
+	if rkpger.state.shareReceived[ind] {
 		return nil, DuplicateIndex
 	}
 	// Check that all indices in the share batch are the same.
@@ -68,20 +84,20 @@ func HandleShareBatch(
 		}
 	}
 
-	// Checks have passed so we update the state.
-	for i, buf := range state.buffers {
+	// Checks have passed so we update the rkpger.state.
+	for i, buf := range rkpger.state.buffers {
 		buf[ind] = shares[i].Value()
 	}
-	state.shareReceived[ind] = true
-	state.count++
+	rkpger.state.shareReceived[ind] = true
+	rkpger.state.count++
 
-	if int(state.count) < int(params.n-params.k+1) {
+	if int(rkpger.state.count) < int(rkpger.params.n-rkpger.params.k+1) {
 		// Not enough shares have been received for reconstruction.
 		return nil, ShareAdded
 	}
-	secrets := make([]secp256k1.Fn, params.b)
-	for i, buf := range state.buffers {
-		poly, ok := params.decoder.Decode(buf)
+	secrets := make([]secp256k1.Fn, rkpger.params.b)
+	for i, buf := range rkpger.state.buffers {
+		poly, ok := rkpger.params.decoder.Decode(buf)
 		if !ok {
 			// The RS decoder was not able to reconstruct the polynomial
 			// because there are too many incorrect shares.
@@ -90,12 +106,12 @@ func HandleShareBatch(
 		secrets[i] = *poly.Coefficient(0)
 	}
 
-	pubKeys := make([]secp256k1.Point, params.b)
+	pubKeys := make([]secp256k1.Point, rkpger.params.b)
 	for i, secret := range secrets {
 		// Compute xG = (xG + sH) + (-s)H
 		secret.Negate(&secret)
-		pubKeys[i].Scale(&params.h, &secret)
-		pubKeys[i].Add(&pubKeys[i], &coms[i][0])
+		pubKeys[i].Scale(&rkpger.params.h, &secret)
+		pubKeys[i].Add(&pubKeys[i], &rkpger.points[i])
 	}
 	return pubKeys, Reconstructed
 }
