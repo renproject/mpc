@@ -2,12 +2,9 @@ package brng
 
 import (
 	"fmt"
-	"math/rand"
-	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/surge"
 
 	"github.com/renproject/mpc/brng/table"
 )
@@ -15,11 +12,6 @@ import (
 type BRNGer struct {
 	batchSize uint32
 	h         secp256k1.Point
-}
-
-// BatchSize returns the expected batch size of the state machine.
-func (brnger BRNGer) BatchSize() uint32 {
-	return brnger.batchSize
 }
 
 // New creates a new BRNG state machine for the given indices and pedersen
@@ -36,9 +28,11 @@ func New(batchSize, k uint32, indices []secp256k1.Fn, h secp256k1.Point) (BRNGer
 	return brnger, row
 }
 
-// TransitionSlice performs the state transition for the BRNger state machine
-// upon receiving a slice.
-func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShares, []shamir.Commitment, []table.Element) {
+// HandleSlice performs the state transition for the BRNger state machine upon
+// receiving a slice.
+func (brnger *BRNGer) HandleSlice(slice table.Slice) (
+	shamir.VerifiableShares, []shamir.Commitment, []table.Element,
+) {
 	if brnger.batchSize != uint32(slice.BatchSize()) {
 		panic(fmt.Sprintf(
 			"slice has the wrong batch size: expected %v, got %v",
@@ -82,43 +76,4 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 	}
 
 	return shares, commitments, nil
-}
-
-// Generate implements the quick.Generator interface.
-func (brnger BRNGer) Generate(_ *rand.Rand, _ int) reflect.Value {
-	batchSize := rand.Uint32()
-	h := secp256k1.RandomPoint()
-	return reflect.ValueOf(BRNGer{batchSize, h})
-}
-
-// SizeHint implements the surge.SizeHinter interface.
-func (brnger BRNGer) SizeHint() int {
-	return surge.SizeHint(brnger.batchSize) +
-		brnger.h.SizeHint()
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (brnger BRNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.MarshalU32(uint32(brnger.batchSize), buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling batchSize: %v", err)
-	}
-	buf, rem, err = brnger.h.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling h: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (brnger *BRNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.UnmarshalU32(&brnger.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling batchSize: %v", err)
-	}
-	buf, rem, err = brnger.h.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling h: %v", err)
-	}
-	return buf, rem, nil
 }

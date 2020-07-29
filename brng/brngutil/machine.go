@@ -89,7 +89,7 @@ func (pm PlayerMachine) InitialMessages() []mpcutil.Message {
 // Handle implements the Machine interface.
 func (pm *PlayerMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	cmsg := msg.(*ConsensusMessage)
-	shares, commitments, _ := pm.brnger.TransitionSlice(cmsg.slice)
+	shares, commitments, _ := pm.brnger.HandleSlice(cmsg.slice)
 	pm.SetOutput(shares, commitments)
 	return nil
 }
