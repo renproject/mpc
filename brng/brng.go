@@ -82,9 +82,9 @@ func (brnger *BRNGer) TransitionSlice(slice table.Slice) (shamir.VerifiableShare
 
 // Generate implements the quick.Generator interface.
 func (brnger BRNGer) Generate(_ *rand.Rand, size int) reflect.Value {
-	batchSize := rand.Uint32() % uint32(size)
-	k := rand.Uint32() % uint32(size)
-	indices := shamirutil.RandomIndices(rand.Intn(20))
+	batchSize := (rand.Uint32() % uint32(size/2)) + 1
+	k := (rand.Uint32() % uint32(size/2)) + 1
+	indices := shamirutil.RandomIndices((size / 4) + 1)
 	h := secp256k1.RandomPoint()
 	b, _ := New(batchSize, k, indices, h)
 	return reflect.ValueOf(b)
