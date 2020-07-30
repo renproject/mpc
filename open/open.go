@@ -25,10 +25,11 @@ import (
 //
 // The state machine supports batching. If several secrets need to be opened at
 // once, instead of having multiple state machines, just one can be used and the
-// incoming shares are processed in batches. This requires all of the secrets to
-// share the number of shares required to open the secrets, (b) the number of
-// participating players, the expected indices of the participating players, and
-// the Pedersen parameter (known as "h").
+// incoming shares are processed in batches. This batching functionality
+// requires the secrets to have all been shared using the same parameters, i.e.
+//	- the number of players and their corresponding indices,
+//	- the reconstruction threshold (k),
+//	- and the Pedersen parameter (h).
 type Opener struct {
 	// State
 	shareBufs []shamir.VerifiableShares
@@ -65,7 +66,7 @@ func (opener Opener) I() int {
 // commitment system parameter. The length of the commitment slice determines
 // the batch size.
 //
-// Panics: This function will panic if and of the following conditions are met.
+// Panics: This function will panic if any of the following conditions are met.
 //	- The batch size is less than 1.
 //	- The reconstruction threshold (k) is less than 1.
 //	- Not all commitments in the batch of commitments have the same
