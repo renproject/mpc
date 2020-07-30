@@ -5,15 +5,15 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/renproject/mpc/mpcutil"
+	"github.com/renproject/mpc/rkpg/rkpgutil"
+	"github.com/renproject/secp256k1"
+	"github.com/renproject/shamir"
+	"github.com/renproject/shamir/shamirutil"
+	
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/renproject/mpc/mpcutil"
 	. "github.com/renproject/mpc/rkpg"
-	"github.com/renproject/mpc/rkpg/rkpgutil"
-	"github.com/renproject/shamir"
-
-	"github.com/renproject/secp256k1"
-	"github.com/renproject/shamir/shamirutil"
 )
 
 var _ = Describe("RKPG", func() {
