@@ -16,14 +16,6 @@ import (
 	. "github.com/renproject/mpc/mpcutil"
 )
 
-// The main properties that we want to test for the Opener state machine are
-//
-//	1. The state transition logic is as described in the documentation.
-//	2. Once enough valid shares have been received for construction, the
-//	correct share is reconstructed.
-//	4. In a network of n nodes, each holding a share of a secret, all honest
-//	nodes will eventually be able to reconstruct the secret in the presence of
-//	n-k malicious nodes where k is the reconstruction threshold of the secret.
 var _ = Describe("Opener", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
@@ -146,6 +138,9 @@ var _ = Describe("Opener", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(opener.I()).To(Equal(i + 1))
 					if opener.I() == k {
+						// If the secrets and decommitments were reconstructed,
+						// check that they have the right form and are equal to
+						// the correct values.
 						Expect(reconstructedSecrets).ToNot(BeNil())
 						Expect(reconstructedDecommitments).ToNot(BeNil())
 						Expect(len(reconstructedSecrets)).To(Equal(len(secrets)))
@@ -165,8 +160,9 @@ var _ = Describe("Opener", func() {
 			})
 
 			It("should return an error when the share batch is invalid", func() {
-				// Setup with n + 1 and treat the last share and index as
-				// extras. The commitment will still have the correct form.
+				// Setup with n + 1 and treat the last share batch and index as
+				// extras. The commitment will still have the correct form when
+				// used with only the first n shar batches and indices.
 				indicesEx, _, _, _, shareBatchesByPlayerEx, commitmentBatch := Setup(n+1, k, b)
 				indices := indicesEx[:len(indicesEx)-1]
 				opener := open.New(commitmentBatch, indices, h)
@@ -235,8 +231,7 @@ var _ = Describe("Opener", func() {
 		ids := make([]ID, n)
 		for i := range indices {
 			id := ID(i + 1)
-			sharesAtI := shareBatchesByPlayer[i]
-			machine := openutil.NewMachine(id, uint32(n), sharesAtI, commitments,
+			machine := openutil.NewMachine(id, uint32(n), shareBatchesByPlayer[i], commitments,
 				open.New(commitments, indices, h))
 			machines[i] = &machine
 			ids[i] = id

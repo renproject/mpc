@@ -149,7 +149,7 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 	}
 
 	// No shares should be invalid. If even a single share is invalid, we mark
-	// the entire set of shares to be invalid.
+	// the entire batch of shares to be invalid.
 	for i, share := range shareBatch {
 		if !shamir.IsValid(opener.h, &opener.commitmentBatch[i], &share) {
 			return nil, nil, ErrInvalidShares
@@ -184,7 +184,7 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 		return secrets, decommitments, nil
 	}
 
-	// At this stage we have added the shares to the respective buffers
-	// but we were not yet able to reconstruct the secrets.
+	// We have added the shares to the respective buffers but we were not yet
+	// able to reconstruct the secrets.
 	return nil, nil, nil
 }
