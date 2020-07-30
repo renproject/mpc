@@ -231,7 +231,7 @@ var _ = Describe("Opener", func() {
 		ids := make([]ID, n)
 		for i := range indices {
 			id := ID(i + 1)
-			machine := openutil.NewMachine(id, uint32(n), shareBatchesByPlayer[i], commitments,
+			machine := openutil.NewMachine(id, ids, uint32(n), shareBatchesByPlayer[i], commitments,
 				open.New(commitments, indices, h))
 			machines[i] = &machine
 			ids[i] = id

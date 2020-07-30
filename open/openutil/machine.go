@@ -10,7 +10,8 @@ import (
 
 // The Machine type used for the opener network test.
 type Machine struct {
-	id                     mpcutil.ID
+	ownID                  mpcutil.ID
+	ids                    []mpcutil.ID
 	n                      uint32
 	shares                 shamir.VerifiableShares
 	commitments            []shamir.Commitment
@@ -20,32 +21,33 @@ type Machine struct {
 
 // NewMachine constructs a new Machine.
 func NewMachine(
-	id mpcutil.ID,
+	ownID mpcutil.ID,
+	ids []mpcutil.ID,
 	n uint32,
 	shares shamir.VerifiableShares,
 	commitments []shamir.Commitment,
 	opener open.Opener,
 ) Machine {
 	secrets, decommitments, _ := opener.HandleShareBatch(shares)
-	return Machine{id, n, shares, commitments, opener, secrets, decommitments}
+	return Machine{ownID, ids, n, shares, commitments, opener, secrets, decommitments}
 }
 
 // ID implements the mpcutil.Machine interface.
 func (m Machine) ID() mpcutil.ID {
-	return m.id
+	return m.ownID
 }
 
 // InitialMessages implements the mpcutil.Machine interface.
 func (m Machine) InitialMessages() []mpcutil.Message {
 	messages := make([]mpcutil.Message, m.n-1)[:0]
-	for i := uint32(0); i < m.n; i++ {
-		if mpcutil.ID(i) == m.id {
+	for _, id := range m.ids {
+		if id == m.ownID {
 			continue
 		}
 		messages = append(messages, &Message{
 			shares: m.shares,
-			from:   m.id,
-			to:     mpcutil.ID(i),
+			from:   m.ownID,
+			to:     id,
 		})
 	}
 	return messages
@@ -63,8 +65,9 @@ func (m *Machine) Handle(msg mpcutil.Message) []mpcutil.Message {
 
 // SizeHint implements the surge.SizeHinter interface.
 func (m Machine) SizeHint() int {
-	return m.id.SizeHint() +
-		4 +
+	return m.ownID.SizeHint() +
+		surge.SizeHint(m.ids) +
+		surge.SizeHint(m.n) +
 		m.shares.SizeHint() +
 		surge.SizeHint(m.commitments) +
 		m.opener.SizeHint()
@@ -72,7 +75,11 @@ func (m Machine) SizeHint() int {
 
 // Marshal implements the surge.Marshaler interface.
 func (m Machine) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := m.id.Marshal(buf, rem)
+	buf, rem, err := m.ownID.Marshal(buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	buf, rem, err = surge.Marshal(m.ids, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -93,7 +100,11 @@ func (m Machine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 
 // Unmarshal implements the surge.Unmarshaler interface.
 func (m *Machine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := m.id.Unmarshal(buf, rem)
+	buf, rem, err := m.ownID.Unmarshal(buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	buf, rem, err = surge.Unmarshal(m.ids, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
