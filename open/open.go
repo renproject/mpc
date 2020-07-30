@@ -2,13 +2,9 @@ package open
 
 import (
 	"fmt"
-	"math/rand"
-	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-	"github.com/renproject/shamir/shamirutil"
-	"github.com/renproject/surge"
 )
 
 // Opener is a state machine that is responsible for opening the secret value
@@ -25,10 +21,11 @@ import (
 //
 // The state machine supports batching. If several secrets need to be opened at
 // once, instead of having multiple state machines, just one can be used and the
-// incoming shares are processed in batches. This requires all of the secrets to
-// share the number of shares required to open the secrets, (b) the number of
-// participating players, the expected indices of the participating players, and
-// the Pedersen parameter (known as "h").
+// incoming shares are processed in batches. This batching functionality
+// requires the secrets to have all been shared using the same parameters, i.e.
+//	- the number of players and their corresponding indices,
+//	- the reconstruction threshold (k),
+//	- and the Pedersen parameter (h).
 type Opener struct {
 	// State
 	shareBufs []shamir.VerifiableShares
@@ -65,7 +62,7 @@ func (opener Opener) I() int {
 // commitment system parameter. The length of the commitment slice determines
 // the batch size.
 //
-// Panics: This function will panic if and of the following conditions are met.
+// Panics: This function will panic if any of the following conditions are met.
 //	- The batch size is less than 1.
 //	- The reconstruction threshold (k) is less than 1.
 //	- Not all commitments in the batch of commitments have the same
@@ -108,12 +105,11 @@ func New(commitmentBatch []shamir.Commitment, indices []secp256k1.Fn, h secp256k
 }
 
 // HandleShareBatch handles the state transition logic upon receiving a batch
-// of shares, and returns a ShareEvent that describes the outcome of the state
-// transition. See the documentation for the different ShareEvent possiblities
-// for their significance. If enough shares have been received to reconstruct
-// the secret, then this is returned, otherwise the corresponding return value
-// is nil. Similarly, the decommitment (or hiding) value for the verifiable
-// sharing will also be returned.
+// of shares. If enough shares have been received to reconstruct the secret,
+// then this is returned, otherwise the corresponding return value is nil.
+// Similarly, the decommitment (or hiding) value for the verifiable sharing
+// will also be returned. If the share batch was invalid in any way, an error
+// is returned.
 func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 	[]secp256k1.Fn,
 	[]secp256k1.Fn,
@@ -153,7 +149,7 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 	}
 
 	// No shares should be invalid. If even a single share is invalid, we mark
-	// the entire set of shares to be invalid.
+	// the entire batch of shares to be invalid.
 	for i, share := range shareBatch {
 		if !shamir.IsValid(opener.h, &opener.commitmentBatch[i], &share) {
 			return nil, nil, ErrInvalidShares
@@ -188,76 +184,7 @@ func (opener *Opener) HandleShareBatch(shareBatch shamir.VerifiableShares) (
 		return secrets, decommitments, nil
 	}
 
-	// At this stage we have added the shares to the respective buffers
-	// but we were not yet able to reconstruct the secrets.
+	// We have added the shares to the respective buffers but we were not yet
+	// able to reconstruct the secrets.
 	return nil, nil, nil
-}
-
-// Generate implements the quick.Generator interface.
-func (opener Opener) Generate(_ *rand.Rand, size int) reflect.Value {
-	// A curve point is more or less 3 field elements that contain 4 uint64s.
-	size /= 12
-
-	k := rand.Intn(size) + 1
-	b := size/k + 1
-	commitmentBatch := make([]shamir.Commitment, b)
-	for i := range commitmentBatch {
-		commitmentBatch[i] = shamir.NewCommitmentWithCapacity(k)
-		for j := 0; j < k; j++ {
-			commitmentBatch[i] = append(commitmentBatch[i], secp256k1.RandomPoint())
-		}
-	}
-	indices := shamirutil.RandomIndices(rand.Intn(20))
-	h := secp256k1.RandomPoint()
-	return reflect.ValueOf(New(commitmentBatch, indices, h))
-}
-
-// SizeHint implements the surge.SizeHinter interface.
-func (opener Opener) SizeHint() int {
-	return surge.SizeHint(opener.commitmentBatch) +
-		surge.SizeHint(opener.shareBufs) +
-		opener.h.SizeHint() +
-		surge.SizeHint(opener.indices)
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (opener Opener) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.Marshal(opener.shareBufs, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling share buffers: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.commitmentBatch, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling commitmentBatch: %v", err)
-	}
-	buf, rem, err = opener.h.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling h: %v", err)
-	}
-	buf, rem, err = surge.Marshal(opener.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling indices: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (opener *Opener) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := surge.Unmarshal(&opener.shareBufs, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling share buffers: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.commitmentBatch, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling commitment: %v", err)
-	}
-	buf, rem, err = opener.h.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling h: %v", err)
-	}
-	buf, rem, err = surge.Unmarshal(&opener.indices, buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling indices: %v", err)
-	}
-	return buf, rem, nil
 }
