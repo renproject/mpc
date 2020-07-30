@@ -8,6 +8,7 @@ import (
 	"github.com/renproject/shamir/rs"
 )
 
+// An RKPGer is a state machine that implements the RKPG protocol.
 type RKPGer struct {
 	state State
 
@@ -21,8 +22,9 @@ type RKPGer struct {
 	h       secp256k1.Point
 }
 
-// New returns a new RKPG state machine along with the initial messages that
-// are to be sent to the other parties.
+// New returns a new RKPG state machine along with the initial message that is
+// to be broadcast to the other parties. The state machine will handle this
+// message before being returned.
 func New(
 	indices []secp256k1.Fn,
 	h secp256k1.Point,
