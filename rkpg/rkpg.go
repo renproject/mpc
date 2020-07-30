@@ -21,6 +21,8 @@ type RKPGer struct {
 	h       secp256k1.Point
 }
 
+// New returns a new RKPG state machine along with the initial messages that
+// are to be sent to the other parties.
 func New(
 	indices []secp256k1.Fn,
 	h secp256k1.Point,
@@ -43,7 +45,7 @@ func New(
 	}
 	k := rngComs[0].Len()
 
-	shares := make(shamir.Shares, len(rngShares))
+	shares := make(shamir.Shares, b)
 	for i := range shares {
 		ind := rzgShares[i].Share.Index
 		dRnShare := shamir.NewShare(ind, rngShares[i].Decommitment)
@@ -64,6 +66,12 @@ func New(
 		decoder: rs.NewDecoder(indices, k),
 		indices: indicesCopy,
 		h:       h,
+	}
+
+	// Proccess own share.
+	_, err := rkpger.HandleShareBatch(shares)
+	if err != nil {
+		panic("error handling own share")
 	}
 
 	return rkpger, shares

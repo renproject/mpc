@@ -41,62 +41,20 @@ var _ = Describe("RKPG", func() {
 		return rngShares, rzgShares, rngComs, secrets
 	}
 
+	RKPGShare := func(rngShare, rzgShare shamir.VerifiableShare) shamir.Share {
+		var share shamir.Share
+		ind := rzgShare.Share.Index
+		dRnShare := shamir.NewShare(ind, rngShare.Decommitment)
+		share.Add(&dRnShare, &rzgShare.Share)
+		return share
+	}
+
 	Context("state transitions", func() {
-		CreateInvalidShares := func(
-			t int,
-			indices []secp256k1.Fn,
-			h secp256k1.Point,
-			rngShares, rzgShares []shamir.VerifiableShares,
-			rngComs []shamir.Commitment,
-		) []shamir.Shares {
-			n := len(indices)
-			b := len(rngComs)
-			shares := make([]shamir.Shares, n)
-			for i := range shares {
-				shares[i] = make(shamir.Shares, len(rngShares[i]))
-				for j := range shares[i] {
-					ind := rzgShares[i][j].Share.Index
-					dRnShare := shamir.NewShare(ind, rngShares[i][j].Decommitment)
-					shares[i][j].Add(&dRnShare, &rzgShares[i][j].Share)
-				}
-			}
-
-			badBuf := rand.Intn(b)
-			for i := 0; i < t; i++ {
-				shares[i][badBuf] = shamir.NewShare(shares[i][badBuf].Index, secp256k1.NewFnFromU16(0))
-			}
-
-			return shares
-		}
-
-		CheckAgainstInvalidShares := func(
-			n, k int,
-			rkpger *RKPGer,
-			shares []shamir.Shares,
-			coms []shamir.Commitment,
-		) {
-			threshold := n - k + 1
-			errThreshold := n - 2
-			for i := 0; i < threshold-1; i++ {
-				res, err := rkpger.HandleShareBatch(shares[i])
-				Expect(err).ToNot(HaveOccurred())
-				Expect(res).To(BeNil())
-			}
-			for i := threshold - 1; i < errThreshold-1; i++ {
-				res, err := rkpger.HandleShareBatch(shares[i])
-				Expect(err).To(Equal(ErrTooManyErrors))
-				Expect(res).To(BeNil())
-			}
-			res, err := rkpger.HandleShareBatch(shares[errThreshold-1])
-			Expect(res).ToNot(BeNil())
-			Expect(err).ToNot(HaveOccurred())
-		}
-
 		Specify("shares with invalid batch size", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[1], rzgShares[1], rngComs)
 
 				res, err := rkpger.HandleShareBatch(make(shamir.Shares, b-1))
 				Expect(res).To(BeNil())
@@ -108,7 +66,7 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, _ := New(indices, h, rngShares[1], rzgShares[1], rngComs)
 
 				// As it is an uninitialised slice, all of the shares in
 				// `shares` should have index zero, which should not be in the
@@ -123,14 +81,10 @@ var _ = Describe("RKPG", func() {
 			for i := 0; i < trials; i++ {
 				_, k, _, b, h, indices := RandomTestParams()
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
-				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
+				rkpger, shares := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
-				shares := make(shamir.Shares, b)
-				for j := range shares {
-					shares[j] = shamir.NewShare(indices[0], secp256k1.Fn{})
-				}
-
-				_, _ = rkpger.HandleShareBatch(shares)
+				// The RKPGer has already handled its own shares, so this
+				// should trigger a duplciate index error.
 				res, err := rkpger.HandleShareBatch(shares)
 				Expect(res).To(BeNil())
 				Expect(err).To(Equal(ErrDuplicateIndex))
@@ -144,9 +98,9 @@ var _ = Describe("RKPG", func() {
 				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				shares := make(shamir.Shares, b)
-				shares[0] = shamir.NewShare(indices[0], secp256k1.Fn{})
+				shares[0] = shamir.NewShare(indices[1], secp256k1.Fn{})
 				for j := 1; j < len(shares); j++ {
-					shares[j] = shamir.NewShare(indices[1], secp256k1.Fn{})
+					shares[j] = shamir.NewShare(indices[2], secp256k1.Fn{})
 				}
 
 				res, err := rkpger.HandleShareBatch(shares)
@@ -162,13 +116,13 @@ var _ = Describe("RKPG", func() {
 				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
 				var err error
-				shares := make([]shamir.Shares, n)
+				shares := make([]shamir.Shares, n-1)
 				for j := range shares {
-					_, shares[j] = New(indices, h, rngShares[j], rzgShares[j], rngComs)
+					_, shares[j] = New(indices, h, rngShares[j+1], rzgShares[j+1], rngComs)
 				}
 
 				threshold := n - k + 1
-				for j := 0; j < threshold-1; j++ {
+				for j := 0; j < threshold-2; j++ {
 					res, err := rkpger.HandleShareBatch(shares[j])
 					Expect(err).ToNot(HaveOccurred())
 					Expect(res).To(BeNil())
@@ -189,8 +143,34 @@ var _ = Describe("RKPG", func() {
 				rngShares, rzgShares, rngComs, _ := RXGOutputs(k, b, indices, h)
 				rkpger, _ := New(indices, h, rngShares[0], rzgShares[0], rngComs)
 
-				shares := CreateInvalidShares(t, indices, h, rngShares, rzgShares, rngComs)
-				CheckAgainstInvalidShares(n, k, &rkpger, shares, rngComs)
+				// Create invalid shares.
+				shares := make([]shamir.Shares, n-1)
+				for i := range shares {
+					shares[i] = make(shamir.Shares, b)
+					for j := range shares[i] {
+						shares[i][j] = RKPGShare(rngShares[i+1][j], rzgShares[i+1][j])
+					}
+				}
+				badBuf := rand.Intn(b)
+				for i := 0; i < t; i++ {
+					shares[i][badBuf] = shamir.NewShare(shares[i][badBuf].Index, secp256k1.NewFnFromU16(0))
+				}
+
+				threshold := n - k + 1
+				errThreshold := n - 2
+				for i := 0; i < threshold-2; i++ {
+					res, err := rkpger.HandleShareBatch(shares[i])
+					Expect(err).ToNot(HaveOccurred())
+					Expect(res).To(BeNil())
+				}
+				for i := threshold - 2; i < errThreshold-2; i++ {
+					res, err := rkpger.HandleShareBatch(shares[i])
+					Expect(err).To(Equal(ErrTooManyErrors))
+					Expect(res).To(BeNil())
+				}
+				res, err := rkpger.HandleShareBatch(shares[errThreshold-1])
+				Expect(res).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	})
