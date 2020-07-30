@@ -44,6 +44,47 @@ var _ = Describe("Opener", func() {
 		return transposed
 	}
 
+	RandomVerifiableSharingBatch := func(indices []secp256k1.Fn, k, b int) (
+		[]shamir.VerifiableShares, []shamir.Commitment, []secp256k1.Fn, []secp256k1.Fn,
+	) {
+		n := len(indices)
+
+		sharingsBatch := make([]shamir.VerifiableShares, b)
+		commitmentBatch := make([]shamir.Commitment, b)
+		secrets := make([]secp256k1.Fn, b)
+		decommitments := make([]secp256k1.Fn, b)
+
+		coeffs := make([]secp256k1.Fn, k)
+		sharing := make(shamir.Shares, n)
+		decommitmentSharing := make(shamir.Shares, n)
+		for i := 0; i < b; i++ {
+			sharingsBatch[i] = make(shamir.VerifiableShares, n)
+			commitmentBatch[i] = shamir.NewCommitmentWithCapacity(k)
+
+			secrets[i] = secp256k1.RandomFn()
+			shamir.ShareAndGetCoeffs(&sharing, coeffs, indices, secrets[i], k)
+			commitmentBatch[i] = commitmentBatch[i][:k]
+			for j, c := range coeffs {
+				commitmentBatch[i][j].BaseExp(&c)
+			}
+			decommitments[i] = secp256k1.RandomFn()
+			shamir.ShareAndGetCoeffs(&decommitmentSharing, coeffs, indices, decommitments[i], k)
+			var tmp secp256k1.Point
+			for j, c := range coeffs {
+				tmp.Scale(&h, &c)
+				commitmentBatch[i][j].Add(&commitmentBatch[i][j], &tmp)
+			}
+
+			for j := range sharingsBatch[i] {
+				sharingsBatch[i][j].Share = sharing[j]
+				sharingsBatch[i][j].Decommitment = decommitmentSharing[j].Value
+			}
+		}
+
+		shareBatchesByPlayer := TransposeShares(sharingsBatch)
+		return shareBatchesByPlayer, commitmentBatch, secrets, decommitments
+	}
+
 	PerturbRandomShareInBatch := func(shareBatch shamir.VerifiableShares) shamir.VerifiableShares {
 		r := rand.Uint32()
 		// Make sure that we always perturb.
@@ -74,22 +115,15 @@ var _ = Describe("Opener", func() {
 			[]secp256k1.Fn,
 			open.Opener,
 			[]secp256k1.Fn,
+			[]secp256k1.Fn,
 			[]shamir.VerifiableShares,
 			[]shamir.Commitment,
 		) {
-			indices := shamirutil.SequentialIndices(n)
-			sharingsBatch := make([]shamir.VerifiableShares, b)
-			commitments := make([]shamir.Commitment, b)
-			secrets := make([]secp256k1.Fn, b)
-			for i := 0; i < b; i++ {
-				sharingsBatch[i] = make(shamir.VerifiableShares, n)
-				commitments[i] = shamir.NewCommitmentWithCapacity(k)
-				secrets[i] = secp256k1.RandomFn()
-				shamir.VShareSecret(&sharingsBatch[i], &commitments[i], indices, h, secrets[i], k)
-			}
-			shareBatchesByPlayer := TransposeShares(sharingsBatch)
+			indices := shamirutil.RandomIndices(n)
+			shareBatchesByPlayer, commitments, secrets, decommitments :=
+				RandomVerifiableSharingBatch(indices, k, b)
 			opener := open.New(commitments, indices, h)
-			return indices, opener, secrets, shareBatchesByPlayer, commitments
+			return indices, opener, secrets, decommitments, shareBatchesByPlayer, commitments
 		}
 
 		CheckInvalidBatchBehaviour := func(
@@ -105,32 +139,37 @@ var _ = Describe("Opener", func() {
 
 		Context("state transitions", func() {
 			It("should add the share to the buffer if it is valid", func() {
-				_, opener, secrets, shareBatchesByPlayer, _ := Setup(n, k, b)
+				_, opener, secrets, decommitments, shareBatchesByPlayer, _ := Setup(n, k, b)
 
 				for i, shareBatch := range shareBatchesByPlayer {
-					reconstructedSecrets, decommitments, err := opener.HandleShareBatch(shareBatch)
+					reconstructedSecrets, reconstructedDecommitments, err := opener.HandleShareBatch(shareBatch)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(opener.I()).To(Equal(i + 1))
 					if opener.I() == k {
 						Expect(reconstructedSecrets).ToNot(BeNil())
-						Expect(decommitments).ToNot(BeNil())
+						Expect(reconstructedDecommitments).ToNot(BeNil())
 						Expect(len(reconstructedSecrets)).To(Equal(len(secrets)))
 						Expect(len(reconstructedSecrets)).To(Equal(b))
 						Expect(len(decommitments)).To(Equal(b))
 						for i, secret := range reconstructedSecrets {
 							Expect(secret.Eq(&secrets[i])).To(BeTrue())
 						}
-						// TODO: Check decommitments too?
+						for i, decommitment := range reconstructedDecommitments {
+							Expect(decommitment.Eq(&decommitments[i])).To(BeTrue())
+						}
 					} else {
 						Expect(reconstructedSecrets).To(BeNil())
-						Expect(decommitments).To(BeNil())
+						Expect(reconstructedDecommitments).To(BeNil())
 					}
 				}
 			})
 
 			It("should return an error when the share batch is invalid", func() {
-				indices, _, _, shareBatchesByPlayerEx, commitmentBatch := Setup(n+1, k, b)
-				opener := open.New(commitmentBatch, indices[:len(indices)-1], h)
+				// Setup with n + 1 and treat the last share and index as
+				// extras. The commitment will still have the correct form.
+				indicesEx, _, _, _, shareBatchesByPlayerEx, commitmentBatch := Setup(n+1, k, b)
+				indices := indicesEx[:len(indicesEx)-1]
+				opener := open.New(commitmentBatch, indices, h)
 				shareBatchesByPlayer := shareBatchesByPlayerEx[:len(shareBatchesByPlayerEx)-1]
 				extraShareBatch := shareBatchesByPlayerEx[len(shareBatchesByPlayerEx)-1]
 
@@ -188,22 +227,14 @@ var _ = Describe("Opener", func() {
 		n := 20
 		k := 7
 
-		indices := shamirutil.SequentialIndices(n)
-		sharingsBatch := make([]shamir.VerifiableShares, b)
-		commitments := make([]shamir.Commitment, b)
+		indices := shamirutil.RandomIndices(n)
 		machines := make([]Machine, n)
-		secrets := make([]secp256k1.Fn, b)
-		for i := 0; i < b; i++ {
-			sharingsBatch[i] = make(shamir.VerifiableShares, n)
-			commitments[i] = shamir.NewCommitmentWithCapacity(k)
-			secrets[i] = secp256k1.RandomFn()
-			shamir.VShareSecret(&sharingsBatch[i], &commitments[i], indices, h, secrets[i], k)
-		}
-		shareBatchesByPlayer := TransposeShares(sharingsBatch)
+		shareBatchesByPlayer, commitments, secrets, decommitments :=
+			RandomVerifiableSharingBatch(indices, k, b)
 
 		ids := make([]ID, n)
 		for i := range indices {
-			id := ID(i)
+			id := ID(i + 1)
 			sharesAtI := shareBatchesByPlayer[i]
 			machine := openutil.NewMachine(id, uint32(n), sharesAtI, commitments,
 				open.New(commitments, indices, h))
@@ -226,17 +257,18 @@ var _ = Describe("Opener", func() {
 				if isOffline[machine.ID()] {
 					continue
 				}
-				reconstructed := machine.(*openutil.Machine).Secrets
-				decommitments := machine.(*openutil.Machine).Decommitments
+				reconstructedSecrets := machine.(*openutil.Machine).Secrets
+				reconstructedDecommitments := machine.(*openutil.Machine).Decommitments
 
 				for i := 0; i < b; i++ {
-					if !reconstructed[i].Eq(&secrets[i]) {
+					if !reconstructedSecrets[i].Eq(&secrets[i]) ||
+						!reconstructedDecommitments[i].Eq(&decommitments[i]) {
 						network.Dump("test.dump")
 						Fail(fmt.Sprintf("machine with ID %v got the wrong secret", machine.ID()))
 					}
 				}
 
-				Expect(len(decommitments)).To(Equal(b))
+				Expect(len(reconstructedDecommitments)).To(Equal(b))
 			}
 		})
 	})
