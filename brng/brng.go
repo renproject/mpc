@@ -5,75 +5,114 @@ import (
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
-
-	"github.com/renproject/mpc/brng/table"
 )
 
 type BRNGer struct {
 	batchSize uint32
+	index     secp256k1.Fn
 	h         secp256k1.Point
 }
 
 // New creates a new BRNG state machine for the given indices and pedersen
 // parameter h.
-func New(batchSize, k uint32, indices []secp256k1.Fn, h secp256k1.Point) (BRNGer, table.Row) {
-	row := table.MakeRow(len(indices), int(k), int(batchSize))
-	for i := range row {
-		r := secp256k1.RandomFn()
-		pointerToShares := row[i].BorrowShares()
-		pointerToCommitment := row[i].BorrowCommitment()
-		shamir.VShareSecret(pointerToShares, pointerToCommitment, indices, h, r, int(k))
+func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp256k1.Point) (
+	BRNGer, []Sharing,
+) {
+	if batchSize < 1 {
+		panic(fmt.Sprintf("batch size must be at least 1: got %v", batchSize))
 	}
-	brnger := BRNGer{batchSize, h}
-	return brnger, row
+	if k < 1 {
+		panic(fmt.Sprintf("k must be at least 1: got %v", k))
+	}
+	n := len(indices)
+	sharings := make([]Sharing, int(batchSize))
+	for i := range sharings {
+		sharings[i].Shares = make(shamir.VerifiableShares, n)
+		sharings[i].Commitment = shamir.NewCommitmentWithCapacity(int(k))
+		shamir.VShareSecret(&sharings[i].Shares, &sharings[i].Commitment,
+			indices, h, secp256k1.RandomFn(), int(k))
+	}
+	brnger := BRNGer{batchSize, index, h}
+	return brnger, sharings
 }
 
-// HandleSlice performs the state transition for the BRNger state machine upon
-// receiving a slice.
-func (brnger *BRNGer) HandleSlice(slice table.Slice) (
-	shamir.VerifiableShares, []shamir.Commitment, []table.Element,
+func (brnger *BRNGer) IsValid(
+	sharesBatch []shamir.VerifiableShares,
+	commitmentsBatch [][]shamir.Commitment,
+	requiredContributions int,
+) error {
+	if requiredContributions < 1 {
+		panic(fmt.Sprintf("required contributions must be at least 1: got %v", requiredContributions))
+	}
+	if uint32(len(commitmentsBatch)) != brnger.batchSize {
+		return ErrIncorrectBatchSize
+	}
+	numContributions := len(commitmentsBatch[0])
+	if numContributions < requiredContributions {
+		return ErrNotEnoughContributions
+	}
+	for _, commitments := range commitmentsBatch {
+		if len(commitments) != numContributions {
+			return ErrInvalidInputDimensions
+		}
+	}
+	k := commitmentsBatch[0][0].Len()
+	for _, commitments := range commitmentsBatch {
+		for _, commitment := range commitments {
+			if commitment.Len() != k {
+				return ErrInvalidInputDimensions
+			}
+		}
+	}
+
+	if uint32(len(sharesBatch)) != brnger.batchSize {
+		return ErrIncorrectBatchSize
+	}
+	for i, shares := range sharesBatch {
+		if len(shares) != numContributions {
+			return ErrInvalidInputDimensions
+		}
+		for j, share := range shares {
+			if !share.Share.IndexEq(&brnger.index) {
+				return ErrIncorrectIndex
+			}
+			if !shamir.IsValid(brnger.h, &commitmentsBatch[i][j], &share) {
+				return ErrInvalidShares
+			}
+		}
+	}
+
+	return nil
+}
+
+// HandleConsensusOutput performs the state transition for the BRNger state
+// machine upon receiving a slice.
+func HandleConsensusOutput(
+	sharesBatch []shamir.VerifiableShares, commitmentsBatch [][]shamir.Commitment,
+) (
+	shamir.VerifiableShares, []shamir.Commitment,
 ) {
-	if brnger.batchSize != uint32(slice.BatchSize()) {
-		panic(fmt.Sprintf(
-			"slice has the wrong batch size: expected %v, got %v",
-			brnger.batchSize, slice.BatchSize(),
-		))
-	}
-
-	// Higher level checks ensure that the Element's within a slice have
-	// the correct index. So at the lower level, BRNG state machine can
-	// proceed without checking them
-	if !slice.HasValidForm() {
-		panic("slice has invalid form")
-	}
-
-	commitments := make([]shamir.Commitment, brnger.batchSize)
-	for i, col := range slice {
-		var commitment shamir.Commitment
-		commitment.Set(col[0].Commitment())
-		for _, e := range col[1:] {
-			commitment.Add(commitment, e.Commitment())
+	commitmentSumBatch := make([]shamir.Commitment, len(commitmentsBatch))
+	for i, commitments := range commitmentsBatch {
+		commitmentSumBatch[i].Set(commitments[0])
+		for _, com := range commitments[1:] {
+			commitmentSumBatch[i].Add(commitmentSumBatch[i], com)
 		}
-		commitments[i].Set(commitment)
 	}
 
-	// This checks the validity of every element in every column of the slice
-	// Faults are an array of elements that fail the validity check
-	faults := slice.Faults(brnger.h)
-	if faults != nil {
-		return nil, commitments, faults
+	// If the given shares were nil then they should be ignored, otherwise
+	// progress to summing them.
+	if sharesBatch == nil {
+		return nil, commitmentSumBatch
 	}
 
-	// Construct the output share(s).
-	shares := make(shamir.VerifiableShares, brnger.batchSize)
-	for i, col := range slice {
-		share := col[0].Share()
-		for _, e := range col[1:] {
-			summand := e.Share()
-			share.Add(&share, &summand)
+	shareSumBatch := make(shamir.VerifiableShares, len(sharesBatch))
+	for i, shares := range sharesBatch {
+		shareSumBatch[i] = shares[0]
+		for _, share := range shares[1:] {
+			shareSumBatch[i].Add(&shareSumBatch[i], &share)
 		}
-		shares[i] = share
 	}
 
-	return shares, commitments, nil
+	return shareSumBatch, commitmentSumBatch
 }

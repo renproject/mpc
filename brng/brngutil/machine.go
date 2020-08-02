@@ -9,7 +9,6 @@ import (
 
 	"github.com/renproject/mpc/brng"
 	"github.com/renproject/mpc/brng/mock"
-	"github.com/renproject/mpc/brng/table"
 	"github.com/renproject/mpc/mpcutil"
 )
 
@@ -17,18 +16,18 @@ import (
 // algorithm.
 type PlayerMachine struct {
 	id, consID mpcutil.ID
-	row        table.Row
+	row        []brng.Sharing
 	brnger     brng.BRNGer
 
-	shares      shamir.VerifiableShares
-	commitments []shamir.Commitment
+	Shares      shamir.VerifiableShares
+	Commitments []shamir.Commitment
 }
 
 // SizeHint implements the surge.SizeHinter interface.
 func (pm PlayerMachine) SizeHint() int {
 	return pm.id.SizeHint() +
 		pm.consID.SizeHint() +
-		pm.row.SizeHint() +
+		surge.SizeHint(pm.row) +
 		pm.brnger.SizeHint()
 }
 
@@ -42,7 +41,7 @@ func (pm PlayerMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = pm.row.Marshal(buf, rem)
+	buf, rem, err = surge.Marshal(pm.row, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -60,7 +59,7 @@ func (pm *PlayerMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = pm.row.Unmarshal(buf, rem)
+	buf, rem, err = surge.Unmarshal(&pm.row, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -89,26 +88,9 @@ func (pm PlayerMachine) InitialMessages() []mpcutil.Message {
 // Handle implements the Machine interface.
 func (pm *PlayerMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	cmsg := msg.(*ConsensusMessage)
-	shares, commitments, _ := pm.brnger.HandleSlice(cmsg.slice)
-	pm.SetOutput(shares, commitments)
+	// TODO: Check validity?
+	pm.Shares, pm.Commitments = brng.HandleConsensusOutput(cmsg.sharesBatch, cmsg.commitmentsBatch)
 	return nil
-}
-
-// SetOutput sets the shares and commitments for the player that represent the
-// output of the BRNG algorithm.
-func (pm *PlayerMachine) SetOutput(shares shamir.VerifiableShares, commitments []shamir.Commitment) {
-	pm.shares = shares
-	pm.commitments = commitments
-}
-
-// Shares returns the output shares of the player.
-func (pm PlayerMachine) Shares() shamir.VerifiableShares {
-	return pm.shares
-}
-
-// Commitments returns the output commitments of the player.
-func (pm PlayerMachine) Commitments() []shamir.Commitment {
-	return pm.commitments
 }
 
 // ConsensusMachine represents the trusted party for the consensus algorithm
@@ -199,14 +181,35 @@ func (cm *ConsensusMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 func (cm ConsensusMachine) formConsensusMessages() []mpcutil.Message {
 	var messages []mpcutil.Message
 
+	table := cm.engine.Table()
+	t := len(table)
+	b := len(table[0])
+
+	commitmentsBatch := make([][]shamir.Commitment, b)
+	for i := range commitmentsBatch {
+		commitmentsBatch[i] = make([]shamir.Commitment, t)
+		for j := range commitmentsBatch[i] {
+			commitmentsBatch[i][j] = table[j][i].Commitment
+		}
+	}
+
 	for i, id := range cm.playerIDs {
-		index := cm.indices[i]
+		// index := cm.indices[i]
+		sharesBatch := make([]shamir.VerifiableShares, b)
+
+		for j := range sharesBatch {
+			sharesBatch[j] = make(shamir.VerifiableShares, t)
+			for k := range sharesBatch[j] {
+				sharesBatch[j][k] = table[k][j].Shares[i]
+			}
+		}
 
 		message := BrngMessage{
 			msg: &ConsensusMessage{
-				from:  cm.id,
-				to:    id,
-				slice: cm.engine.TakeSlice(index),
+				from:             cm.id,
+				to:               id,
+				sharesBatch:      sharesBatch,
+				commitmentsBatch: commitmentsBatch,
 			},
 		}
 
@@ -236,19 +239,20 @@ func NewMachine(
 	id, consID mpcutil.ID,
 	playerIDs []mpcutil.ID,
 	indices, honestIndices []secp256k1.Fn,
+	index secp256k1.Fn,
 	h secp256k1.Point,
 	k, b int,
 ) BrngMachine {
 	if machineType == BrngTypePlayer {
-		brnger, row := brng.New(uint32(b), uint32(k), indices, h)
+		brnger, row := brng.New(uint32(b), uint32(k), indices, index, h)
 
 		pmachine := PlayerMachine{
 			id:          id,
 			consID:      consID,
 			row:         row,
 			brnger:      brnger,
-			shares:      nil,
-			commitments: nil,
+			Shares:      nil,
+			Commitments: nil,
 		}
 
 		return BrngMachine{
@@ -348,7 +352,7 @@ func (bm BrngMachine) Shares() shamir.VerifiableShares {
 	if !ok {
 		return nil
 	}
-	return pm.Shares()
+	return pm.Shares
 }
 
 // Commitments returns the output commitments of the player if the machine
@@ -358,5 +362,5 @@ func (bm BrngMachine) Commitments() []shamir.Commitment {
 	if !ok {
 		return nil
 	}
-	return pm.Commitments()
+	return pm.Commitments
 }
