@@ -105,7 +105,16 @@ func (brnger *BRNGer) IsValid(
 }
 
 // HandleConsensusOutput performs the state transition for the BRNger state
-// machine upon receiving a slice.
+// machine upon receiving the slice of verifiable shares that is output by the
+// consensus protocol. It is assumed that the consensus protocol will decide on
+// an output such that >=k players will find that their inputs to this function
+// are valid. It is assumed that the player will use IsValid during the
+// consensus protocol, and if it is found that the shares in the output of the
+// consensus protocol are not valid for this player, the shares argument should
+// be nil. In this case, the corresponding output shares will also be nil.
+// Every time this function is called, it is assumed that the given commitments
+// are valid, which should be the case if they came from a commited block from
+// the consensus algorithm.
 func HandleConsensusOutput(
 	sharesBatch []shamir.VerifiableShares, commitmentsBatch [][]shamir.Commitment,
 ) (
