@@ -7,6 +7,7 @@ import (
 	"github.com/renproject/shamir"
 )
 
+//BRNGer implements the BRNG algorithm.
 type BRNGer struct {
 	batchSize uint32
 	index     secp256k1.Fn
@@ -14,7 +15,12 @@ type BRNGer struct {
 }
 
 // New creates a new BRNG state machine for the given indices and pedersen
-// parameter h.
+// parameter h. The given index represents the index of the created player. The
+// batch size represents the number of instances of the algorithm to be run in
+// parallel.
+//
+// Panics: This function will panic if either the batch size or the
+// reconstruction threshold (k) are less than 1.
 func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp256k1.Point) (
 	BRNGer, []Sharing,
 ) {
@@ -36,6 +42,17 @@ func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp
 	return brnger, sharings
 }
 
+// IsValid checks the validity of the given potential consensus outputs. The
+// required contributions argument is the minimum number of contributions
+// required from other players for the consensus output to be considered valid.
+// Usually, this will be set to the reconstruction threshold (k) of the shares.
+// A return value of true means that this consensus output can be used to
+// construct the output shares and commitments for BRNG. If the return value is
+// false, then either the shares or the commitments or both are not valid, and
+// a corresponding error is returned based on how they are invalid.
+//
+// Panics: This function will panic if the given required contributions is less
+// than 1.
 func (brnger *BRNGer) IsValid(
 	sharesBatch []shamir.VerifiableShares,
 	commitmentsBatch [][]shamir.Commitment,
@@ -44,8 +61,9 @@ func (brnger *BRNGer) IsValid(
 	if requiredContributions < 1 {
 		panic(fmt.Sprintf("required contributions must be at least 1: got %v", requiredContributions))
 	}
+	// Commitments validity.
 	if uint32(len(commitmentsBatch)) != brnger.batchSize {
-		return ErrIncorrectBatchSize
+		return ErrIncorrectCommitmentsBatchSize
 	}
 	numContributions := len(commitmentsBatch[0])
 	if numContributions < requiredContributions {
@@ -53,24 +71,25 @@ func (brnger *BRNGer) IsValid(
 	}
 	for _, commitments := range commitmentsBatch {
 		if len(commitments) != numContributions {
-			return ErrInvalidInputDimensions
+			return ErrInvalidCommitmentDimensions
 		}
 	}
 	k := commitmentsBatch[0][0].Len()
 	for _, commitments := range commitmentsBatch {
 		for _, commitment := range commitments {
 			if commitment.Len() != k {
-				return ErrInvalidInputDimensions
+				return ErrInvalidCommitmentDimensions
 			}
 		}
 	}
 
+	// Shares validity.
 	if uint32(len(sharesBatch)) != brnger.batchSize {
-		return ErrIncorrectBatchSize
+		return ErrIncorrectSharesBatchSize
 	}
 	for i, shares := range sharesBatch {
 		if len(shares) != numContributions {
-			return ErrInvalidInputDimensions
+			return ErrInvalidShareDimensions
 		}
 		for j, share := range shares {
 			if !share.Share.IndexEq(&brnger.index) {

@@ -88,11 +88,11 @@ var _ = Describe("BRNG", func() {
 
 				// Incorrect batch size for shares
 				err := brnger.IsValid(sharesBatch[1:], commitmentsBatch, t)
-				Expect(err).To(Equal(ErrIncorrectBatchSize))
+				Expect(err).To(Equal(ErrIncorrectSharesBatchSize))
 
 				// Incorrect batch size for commitments
 				err = brnger.IsValid(sharesBatch, commitmentsBatch[1:], t)
-				Expect(err).To(Equal(ErrIncorrectBatchSize))
+				Expect(err).To(Equal(ErrIncorrectCommitmentsBatchSize))
 			})
 
 			Specify("not enough contributions", func() {
@@ -118,7 +118,7 @@ var _ = Describe("BRNG", func() {
 					// error instead.
 					commitmentsBatch[1] = commitmentsBatch[1][1:]
 					err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
-					Expect(err).To(Equal(ErrInvalidInputDimensions))
+					Expect(err).To(Equal(ErrInvalidCommitmentDimensions))
 				})
 
 				Specify("commitment threshold", func() {
@@ -128,7 +128,7 @@ var _ = Describe("BRNG", func() {
 
 					commitmentsBatch[0][0] = shamir.NewCommitmentWithCapacity(int(k) - 1)
 					err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
-					Expect(err).To(Equal(ErrInvalidInputDimensions))
+					Expect(err).To(Equal(ErrInvalidCommitmentDimensions))
 				})
 
 				Specify("share contributions length", func() {
@@ -145,7 +145,7 @@ var _ = Describe("BRNG", func() {
 					// error instead.
 					sharesBatch[1] = sharesBatch[1][1:]
 					err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
-					Expect(err).To(Equal(ErrInvalidInputDimensions))
+					Expect(err).To(Equal(ErrInvalidShareDimensions))
 				})
 			})
 
