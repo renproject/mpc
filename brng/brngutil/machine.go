@@ -169,7 +169,7 @@ func (cm *ConsensusMachine) Handle(msg mpcutil.Message) []mpcutil.Message {
 	// then those messages were already constructed and sent
 	// so do nothing in this case
 	if !cm.engine.Done() {
-		done := cm.engine.HandleRow(pmsg.Row())
+		done := cm.engine.HandleRow(pmsg.row)
 		if done {
 			return cm.formConsensusMessages()
 		}

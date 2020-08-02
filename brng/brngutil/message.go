@@ -26,10 +26,6 @@ func (pm PlayerMessage) To() mpcutil.ID {
 	return pm.to
 }
 
-func (pm PlayerMessage) Row() []brng.Sharing {
-	return pm.row
-}
-
 // SizeHint implements the surge.SizeHinter interface.
 func (pm PlayerMessage) SizeHint() int {
 	return pm.from.SizeHint() + pm.to.SizeHint() + surge.SizeHint(pm.row)
