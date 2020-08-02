@@ -3,15 +3,17 @@ package brngutil
 import (
 	"fmt"
 
-	"github.com/renproject/mpc/brng/table"
+	"github.com/renproject/mpc/brng"
 	"github.com/renproject/mpc/mpcutil"
+	"github.com/renproject/shamir"
+	"github.com/renproject/surge"
 )
 
 // PlayerMessage represents a message that a player sends to the consensus
 // trusted party in an invocation of the BRNG algorithm.
 type PlayerMessage struct {
 	from, to mpcutil.ID
-	row      table.Row
+	row      []brng.Sharing
 }
 
 // From implements the Message interface.
@@ -24,13 +26,9 @@ func (pm PlayerMessage) To() mpcutil.ID {
 	return pm.to
 }
 
-func (pm PlayerMessage) Row() table.Row {
-	return pm.row
-}
-
 // SizeHint implements the surge.SizeHinter interface.
 func (pm PlayerMessage) SizeHint() int {
-	return pm.from.SizeHint() + pm.to.SizeHint() + pm.row.SizeHint()
+	return pm.from.SizeHint() + pm.to.SizeHint() + surge.SizeHint(pm.row)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -43,7 +41,7 @@ func (pm PlayerMessage) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = pm.row.Marshal(buf, rem)
+	buf, rem, err = surge.Marshal(pm.row, buf, rem)
 	return buf, rem, err
 }
 
@@ -57,7 +55,7 @@ func (pm *PlayerMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = pm.row.Unmarshal(buf, rem)
+	buf, rem, err = surge.Unmarshal(&pm.row, buf, rem)
 	return buf, rem, err
 }
 
@@ -65,8 +63,9 @@ func (pm *PlayerMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 // sends to all of the parties once consensus has been reached in the BRNG
 // algorithm.
 type ConsensusMessage struct {
-	from, to mpcutil.ID
-	slice    table.Slice
+	from, to         mpcutil.ID
+	sharesBatch      []shamir.VerifiableShares
+	commitmentsBatch [][]shamir.Commitment
 }
 
 // From implements the Message interface.
@@ -81,7 +80,10 @@ func (cm ConsensusMessage) To() mpcutil.ID {
 
 // SizeHint implements the surge.SizeHinter interface.
 func (cm ConsensusMessage) SizeHint() int {
-	return cm.from.SizeHint() + cm.to.SizeHint() + cm.slice.SizeHint()
+	return cm.from.SizeHint() +
+		cm.to.SizeHint() +
+		surge.SizeHint(cm.sharesBatch) +
+		surge.SizeHint(cm.commitmentsBatch)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -94,8 +96,11 @@ func (cm ConsensusMessage) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = cm.slice.Marshal(buf, rem)
-	return buf, rem, err
+	buf, rem, err = surge.Marshal(cm.sharesBatch, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	return surge.Marshal(cm.commitmentsBatch, buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
@@ -108,8 +113,11 @@ func (cm *ConsensusMessage) Unmarshal(buf []byte, rem int) ([]byte, int, error) 
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = cm.slice.Unmarshal(buf, rem)
-	return buf, rem, err
+	buf, rem, err = surge.Unmarshal(&cm.sharesBatch, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	return surge.Unmarshal(&cm.commitmentsBatch, buf, rem)
 }
 
 // BrngMessage is a wrapper for any of the messages that can be sent during an
