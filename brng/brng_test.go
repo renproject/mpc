@@ -20,7 +20,7 @@ var _ = Describe("BRNG", func() {
 
 	RandomTestParameters := func() (int, uint32, uint32, int, []secp256k1.Fn, secp256k1.Fn, secp256k1.Point) {
 		n := shamirutil.RandRange(5, 20)
-		k := shamirutil.RandRange(1, n)
+		k := shamirutil.RandRange(1, (n/2)-1)
 		b := shamirutil.RandRange(1, 5)
 		t := shamirutil.RandRange(k, n)
 		indices := shamirutil.RandomIndices(n)
@@ -242,7 +242,7 @@ var _ = Describe("BRNG", func() {
 			shuffleMsgs, isOffline := MessageShufflerDropper(playerIDs, rand.Intn(int(k)))
 
 			machines := make([]Machine, 0, len(indices)+1)
-			honestIndices := make([]secp256k1.Fn, 0, len(isOffline))
+			honestIndices := make([]secp256k1.Fn, 0, n-len(isOffline))
 			for i, id := range playerIDs {
 				machine := brngutil.NewMachine(
 					brngutil.BrngTypePlayer, id, consID, playerIDs, indices, nil, indices[i], h, int(k), int(b),
