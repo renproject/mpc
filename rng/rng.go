@@ -2,8 +2,6 @@ package rng
 
 import (
 	"fmt"
-	"math/rand"
-	"reflect"
 
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
@@ -13,13 +11,7 @@ import (
 )
 
 type RNGer struct {
-	// index signifies the given RNG state machine's index.
-	index secp256k1.Fn
-
-	// opener is the Opener state machine operating within the RNG state
-	// machine As the RNG machine receives openings from other players, the
-	// opener state machine also transitions, to eventually reconstruct the
-	// batchSize number of secrets.
+	index  secp256k1.Fn
 	opener open.Opener
 }
 
@@ -54,9 +46,17 @@ func New(
 		requiredBrngBatchSize = int(k)
 	}
 
-	for _, coms := range brngCommitmentBatch {
-		if len(coms) != requiredBrngBatchSize {
-			panic("invalid sets of commitments")
+	for _, commitments := range brngCommitmentBatch {
+		if len(commitments) != requiredBrngBatchSize {
+			panic("invalid commitment dimensions")
+		}
+		for _, commitment := range commitments {
+			if commitment.Len() != int(k) {
+				panic(fmt.Sprintf(
+					"inconsistent commitment threshold: expected %v, got %v",
+					k, commitment.Len(),
+				))
+			}
 		}
 	}
 
@@ -66,6 +66,13 @@ func New(
 	ignoreShares := brngShareBatch == nil
 
 	if !ignoreShares {
+		if len(brngShareBatch) != int(b) {
+			panic(fmt.Sprintf(
+				"incorrect share batch size: expected %v (commitments), got %v\n",
+				b, len(brngShareBatch),
+			))
+		}
+
 		// Each set of shares in the batch should have the correct length.
 		for _, shares := range brngShareBatch {
 			if len(shares) != requiredBrngBatchSize {
@@ -102,7 +109,7 @@ func New(
 	// other players in the network.
 	var directedOpenings map[secp256k1.Fn]shamir.VerifiableShares = nil
 	if !ignoreShares {
-		directedOpenings = make(map[secp256k1.Fn]shamir.VerifiableShares, b)
+		directedOpenings = make(map[secp256k1.Fn]shamir.VerifiableShares, len(indices))
 		for _, j := range indices {
 			for _, setOfShares := range brngShareBatch {
 				accShare := compute.ShareOfShare(j, setOfShares)
@@ -145,43 +152,4 @@ func (rnger *RNGer) HandleShareBatch(shareBatch shamir.VerifiableShares) (shamir
 		shares[i] = shamir.NewVerifiableShare(share, decommitments[i])
 	}
 	return shares, nil
-}
-
-// SizeHint implements the surge.SizeHinter interface.
-func (rnger RNGer) SizeHint() int {
-	return rnger.index.SizeHint() +
-		rnger.opener.SizeHint()
-}
-
-// Marshal implements the surge.Marshaler interface.
-func (rnger RNGer) Marshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := rnger.index.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling index: %v", err)
-	}
-	buf, rem, err = rnger.opener.Marshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("marshaling opener: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// Unmarshal implements the surge.Unmarshaler interface.
-func (rnger *RNGer) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
-	buf, rem, err := rnger.index.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling index: %v", err)
-	}
-	buf, rem, err = rnger.opener.Unmarshal(buf, rem)
-	if err != nil {
-		return buf, rem, fmt.Errorf("unmarshaling opener: %v", err)
-	}
-	return buf, rem, nil
-}
-
-// Generate implements the quick.Generator interface.
-func (rnger RNGer) Generate(rand *rand.Rand, size int) reflect.Value {
-	index := secp256k1.RandomFn()
-	opener := open.Opener{}.Generate(rand, size).Interface().(open.Opener)
-	return reflect.ValueOf(RNGer{index, opener})
 }
