@@ -38,8 +38,6 @@ func New(
 	ownIndex secp256k1.Fn,
 	indices []secp256k1.Fn,
 	h secp256k1.Point,
-	// TODO: The documentation needs to point out that if this argument is not
-	// nil, then it is assumed to be valid.
 	brngShareBatch []shamir.VerifiableShares,
 	brngCommitmentBatch [][]shamir.Commitment,
 	isZero bool,
