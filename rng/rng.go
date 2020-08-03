@@ -10,11 +10,30 @@ import (
 	"github.com/renproject/mpc/rng/compute"
 )
 
+// An RNGer implements the RNG or RZG protocol.
 type RNGer struct {
 	index  secp256k1.Fn
 	opener open.Opener
 }
 
+// New creates a new intance of a state machine that carries out either the RNG
+// or RZG protocol. Which one of these two cases is instantiated is determined
+// by the isZero argument. The share and commitment batch arguments are outputs
+// from the BRNG protocol; they are expected to be valid, and if the given
+// shares are nil then they will be ignored. Along with the state machine, the
+// initial messages to be sent to the other parties are returned, which is a
+// map indexed by the index of the player that the message is destined for. If
+// this function is called with a nil share batch, this returned map will also
+// be nil, as the initial messages cannot be computed without input shares.
+//
+// Panics: This function will panic in the following cases.
+//	- The batch size is less than 1.
+//	- The batch size of the BRNG outputs is less than 1 in the case of RZG, or
+//	less than 2 in the case of RNG.
+//	- Not all batch sizes of the BRNG outputs (both commitments and shares) are
+//	the same.
+//	- Not all commitments have the correct threshold (k).
+//	- The shares and commitments have a different batch size.
 func New(
 	ownIndex secp256k1.Fn,
 	indices []secp256k1.Fn,
@@ -138,6 +157,11 @@ func New(
 	return rnger, directedOpenings, outputCommitments
 }
 
+// HandleShareBatch handles a batch of shares received from another player. If
+// the share batch was invalid in any way, an error will be returned. If the
+// given share batch was the kth valid batch to be received, reconstruction is
+// possible and the return value will be the reconstructed secrets. Otherwise,
+// the return value will be nil.
 func (rnger *RNGer) HandleShareBatch(shareBatch shamir.VerifiableShares) (shamir.VerifiableShares, error) {
 	secrets, decommitments, err := rnger.opener.HandleShareBatch(shareBatch)
 	if err != nil {
