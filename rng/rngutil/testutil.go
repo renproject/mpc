@@ -36,7 +36,7 @@ func RandomOtherIndex(indices []secp256k1.Fn, avoid *secp256k1.Fn) secp256k1.Fn 
 
 // BRNGOutputBatch creates a random output for one player from BRNG, with the
 // given batch number.
-func BRNGOutputBatch(index secp256k1.Fn, b, k int, h secp256k1.Point) (
+func BRNGOutputBatch(index secp256k1.Fn, b, c, k int, h secp256k1.Point) (
 	[]shamir.VerifiableShares,
 	[][]shamir.Commitment,
 ) {
@@ -44,25 +44,25 @@ func BRNGOutputBatch(index secp256k1.Fn, b, k int, h secp256k1.Point) (
 	coms := make([][]shamir.Commitment, b)
 
 	for i := 0; i < b; i++ {
-		shares[i], coms[i] = BRNGOutput(index, k, h)
+		shares[i], coms[i] = BRNGOutput(index, c, k, h)
 	}
 
 	return shares, coms
 }
 
 // BRNGOutput creates a random output for one player from BRNG.
-func BRNGOutput(index secp256k1.Fn, k int, h secp256k1.Point) (
+func BRNGOutput(index secp256k1.Fn, b, k int, h secp256k1.Point) (
 	shamir.VerifiableShares,
 	[]shamir.Commitment,
 ) {
-	shares := make(shamir.VerifiableShares, k)
-	coms := make([]shamir.Commitment, k)
+	shares := make(shamir.VerifiableShares, b)
+	coms := make([]shamir.Commitment, b)
 
 	gPow := secp256k1.Point{}
 	hPow := secp256k1.Point{}
 	sCoeffs := make([]secp256k1.Fn, k)
 	rCoeffs := make([]secp256k1.Fn, k)
-	for i := 0; i < k; i++ {
+	for i := 0; i < b; i++ {
 		for j := 0; j < k; j++ {
 			sCoeffs[j] = secp256k1.RandomFn()
 			rCoeffs[j] = secp256k1.RandomFn()
