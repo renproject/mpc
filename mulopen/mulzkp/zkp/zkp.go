@@ -1,7 +1,19 @@
+// Package zkp provides an implementation of the ZKP for the multiplication of
+// Pedersen commited values described in Appendix C of [1].
+//
+// [1] Rosario Gennaro, Michael O. Rabin, and Tal Rabin. 1998.
+// Simplified VSS and fast-track multiparty computations with applications to
+// threshold cryptography.
+// In Proceedings of the seventeenth annual ACM symposium on Principles of
+// distributed computing (PODC ’98). Association for Computing Machinery, New
+// York, NY, USA, 101–111.
+// DOI:https://doi-org.virtual.anu.edu.au/10.1145/277697.277716
 package zkp
 
 import "github.com/renproject/secp256k1"
 
+// New constructs a new message and witness for the ZKP for the given
+// parameters.
 func New(h, b *secp256k1.Point, alpha, beta, rho, sigma, tau secp256k1.Fn) (Message, Witness) {
 	msg := Message{}
 	w := Witness{
@@ -35,6 +47,8 @@ func New(h, b *secp256k1.Point, alpha, beta, rho, sigma, tau secp256k1.Fn) (Mess
 	return msg, w
 }
 
+// ResponseForChallenge constructs a valid response for the given challenge and
+// witness.
 func ResponseForChallenge(w *Witness, e *secp256k1.Fn) Response {
 	var res Response
 
@@ -59,6 +73,8 @@ func ResponseForChallenge(w *Witness, e *secp256k1.Fn) Response {
 	return res
 }
 
+// Verify returns true if the given message, challenge and response are valid
+// for the ZKP, and false otherwise.
 func Verify(h, a, b, c *secp256k1.Point, msg *Message, res *Response, e *secp256k1.Fn) bool {
 	var actual, expected, hPow secp256k1.Point
 

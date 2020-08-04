@@ -2,6 +2,7 @@ package zkp
 
 import "github.com/renproject/secp256k1"
 
+// The Message that is initially sent in the ZKP.
 type Message struct {
 	m, m1, m2 secp256k1.Point
 }

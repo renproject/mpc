@@ -9,35 +9,41 @@ import (
 )
 
 var _ = Describe("ZKP", func() {
-	var alpha, beta, rho, sigma, tau, tmp secp256k1.Fn
-	var a, b, c, h, hPow secp256k1.Point
-
-	RandomiseInputs := func() {
-		h = secp256k1.RandomPoint()
-
-		alpha = secp256k1.RandomFn()
-		beta = secp256k1.RandomFn()
-		rho = secp256k1.RandomFn()
-		sigma = secp256k1.RandomFn()
-		tau = secp256k1.RandomFn()
-
-		hPow.ScaleUnsafe(&h, &rho)
-		a.BaseExpUnsafe(&alpha)
-		a.AddUnsafe(&a, &hPow)
-
-		hPow.ScaleUnsafe(&h, &sigma)
-		b.BaseExpUnsafe(&beta)
-		b.AddUnsafe(&b, &hPow)
-	}
-
-	RandomCorrectC := func() {
-		hPow.ScaleUnsafe(&h, &tau)
-		tmp.MulUnsafe(&alpha, &beta)
-		c.BaseExpUnsafe(&tmp)
-		c.AddUnsafe(&c, &hPow)
-	}
-
 	trials := 100
+
+	RandomTestParams := func() (
+		secp256k1.Fn, secp256k1.Fn, secp256k1.Fn, secp256k1.Fn, secp256k1.Fn,
+		secp256k1.Point, secp256k1.Point, secp256k1.Point,
+	) {
+		h := secp256k1.RandomPoint()
+
+		alpha := secp256k1.RandomFn()
+		beta := secp256k1.RandomFn()
+		rho := secp256k1.RandomFn()
+		sigma := secp256k1.RandomFn()
+		tau := secp256k1.RandomFn()
+
+		var a, b, hPow secp256k1.Point
+		hPow.Scale(&h, &rho)
+		a.BaseExp(&alpha)
+		a.Add(&a, &hPow)
+
+		hPow.Scale(&h, &sigma)
+		b.BaseExp(&beta)
+		b.Add(&b, &hPow)
+
+		return alpha, beta, rho, sigma, tau, a, b, h
+	}
+
+	RandomCorrectC := func(alpha, beta, tau secp256k1.Fn, h secp256k1.Point) secp256k1.Point {
+		var c, hPow secp256k1.Point
+		var tmp secp256k1.Fn
+		hPow.Scale(&h, &tau)
+		tmp.Mul(&alpha, &beta)
+		c.BaseExp(&tmp)
+		c.Add(&c, &hPow)
+		return c
+	}
 
 	Context("correct proofs", func() {
 		It("should verify correct proofs", func() {
@@ -47,8 +53,8 @@ var _ = Describe("ZKP", func() {
 			var res Response
 
 			for i := 0; i < trials; i++ {
-				RandomiseInputs()
-				RandomCorrectC()
+				alpha, beta, rho, sigma, tau, a, b, h := RandomTestParams()
+				c := RandomCorrectC(alpha, beta, tau, h)
 
 				msg, w = New(&h, &b, alpha, beta, rho, sigma, tau)
 				e = secp256k1.RandomFn()
@@ -66,8 +72,11 @@ var _ = Describe("ZKP", func() {
 			var w Witness
 			var res Response
 
+			var c, hPow secp256k1.Point
+			var tmp secp256k1.Fn
+
 			for i := 0; i < trials; i++ {
-				RandomiseInputs()
+				alpha, beta, rho, sigma, tau, a, b, h := RandomTestParams()
 				hPow.ScaleUnsafe(&h, &tau)
 				tmp = secp256k1.RandomFn() // Pick exponent not equal to alpha * beta
 				c.BaseExpUnsafe(&tmp)
@@ -88,8 +97,8 @@ var _ = Describe("ZKP", func() {
 			var res Response
 
 			for i := 0; i < trials; i++ {
-				RandomiseInputs()
-				RandomCorrectC()
+				alpha, beta, rho, sigma, tau, a, b, h := RandomTestParams()
+				c := RandomCorrectC(alpha, beta, tau, h)
 
 				msg, w = New(&h, &b, alpha, beta, rho, sigma, tau)
 				e = secp256k1.RandomFn()
@@ -108,8 +117,8 @@ var _ = Describe("ZKP", func() {
 			var res Response
 
 			for i := 0; i < trials; i++ {
-				RandomiseInputs()
-				RandomCorrectC()
+				alpha, beta, rho, sigma, tau, a, b, h := RandomTestParams()
+				c := RandomCorrectC(alpha, beta, tau, h)
 
 				msg, w = New(&h, &b, alpha, beta, rho, sigma, tau)
 				e = secp256k1.RandomFn()
