@@ -20,17 +20,17 @@ func New(h, b *secp256k1.Point, alpha, beta, rho, sigma, tau secp256k1.Fn) (Mess
 
 	var hPow secp256k1.Point
 
-	hPow.ScaleUnsafe(h, &w.s)
-	msg.m.BaseExpUnsafe(&w.d)
-	msg.m.AddUnsafe(&msg.m, &hPow)
+	hPow.Scale(h, &w.s)
+	msg.m.BaseExp(&w.d)
+	msg.m.Add(&msg.m, &hPow)
 
-	hPow.ScaleUnsafe(h, &w.s1)
-	msg.m1.BaseExpUnsafe(&w.x)
-	msg.m1.AddUnsafe(&msg.m1, &hPow)
+	hPow.Scale(h, &w.s1)
+	msg.m1.BaseExp(&w.x)
+	msg.m1.Add(&msg.m1, &hPow)
 
-	hPow.ScaleUnsafe(h, &w.s2)
-	msg.m2.ScaleUnsafe(b, &w.x)
-	msg.m2.AddUnsafe(&msg.m2, &hPow)
+	hPow.Scale(h, &w.s2)
+	msg.m2.Scale(b, &w.x)
+	msg.m2.Add(&msg.m2, &hPow)
 
 	return msg, w
 }
@@ -38,23 +38,23 @@ func New(h, b *secp256k1.Point, alpha, beta, rho, sigma, tau secp256k1.Fn) (Mess
 func ResponseForChallenge(w *Witness, e *secp256k1.Fn) Response {
 	var res Response
 
-	res.y.MulUnsafe(e, &w.beta)
-	res.y.AddUnsafe(&res.y, &w.d)
+	res.y.Mul(e, &w.beta)
+	res.y.Add(&res.y, &w.d)
 
-	res.w.MulUnsafe(e, &w.sigma)
-	res.w.AddUnsafe(&res.w, &w.s)
+	res.w.Mul(e, &w.sigma)
+	res.w.Add(&res.w, &w.s)
 
-	res.z.MulUnsafe(e, &w.alpha)
-	res.z.AddUnsafe(&res.z, &w.x)
+	res.z.Mul(e, &w.alpha)
+	res.z.Add(&res.z, &w.x)
 
-	res.w1.MulUnsafe(e, &w.rho)
-	res.w1.AddUnsafe(&res.w1, &w.s1)
+	res.w1.Mul(e, &w.rho)
+	res.w1.Add(&res.w1, &w.s1)
 
-	res.w2.MulUnsafe(&w.sigma, &w.alpha)
+	res.w2.Mul(&w.sigma, &w.alpha)
 	res.w2.Negate(&res.w2)
-	res.w2.AddUnsafe(&res.w2, &w.tau)
-	res.w2.MulUnsafe(&res.w2, e)
-	res.w2.AddUnsafe(&res.w2, &w.s2)
+	res.w2.Add(&res.w2, &w.tau)
+	res.w2.Mul(&res.w2, e)
+	res.w2.Add(&res.w2, &w.s2)
 
 	return res
 }
@@ -62,34 +62,34 @@ func ResponseForChallenge(w *Witness, e *secp256k1.Fn) Response {
 func Verify(h, a, b, c *secp256k1.Point, msg *Message, res *Response, e *secp256k1.Fn) bool {
 	var actual, expected, hPow secp256k1.Point
 
-	expected.BaseExpUnsafe(&res.y)
-	hPow.ScaleUnsafe(h, &res.w)
-	expected.AddUnsafe(&expected, &hPow)
+	expected.BaseExp(&res.y)
+	hPow.Scale(h, &res.w)
+	expected.Add(&expected, &hPow)
 
-	actual.ScaleUnsafe(b, e)
-	actual.AddUnsafe(&actual, &msg.m)
-
-	if !actual.Eq(&expected) {
-		return false
-	}
-
-	expected.BaseExpUnsafe(&res.z)
-	hPow.ScaleUnsafe(h, &res.w1)
-	expected.AddUnsafe(&expected, &hPow)
-
-	actual.ScaleUnsafe(a, e)
-	actual.AddUnsafe(&actual, &msg.m1)
+	actual.Scale(b, e)
+	actual.Add(&actual, &msg.m)
 
 	if !actual.Eq(&expected) {
 		return false
 	}
 
-	expected.ScaleUnsafe(b, &res.z)
-	hPow.ScaleUnsafe(h, &res.w2)
-	expected.AddUnsafe(&expected, &hPow)
+	expected.BaseExp(&res.z)
+	hPow.Scale(h, &res.w1)
+	expected.Add(&expected, &hPow)
 
-	actual.ScaleUnsafe(c, e)
-	actual.AddUnsafe(&actual, &msg.m2)
+	actual.Scale(a, e)
+	actual.Add(&actual, &msg.m1)
+
+	if !actual.Eq(&expected) {
+		return false
+	}
+
+	expected.Scale(b, &res.z)
+	hPow.Scale(h, &res.w2)
+	expected.Add(&expected, &hPow)
+
+	actual.Scale(c, e)
+	actual.Add(&actual, &msg.m2)
 
 	if !actual.Eq(&expected) {
 		return false

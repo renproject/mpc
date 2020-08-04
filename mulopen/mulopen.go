@@ -1,6 +1,7 @@
 package mulopen
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -26,37 +27,35 @@ func New(
 ) (MulOpener, []Message) {
 	batchSize := len(aShareBatch)
 	if batchSize < 1 {
-		// TODO
+		panic(fmt.Sprintf("batch size should be at least 1: got %v", batchSize))
 	}
 	if len(bShareBatch) != batchSize ||
 		len(rzgShareBatch) != batchSize ||
 		len(aCommitmentBatch) != batchSize ||
 		len(bCommitmentBatch) != batchSize ||
 		len(rzgCommitmentBatch) != batchSize {
-		// TODO
+		panic("inconsistent batch size")
 	}
 	k := aCommitmentBatch[0].Len()
 	if k < 2 {
-		// TODO
+		panic(fmt.Sprintf("k should be at least 2: got %v", k))
 	}
-	for _, com := range aCommitmentBatch {
-		if com.Len() != k {
-			// TODO
+	for i := 0; i < batchSize; i++ {
+		if aCommitmentBatch[i].Len() != k || bCommitmentBatch[i].Len() != k {
+			panic("inconsistent threshold (k)")
 		}
 	}
-	for _, com := range bCommitmentBatch {
-		if com.Len() != k {
-			// TODO
-		}
-	}
-	for _, com := range bCommitmentBatch {
+	for _, com := range rzgCommitmentBatch {
 		if com.Len() != 2*k-1 {
-			// TODO
+			panic(fmt.Sprintf("incorrect rzg k: expected 2*%v-1 = %v, got %v", k, 2*k-1, com.Len()))
 		}
 	}
 	n := len(indices)
 	if 2*k-1 > n {
-		// TODO
+		panic(fmt.Sprintf(
+			"k too large for n: expected 2*%v-1 = %v to be less than %v",
+			k, 2*k-1, n,
+		))
 	}
 	index := aShareBatch[0].Share.Index
 
@@ -103,6 +102,12 @@ func New(
 		}
 	}
 
+	// Handle own message immediately.
+	output, err := mulopener.HandleShareBatch(messageBatch)
+	if output != nil || err != nil {
+		panic("unexpected result handling own message")
+	}
+
 	return mulopener, messageBatch
 }
 
@@ -114,7 +119,7 @@ func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k
 	}()
 
 	if uint32(len(messageBatch)) != mulopener.batchSize {
-		// TODO
+		return nil, ErrIncorrectBatchSize
 	}
 	index := messageBatch[0].VShare.Share.Index
 	{
@@ -125,14 +130,20 @@ func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k
 			}
 		}
 		if !exists {
-			// TODO
+			return nil, ErrInvalidIndex
 		}
 	}
 	for i := range messageBatch {
 		if !messageBatch[i].VShare.Share.IndexEq(&index) {
-			// TODO
+			return nil, ErrInconsistentShares
 		}
 	}
+	for _, s := range mulopener.shareBufs[0] {
+		if s.IndexEq(&index) {
+			return nil, ErrDuplicateIndex
+		}
+	}
+
 	for i := uint32(0); i < mulopener.batchSize; i++ {
 		aShareCommitment := polyEvalPoint(mulopener.aCommitmentBatch[i], index)
 		bShareCommitment := polyEvalPoint(mulopener.bCommitmentBatch[i], index)
@@ -140,7 +151,7 @@ func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k
 			&mulopener.h, &aShareCommitment, &bShareCommitment, &messageBatch[i].Commitment,
 			&messageBatch[i].Proof,
 		) {
-			// TODO
+			return nil, ErrInvalidZKP
 		}
 		var shareCommitment secp256k1.Point
 		rzgShareCommitment := polyEvalPoint(mulopener.rzgCommitmentBatch[i], index)
@@ -151,7 +162,7 @@ func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k
 			&mulopener.h,
 		)
 		if !shareCommitment.Eq(&com) {
-			// TODO
+			return nil, ErrInvalidShares
 		}
 	}
 
