@@ -48,13 +48,6 @@ func New(
 			panic(fmt.Sprintf("incorrect rzg k: expected 2*%v-1 = %v, got %v", k, 2*k-1, com.Len()))
 		}
 	}
-	n := len(indices)
-	if 2*k-1 > n {
-		panic(fmt.Sprintf(
-			"k too large for n: expected 2*%v-1 = %v to be less than %v",
-			k, 2*k-1, n,
-		))
-	}
 	index := aShareBatch[0].Share.Index
 
 	shareBufs := make([]shamir.Shares, batchSize)

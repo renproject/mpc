@@ -232,7 +232,7 @@ var _ = Describe("MulOpener", func() {
 
 			Specify("invalid zkp", func() {
 				TestErrorCase(ErrInvalidZKP, 1,
-					func(messageBatch []Message, index secp256k1.Fn) []Message {
+					func(messageBatch []Message, _ secp256k1.Fn) []Message {
 						messageBatch[0].Commitment = secp256k1.RandomPoint()
 						return messageBatch
 					})
@@ -240,7 +240,7 @@ var _ = Describe("MulOpener", func() {
 
 			Specify("invalid share", func() {
 				TestErrorCase(ErrInvalidShares, 1,
-					func(messageBatch []Message, index secp256k1.Fn) []Message {
+					func(messageBatch []Message, _ secp256k1.Fn) []Message {
 						messageBatch[0].VShare.Share.Value = secp256k1.RandomFn()
 						return messageBatch
 					})
@@ -250,6 +250,103 @@ var _ = Describe("MulOpener", func() {
 
 	Context("panics", func() {
 		Specify("batch size too small", func() {
+			n, k, b, indices, h := RandomTestParams()
+			playerInd := rand.Intn(n)
+			aShares, aCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			bShares, bCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			rzgShares, rzgCommitments := rkpgutil.RZGOutputBatch(indices, 2*k-1, b, h)
+
+			Expect(func() {
+				New(
+					aShares[playerInd][:0], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd][:0], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd][:0],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments[:0], bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments[:0], rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments[:0],
+					indices, h,
+				)
+			}).To(Panic())
+		})
+
+		Specify("k too small", func() {
+			n, k, b, indices, h := RandomTestParams()
+			playerInd := rand.Intn(n)
+			aShares, aCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			bShares, bCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			rzgShares, rzgCommitments := rkpgutil.RZGOutputBatch(indices, 2*k-1, b, h)
+
+			aCommitments[0] = shamir.Commitment{secp256k1.Point{}}
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+		})
+
+		Specify("inconsistent k", func() {
+			n, k, b, indices, h := RandomTestParams()
+			playerInd := rand.Intn(n)
+			aShares, aCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			bShares, bCommitments, _ := rkpgutil.RNGOutputBatch(indices, k+1, b, h)
+			rzgShares, rzgCommitments := rkpgutil.RZGOutputBatch(indices, 2*k-1, b, h)
+
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
+		})
+
+		Specify("incorrect rzg k", func() {
+			n, k, b, indices, h := RandomTestParams()
+			playerInd := rand.Intn(n)
+			aShares, aCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			bShares, bCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			rzgShares, rzgCommitments := rkpgutil.RZGOutputBatch(indices, 2*k-2, b, h)
+
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, h,
+				)
+			}).To(Panic())
 		})
 	})
 
