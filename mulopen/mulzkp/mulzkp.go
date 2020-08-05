@@ -18,12 +18,6 @@ import (
 	"github.com/renproject/secp256k1"
 )
 
-// A Proof for the ZKP.
-type Proof struct {
-	msg zkp.Message
-	res zkp.Response
-}
-
 // CreateProof constructs a new ZKP that attests to the fact that
 // 		c = (alpha*beta)G + (tau)H,
 // where

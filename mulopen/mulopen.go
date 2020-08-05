@@ -2,8 +2,6 @@ package mulopen
 
 import (
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/renproject/mpc/mulopen/mulzkp"
 	"github.com/renproject/secp256k1"
@@ -112,12 +110,6 @@ func New(
 }
 
 func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k1.Fn, error) {
-	start := time.Now()
-	defer func() {
-		elapsed := time.Since(start)
-		log.Printf("processed message in %s", elapsed)
-	}()
-
 	if uint32(len(messageBatch)) != mulopener.batchSize {
 		return nil, ErrIncorrectBatchSize
 	}
