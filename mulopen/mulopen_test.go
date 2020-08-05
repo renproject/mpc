@@ -351,9 +351,9 @@ var _ = Describe("MulOpener", func() {
 	})
 
 	Context("network", func() {
-		n := 20
-		k := 6
-		b := 5
+		n := 15
+		k := 4
+		b := 3
 
 		Specify("all honest nodes should reconstruct the product of the secrets", func() {
 			indices := shamirutil.RandomIndices(n)

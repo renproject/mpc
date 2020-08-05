@@ -8,6 +8,8 @@ import (
 	"github.com/renproject/shamir"
 )
 
+// A MulOpener is a state machine that implements the multiply and open
+// protocol.
 type MulOpener struct {
 	shareBufs []shamir.Shares
 
@@ -18,6 +20,9 @@ type MulOpener struct {
 	h       secp256k1.Point
 }
 
+// New returns a new MulOpener state machine along with the initial message
+// that is to be broadcast to the other parties. The state machine will handle
+// this message before being returned.
 func New(
 	aShareBatch, bShareBatch, rzgShareBatch shamir.VerifiableShares,
 	aCommitmentBatch, bCommitmentBatch, rzgCommitmentBatch []shamir.Commitment,
@@ -102,6 +107,13 @@ func New(
 	return mulopener, messageBatch
 }
 
+// HandleShareBatch applies a state transition upon receiveing the given shares
+// from another party during the open in the multiply and open protocol. Once
+// enough valid shares have been received to reconstruct, the output, i.e. the
+// product of the two input secrets, is computed and returned. If not enough
+// shares have been received, the return value will be nil. If the message
+// batch id invalid in any way, an error will be returned along with a nil
+// value.
 func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k1.Fn, error) {
 	if uint32(len(messageBatch)) != mulopener.batchSize {
 		return nil, ErrIncorrectBatchSize
