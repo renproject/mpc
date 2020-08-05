@@ -1,6 +1,11 @@
 package mulzkp
 
-import "github.com/renproject/mpc/mulopen/mulzkp/zkp"
+import (
+	"math/rand"
+	"reflect"
+
+	"github.com/renproject/mpc/mulopen/mulzkp/zkp"
+)
 
 // A Proof for the ZKP.
 type Proof struct {
@@ -27,4 +32,14 @@ func (p *Proof) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	return p.res.Unmarshal(buf, rem)
+}
+
+// Generate implements the quick.Generator interface.
+func (p Proof) Generate(r *rand.Rand, size int) reflect.Value {
+	msg := zkp.Message{}.Generate(r, size).Interface().(zkp.Message)
+	res := zkp.Response{}.Generate(r, size).Interface().(zkp.Response)
+	return reflect.ValueOf(Proof{
+		msg,
+		res,
+	})
 }

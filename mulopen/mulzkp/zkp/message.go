@@ -1,6 +1,11 @@
 package zkp
 
-import "github.com/renproject/secp256k1"
+import (
+	"math/rand"
+	"reflect"
+
+	"github.com/renproject/secp256k1"
+)
 
 // The Message that is initially sent in the ZKP.
 type Message struct {
@@ -40,4 +45,14 @@ func (msg *Message) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	}
 
 	return msg.m2.Unmarshal(buf, rem)
+}
+
+// Generate implements the quick.Generator interface.
+func (msg Message) Generate(_ *rand.Rand, _ int) reflect.Value {
+	m := Message{
+		m:  secp256k1.RandomPoint(),
+		m1: secp256k1.RandomPoint(),
+		m2: secp256k1.RandomPoint(),
+	}
+	return reflect.ValueOf(m)
 }

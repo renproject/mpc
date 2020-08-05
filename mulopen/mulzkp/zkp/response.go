@@ -1,6 +1,11 @@
 package zkp
 
-import "github.com/renproject/secp256k1"
+import (
+	"math/rand"
+	"reflect"
+
+	"github.com/renproject/secp256k1"
+)
 
 // The Response for a challenge in the ZKP.
 type Response struct {
@@ -56,4 +61,16 @@ func (res *Response) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	return res.w2.Unmarshal(buf, rem)
+}
+
+// Generate implements the quick.Generator interface.
+func (res Response) Generate(_ *rand.Rand, _ int) reflect.Value {
+	r := Response{
+		y:  secp256k1.RandomFn(),
+		w:  secp256k1.RandomFn(),
+		z:  secp256k1.RandomFn(),
+		w1: secp256k1.RandomFn(),
+		w2: secp256k1.RandomFn(),
+	}
+	return reflect.ValueOf(r)
 }
