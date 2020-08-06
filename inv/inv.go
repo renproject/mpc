@@ -6,12 +6,16 @@ import (
 	"github.com/renproject/shamir"
 )
 
+// An Inverter is a state machine that implements the inversion protocol.
 type Inverter struct {
 	mulopener        mulopen.MulOpener
 	rShareBatch      shamir.VerifiableShares
 	rCommitmentBatch []shamir.Commitment
 }
 
+// New returns a new Inverter state machine along with the initial message that
+// is to be broadcast to the other parties. The state machine will handle this
+// message before being returned.
 func New(
 	aShareBatch, rShareBatch, rzgShareBatch shamir.VerifiableShares,
 	aCommitmentBatch, rCommitmentBatch, rzgCommitmentBatch []shamir.Commitment,
@@ -34,6 +38,14 @@ func New(
 	return inverter, messages
 }
 
+// HandleMulOpenMessageBatch applies a state transition upon receiveing the
+// given shares from another party during the  multiply and open step in the
+// inversion protocol. Once enough valid messages have been received to
+// complete the inversion protocol, the output, i.e.  shares and commitments
+// that correspond to the multiplicative inverse of the input secret, is
+// computed and returned. If not enough messages have been received, the return
+// value will be nil. If the message batch is invalid in any way, an error will
+// be returned along with a nil value.
 func (inverter *Inverter) HandleMulOpenMessageBatch(messageBatch []mulopen.Message) (
 	shamir.VerifiableShares, []shamir.Commitment, error,
 ) {
