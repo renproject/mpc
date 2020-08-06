@@ -5,7 +5,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "github.com/renproject/mpc/inv"
 
 	"github.com/renproject/mpc/inv/invutil"
 	"github.com/renproject/mpc/mpcutil"
@@ -16,11 +15,6 @@ import (
 )
 
 var _ = Describe("inverter", func() {
-	// FIXME
-	Specify("FIXME", func() {
-		Expect(func() { New(nil, nil, nil, nil, nil, nil, nil, secp256k1.Point{}) }).To(Panic())
-	})
-
 	Context("network", func() {
 		n := 15
 		k := 4
