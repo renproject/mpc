@@ -218,6 +218,12 @@ var _ = Describe("BRNG", func() {
 				_, _, b, _, indices, index, h := RandomTestParameters()
 				Expect(func() { New(b, 0, indices, index, h) }).To(Panic())
 			})
+
+			Specify("insecure pedersen parameter", func() {
+				_, k, b, _, indices, index, _ := RandomTestParameters()
+				h := secp256k1.NewPointInfinity()
+				Expect(func() { New(b, k, indices, index, h) }).To(Panic())
+			})
 		})
 
 		Context("when checking validity", func() {

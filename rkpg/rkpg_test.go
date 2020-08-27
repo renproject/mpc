@@ -176,6 +176,16 @@ var _ = Describe("RKPG", func() {
 	})
 
 	Context("initial messages", func() {
+		Specify("insecure pedersen parameter", func() {
+			_, _, _, b, _, indices := RandomTestParams()
+			inf := secp256k1.NewPointInfinity()
+			rngShares := make(shamir.VerifiableShares, b)
+			rzgShares := make(shamir.VerifiableShares, b)
+			rngComs := make([]shamir.Commitment, b)
+
+			Expect(func() { New(indices, inf, rngShares, rzgShares, rngComs) }).To(Panic())
+		})
+
 		Specify("shares with the wrong batch size", func() {
 			for i := 0; i < trials; i++ {
 				_, _, _, b, h, indices := RandomTestParams()

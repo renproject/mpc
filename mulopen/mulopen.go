@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/renproject/mpc/mulopen/mulzkp"
+	"github.com/renproject/mpc/params"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
@@ -28,6 +29,9 @@ func New(
 	aCommitmentBatch, bCommitmentBatch, rzgCommitmentBatch []shamir.Commitment,
 	indices []secp256k1.Fn, h secp256k1.Point,
 ) (MulOpener, []Message) {
+	if !params.ValidPedersenParameter(h) {
+		panic("insecure choice of pedersen parameter")
+	}
 	batchSize := len(aShareBatch)
 	if batchSize < 1 {
 		panic(fmt.Sprintf("batch size should be at least 1: got %v", batchSize))

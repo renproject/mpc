@@ -168,6 +168,15 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		})
 
 		Context("panics", func() {
+			Specify("insecure pedersen parameter", func() {
+				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
+				inf := secp256k1.NewPointInfinity()
+				brngShareBatch, brngCommitmentBatch := rngutil.BRNGOutputBatch(index, b, c, k, h)
+				Expect(func() {
+					rng.New(index, indices, inf, brngShareBatch, brngCommitmentBatch, isZero)
+				}).To(Panic())
+			})
+
 			Specify("too small commitment batch size", func() {
 				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
 				brngShareBatch, _ := rngutil.BRNGOutputBatch(index, b, c, k, h)

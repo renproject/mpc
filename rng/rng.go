@@ -7,6 +7,7 @@ import (
 	"github.com/renproject/shamir"
 
 	"github.com/renproject/mpc/open"
+	"github.com/renproject/mpc/params"
 	"github.com/renproject/mpc/rng/compute"
 )
 
@@ -42,6 +43,9 @@ func New(
 	brngCommitmentBatch [][]shamir.Commitment,
 	isZero bool,
 ) (RNGer, map[secp256k1.Fn]shamir.VerifiableShares, []shamir.Commitment) {
+	if !params.ValidPedersenParameter(h) {
+		panic("insecure choice of pedersen parameter")
+	}
 	b := uint32(len(brngCommitmentBatch))
 	if b <= 0 {
 		panic(fmt.Sprintf("b must be greater than 0, got: %v", b))

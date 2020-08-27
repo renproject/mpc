@@ -2,6 +2,7 @@ package inv
 
 import (
 	"github.com/renproject/mpc/mulopen"
+	"github.com/renproject/mpc/params"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
@@ -21,6 +22,9 @@ func New(
 	aCommitmentBatch, rCommitmentBatch, rzgCommitmentBatch []shamir.Commitment,
 	indices []secp256k1.Fn, h secp256k1.Point,
 ) (Inverter, []mulopen.Message) {
+	if !params.ValidPedersenParameter(h) {
+		panic("insecure choice of pedersen parameter")
+	}
 	rShareBatchCopy := make(shamir.VerifiableShares, len(rShareBatch))
 	rCommitmentBatchCopy := make([]shamir.Commitment, len(rCommitmentBatch))
 	copy(rShareBatchCopy, rShareBatch)
