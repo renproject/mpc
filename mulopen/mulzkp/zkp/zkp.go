@@ -7,7 +7,7 @@
 // In Proceedings of the seventeenth annual ACM symposium on Principles of
 // distributed computing (PODC ’98). Association for Computing Machinery, New
 // York, NY, USA, 101–111.
-// DOI:https://doi-org.virtual.anu.edu.au/10.1145/277697.277716
+// https://doi.org/10.1145/277697.277716
 package zkp
 
 import "github.com/renproject/secp256k1"
