@@ -1,4 +1,4 @@
-package testutil
+package mpcutil
 
 import (
 	"os"
@@ -28,10 +28,11 @@ func NewDebugger(filename string, messageType, machineType interface{}) Debugger
 		panic(err)
 	}
 
-
 	// Unmarshal machines.
+	buf := make([]byte, surge.MaxBytes)
+	_, err = file.Read(buf)
 	sl := reflect.New(reflect.SliceOf(reflect.TypeOf(machineType)))
-	_, err = surge.Unmarshal(file, sl.Interface(), surge.MaxBytes)
+	buf, _, err = surge.Unmarshal(sl.Interface(), buf, surge.MaxBytes)
 	if err != nil {
 		panic(err)
 	}
@@ -43,7 +44,7 @@ func NewDebugger(filename string, messageType, machineType interface{}) Debugger
 
 	// Unmarshal messages.
 	sl = reflect.New(reflect.SliceOf(reflect.TypeOf(messageType)))
-	_, err = surge.Unmarshal(file, sl.Interface(), surge.MaxBytes)
+	_, _, err = surge.Unmarshal(sl.Interface(), buf, surge.MaxBytes)
 	if err != nil {
 		panic(err)
 	}
