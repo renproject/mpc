@@ -3,6 +3,7 @@ package brng
 import (
 	"fmt"
 
+	"github.com/renproject/mpc/params"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
@@ -20,7 +21,8 @@ type BRNGer struct {
 // parallel.
 //
 // Panics: This function will panic if either the batch size or the
-// reconstruction threshold (k) are less than 1.
+// reconstruction threshold (k) are less than 1, or if the Pedersen parameter
+// is known to be insecure.
 func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp256k1.Point) (
 	BRNGer, []Sharing,
 ) {
@@ -29,6 +31,9 @@ func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp
 	}
 	if k < 1 {
 		panic(fmt.Sprintf("k must be at least 1: got %v", k))
+	}
+	if !params.ValidPedersenParameter(h) {
+		panic("insecure choice of pedersen parameter")
 	}
 	n := len(indices)
 	sharings := make([]Sharing, int(batchSize))

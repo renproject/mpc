@@ -191,6 +191,12 @@ var _ = Describe("Opener", func() {
 		})
 
 		Context("panics", func() {
+			Specify("insecure pedersen parameter", func() {
+				indices := []secp256k1.Fn{}
+				inf := secp256k1.NewPointInfinity()
+				Expect(func() { open.New([]shamir.Commitment{}, indices, inf) }).To(Panic())
+			})
+
 			Specify("invalid batch size", func() {
 				indices := []secp256k1.Fn{}
 				Expect(func() { open.New([]shamir.Commitment{}, indices, h) }).To(Panic())

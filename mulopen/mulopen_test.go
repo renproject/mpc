@@ -249,6 +249,23 @@ var _ = Describe("MulOpener", func() {
 	})
 
 	Context("panics", func() {
+		Specify("insecure pedersen parameter", func() {
+			n, k, b, indices, h := RandomTestParams()
+			playerInd := rand.Intn(n)
+			aShares, aCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			bShares, bCommitments, _ := rkpgutil.RNGOutputBatch(indices, k, b, h)
+			rzgShares, rzgCommitments := rkpgutil.RZGOutputBatch(indices, 2*k-1, b, h)
+
+			inf := secp256k1.NewPointInfinity()
+			Expect(func() {
+				New(
+					aShares[playerInd], bShares[playerInd], rzgShares[playerInd],
+					aCommitments, bCommitments, rzgCommitments,
+					indices, inf,
+				)
+			}).To(Panic())
+		})
+
 		Specify("batch size too small", func() {
 			n, k, b, indices, h := RandomTestParams()
 			playerInd := rand.Intn(n)

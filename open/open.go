@@ -3,6 +3,7 @@ package open
 import (
 	"fmt"
 
+	"github.com/renproject/mpc/params"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 )
@@ -68,6 +69,9 @@ func (opener Opener) I() int {
 //	- Not all commitments in the batch of commitments have the same
 //		reconstruction threshold (k).
 func New(commitmentBatch []shamir.Commitment, indices []secp256k1.Fn, h secp256k1.Point) Opener {
+	if !params.ValidPedersenParameter(h) {
+		panic("insecure choice of pedersen parameter")
+	}
 	// The batch size must be at least 1.
 	b := uint32(len(commitmentBatch))
 	if b < 1 {

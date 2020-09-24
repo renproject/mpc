@@ -3,6 +3,7 @@ package rkpg
 import (
 	"fmt"
 
+	"github.com/renproject/mpc/params"
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/rs"
@@ -31,6 +32,9 @@ func New(
 	rngShares, rzgShares shamir.VerifiableShares,
 	rngComs []shamir.Commitment,
 ) (RKPGer, shamir.Shares) {
+	if !params.ValidPedersenParameter(h) {
+		panic("insecure choice of pedersen parameter")
+	}
 	n := len(indices)
 	b := len(rngShares)
 	if len(rzgShares) != b {
