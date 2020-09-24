@@ -57,7 +57,23 @@ func New(
 			panic(fmt.Sprintf("incorrect rzg k: expected 2*%v-1 = %v, got %v", k, 2*k-1, com.Len()))
 		}
 	}
+
 	index := aShareBatch[0].Share.Index
+	for _, aShare := range aShareBatch {
+		if !aShare.Share.Index.Eq(&index) {
+			panic(fmt.Sprintf("incorrect a_index: expected %v, got %v", index, aShare.Share.Index))
+		}
+	}
+	for _, bShare := range bShareBatch {
+		if !bShare.Share.Index.Eq(&index) {
+			panic(fmt.Sprintf("incorrect b_index: expected %v, got %v", index, bShare.Share.Index))
+		}
+	}
+	for _, rzgShare := range rzgShareBatch {
+		if !rzgShare.Share.Index.Eq(&index) {
+			panic(fmt.Sprintf("incorrect z_index: expected %v, got %v", index, rzgShare.Share.Index))
+		}
+	}
 
 	shareBufs := make([]shamir.Shares, batchSize)
 	for i := range shareBufs {
@@ -80,8 +96,8 @@ func New(
 	for i := 0; i < batchSize; i++ {
 		product.Mul(&aShareBatch[i].Share.Value, &bShareBatch[i].Share.Value)
 		tau := secp256k1.RandomFn()
-		aShareCommitment := polyEvalPoint(aCommitmentBatch[i], index)
-		bShareCommitment := polyEvalPoint(bCommitmentBatch[i], index)
+		aShareCommitment := pedersenCommit(&aShareBatch[i].Share.Value, &aShareBatch[i].Decommitment, &h)
+		bShareCommitment := pedersenCommit(&bShareBatch[i].Share.Value, &bShareBatch[i].Decommitment, &h)
 		productShareCommitment := pedersenCommit(&product, &tau, &h)
 		proof := mulzkp.CreateProof(&h, &aShareCommitment, &bShareCommitment, &productShareCommitment,
 			aShareBatch[i].Share.Value, bShareBatch[i].Share.Value,
@@ -128,6 +144,7 @@ func (mulopener *MulOpener) HandleShareBatch(messageBatch []Message) ([]secp256k
 		for i := range mulopener.indices {
 			if index.Eq(&mulopener.indices[i]) {
 				exists = true
+				break
 			}
 		}
 		if !exists {
