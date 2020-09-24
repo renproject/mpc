@@ -10,7 +10,7 @@ import (
 	"github.com/renproject/secp256k1"
 	"github.com/renproject/shamir"
 	"github.com/renproject/shamir/shamirutil"
-	
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/renproject/mpc/rkpg"
