@@ -60,7 +60,7 @@ var _ = Describe("BRNG", func() {
 	Context("creating a new BRNGer and initial messages", func() {
 		Specify("the shairings (initial messages) should be valid", func() {
 			_, k, b, _, indices, index, h := RandomTestParameters()
-			_, sharingBatch := New(b, k, indices, index, h)
+			sharingBatch := New(b, k, indices, index, h)
 			Expect(len(sharingBatch)).To(Equal(int(b)))
 			for _, sharing := range sharingBatch {
 				Expect(shamirutil.VsharesAreConsistent(sharing.Shares, int(k))).To(BeTrue())
@@ -75,8 +75,8 @@ var _ = Describe("BRNG", func() {
 		Specify("valid share and commitment batches", func() {
 			_, k, b, t, indices, index, h := RandomTestParameters()
 			sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-			brnger, _ := New(b, k, indices, index, h)
-			err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+			_ = New(b, k, indices, index, h)
+			err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -84,22 +84,22 @@ var _ = Describe("BRNG", func() {
 			Specify("incorrect batch size", func() {
 				_, k, b, t, indices, index, h := RandomTestParameters()
 				sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-				brnger, _ := New(b, k, indices, index, h)
+				_ = New(b, k, indices, index, h)
 
 				// Incorrect batch size for shares
-				err := brnger.IsValid(sharesBatch[1:], commitmentsBatch, t)
+				err := IsValid(b, index, h, sharesBatch[1:], commitmentsBatch, t)
 				Expect(err).To(Equal(ErrIncorrectSharesBatchSize))
 
 				// Incorrect batch size for commitments
-				err = brnger.IsValid(sharesBatch, commitmentsBatch[1:], t)
+				err = IsValid(b, index, h, sharesBatch, commitmentsBatch[1:], t)
 				Expect(err).To(Equal(ErrIncorrectCommitmentsBatchSize))
 			})
 
 			Specify("not enough contributions", func() {
 				_, k, b, t, indices, index, h := RandomTestParameters()
 				sharesBatch, commitmentsBatch := ValidBatches(k, b, t-1, indices, index, h)
-				brnger, _ := New(b, k, indices, index, h)
-				err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+				_ = New(b, k, indices, index, h)
+				err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 				Expect(err).To(Equal(ErrNotEnoughContributions))
 			})
 
@@ -111,23 +111,23 @@ var _ = Describe("BRNG", func() {
 						b++
 					}
 					sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-					brnger, _ := New(b, k, indices, index, h)
+					_ = New(b, k, indices, index, h)
 
 					// We modify the slice at index 1 because if the index 0
 					// element has the wrong length, it will return a different
 					// error instead.
 					commitmentsBatch[1] = commitmentsBatch[1][1:]
-					err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+					err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 					Expect(err).To(Equal(ErrInvalidCommitmentDimensions))
 				})
 
 				Specify("commitment threshold", func() {
 					_, k, b, t, indices, index, h := RandomTestParameters()
 					sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-					brnger, _ := New(b, k, indices, index, h)
+					_ = New(b, k, indices, index, h)
 
 					commitmentsBatch[0][0] = shamir.NewCommitmentWithCapacity(int(k) - 1)
-					err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+					err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 					Expect(err).To(Equal(ErrInvalidCommitmentDimensions))
 				})
 
@@ -138,13 +138,13 @@ var _ = Describe("BRNG", func() {
 						b++
 					}
 					sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-					brnger, _ := New(b, k, indices, index, h)
+					_ = New(b, k, indices, index, h)
 
 					// We modify the slice at index 1 because if the index 0
 					// element has the wrong length, it will return a different
 					// error instead.
 					sharesBatch[1] = sharesBatch[1][1:]
-					err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+					err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 					Expect(err).To(Equal(ErrInvalidShareDimensions))
 				})
 			})
@@ -152,7 +152,7 @@ var _ = Describe("BRNG", func() {
 			Specify("incorrect share index", func() {
 				_, k, b, t, indices, index, h := RandomTestParameters()
 				sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-				brnger, _ := New(b, k, indices, index, h)
+				_ = New(b, k, indices, index, h)
 
 				// Pick an index that is not the index of the BRNGer.
 				badIndex := indices[rand.Intn(len(indices))]
@@ -161,16 +161,16 @@ var _ = Describe("BRNG", func() {
 				}
 
 				sharesBatch[0][0].Share.Index = badIndex
-				err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+				err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 				Expect(err).To(Equal(ErrIncorrectIndex))
 			})
 
 			Specify("invalid shares", func() {
 				_, k, b, t, indices, index, h := RandomTestParameters()
 				sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-				brnger, _ := New(b, k, indices, index, h)
+				_ = New(b, k, indices, index, h)
 				sharesBatch[0][0].Share.Value = secp256k1.RandomFn()
-				err := brnger.IsValid(sharesBatch, commitmentsBatch, t)
+				err := IsValid(b, index, h, sharesBatch, commitmentsBatch, t)
 				Expect(err).To(Equal(ErrInvalidShares))
 			})
 		})
@@ -230,8 +230,8 @@ var _ = Describe("BRNG", func() {
 			Specify("required contributions less than 1", func() {
 				_, k, b, t, indices, index, h := RandomTestParameters()
 				sharesBatch, commitmentsBatch := ValidBatches(k, b, t, indices, index, h)
-				brnger, _ := New(b, k, indices, index, h)
-				Expect(func() { brnger.IsValid(sharesBatch, commitmentsBatch, 0) }).To(Panic())
+				_ = New(b, k, indices, index, h)
+				Expect(func() { IsValid(b, index, h, sharesBatch, commitmentsBatch, 0) }).To(Panic())
 			})
 		})
 	})
