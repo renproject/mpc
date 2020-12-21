@@ -8,24 +8,16 @@ import (
 	"github.com/renproject/shamir"
 )
 
-//BRNGer implements the BRNG algorithm.
-type BRNGer struct {
-	batchSize uint32
-	index     secp256k1.Fn
-	h         secp256k1.Point
-}
-
-// New creates a new BRNG state machine for the given indices and pedersen
-// parameter h. The given index represents the index of the created player. The
-// batch size represents the number of instances of the algorithm to be run in
-// parallel.
+// New creates a random batch of sharings that will be sent to the other
+// players during the BRNG algorithm. The verifiable sharings will correspond
+// to the given indices and pedersen parameter h. The given index represents
+// the index of the created player. The batch size represents the number of
+// instances of the algorithm to be run in parallel.
 //
 // Panics: This function will panic if either the batch size or the
 // reconstruction threshold (k) are less than 1, or if the Pedersen parameter
 // is known to be insecure.
-func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp256k1.Point) (
-	BRNGer, []Sharing,
-) {
+func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp256k1.Point) []Sharing {
 	if batchSize < 1 {
 		panic(fmt.Sprintf("batch size must be at least 1: got %v", batchSize))
 	}
@@ -43,8 +35,7 @@ func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp
 		shamir.VShareSecret(&sharings[i].Shares, &sharings[i].Commitment,
 			indices, h, secp256k1.RandomFn(), int(k))
 	}
-	brnger := BRNGer{batchSize, index, h}
-	return brnger, sharings
+	return sharings
 }
 
 // IsValid checks the validity of the given potential consensus outputs. The
@@ -58,7 +49,10 @@ func New(batchSize, k uint32, indices []secp256k1.Fn, index secp256k1.Fn, h secp
 //
 // Panics: This function will panic if the given required contributions is less
 // than 1.
-func (brnger *BRNGer) IsValid(
+func IsValid(
+	batchSize uint32,
+	ownIndex secp256k1.Fn,
+	h secp256k1.Point,
 	sharesBatch []shamir.VerifiableShares,
 	commitmentsBatch [][]shamir.Commitment,
 	requiredContributions int,
@@ -67,7 +61,7 @@ func (brnger *BRNGer) IsValid(
 		panic(fmt.Sprintf("required contributions must be at least 1: got %v", requiredContributions))
 	}
 	// Commitments validity.
-	if uint32(len(commitmentsBatch)) != brnger.batchSize {
+	if uint32(len(commitmentsBatch)) != batchSize {
 		return ErrIncorrectCommitmentsBatchSize
 	}
 	numContributions := len(commitmentsBatch[0])
@@ -89,7 +83,7 @@ func (brnger *BRNGer) IsValid(
 	}
 
 	// Shares validity.
-	if uint32(len(sharesBatch)) != brnger.batchSize {
+	if uint32(len(sharesBatch)) != batchSize {
 		return ErrIncorrectSharesBatchSize
 	}
 	for i, shares := range sharesBatch {
@@ -97,10 +91,10 @@ func (brnger *BRNGer) IsValid(
 			return ErrInvalidShareDimensions
 		}
 		for j, share := range shares {
-			if !share.Share.IndexEq(&brnger.index) {
+			if !share.Share.IndexEq(&ownIndex) {
 				return ErrIncorrectIndex
 			}
-			if !shamir.IsValid(brnger.h, &commitmentsBatch[i][j], &share) {
+			if !shamir.IsValid(h, &commitmentsBatch[i][j], &share) {
 				return ErrInvalidShares
 			}
 		}
@@ -109,17 +103,17 @@ func (brnger *BRNGer) IsValid(
 	return nil
 }
 
-// HandleConsensusOutput performs the state transition for the BRNger state
-// machine upon receiving the slice of verifiable shares that is output by the
-// consensus protocol. It is assumed that the consensus protocol will decide on
-// an output such that >=k players will find that their inputs to this function
-// are valid. It is assumed that the player will use IsValid during the
-// consensus protocol, and if it is found that the shares in the output of the
-// consensus protocol are not valid for this player, the shares argument should
-// be nil. In this case, the corresponding output shares will also be nil.
-// Every time this function is called, it is assumed that the given commitments
-// are valid, which should be the case if they came from a commited block from
-// the consensus algorithm.
+// HandleConsensusOutput computes the output shares and commitments for the
+// BRNG algorithm upon receiving the slice of verifiable shares that is output
+// by the consensus protocol. It is assumed that the consensus protocol will
+// decide on an output such that >=k players will find that their inputs to
+// this function are valid. It is assumed that the player will use IsValid
+// during the consensus protocol, and if it is found that the shares in the
+// output of the consensus protocol are not valid for this player, the shares
+// argument should be nil. In this case, the corresponding output shares will
+// also be nil. Every time this function is called, it is assumed that the
+// given commitments are valid, which should be the case if they came from a
+// commited block from the consensus algorithm.
 func HandleConsensusOutput(
 	sharesBatch []shamir.VerifiableShares, commitmentsBatch [][]shamir.Commitment,
 ) (

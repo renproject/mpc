@@ -17,7 +17,10 @@ import (
 type PlayerMachine struct {
 	id, consID mpcutil.ID
 	row        []brng.Sharing
-	brnger     brng.BRNGer
+
+	batchSize uint32
+	ownIndex  secp256k1.Fn
+	h         secp256k1.Point
 
 	Shares      shamir.VerifiableShares
 	Commitments []shamir.Commitment
@@ -28,7 +31,9 @@ func (pm PlayerMachine) SizeHint() int {
 	return pm.id.SizeHint() +
 		pm.consID.SizeHint() +
 		surge.SizeHint(pm.row) +
-		pm.brnger.SizeHint()
+		surge.SizeHint(pm.batchSize) +
+		surge.SizeHint(pm.ownIndex) +
+		surge.SizeHint(pm.h)
 }
 
 // Marshal implements the surge.Marshaler interface.
@@ -45,8 +50,15 @@ func (pm PlayerMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = pm.brnger.Marshal(buf, rem)
-	return buf, rem, err
+	buf, rem, err = surge.Marshal(pm.batchSize, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	buf, rem, err = surge.Marshal(pm.ownIndex, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	return surge.Marshal(pm.h, buf, rem)
 }
 
 // Unmarshal implements the surge.Unmarshaler interface.
@@ -63,8 +75,15 @@ func (pm *PlayerMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 	if err != nil {
 		return buf, rem, err
 	}
-	buf, rem, err = pm.brnger.Unmarshal(buf, rem)
-	return buf, rem, err
+	buf, rem, err = surge.Unmarshal(&pm.batchSize, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	buf, rem, err = surge.Unmarshal(&pm.ownIndex, buf, rem)
+	if err != nil {
+		return buf, rem, err
+	}
+	return surge.Unmarshal(&pm.h, buf, rem)
 }
 
 // ID implements the Machine interface.
@@ -244,13 +263,15 @@ func NewMachine(
 	k, b int,
 ) BrngMachine {
 	if machineType == BrngTypePlayer {
-		brnger, row := brng.New(uint32(b), uint32(k), indices, index, h)
+		row := brng.New(uint32(b), uint32(k), indices, index, h)
 
 		pmachine := PlayerMachine{
 			id:          id,
 			consID:      consID,
 			row:         row,
-			brnger:      brnger,
+			batchSize:   uint32(b),
+			ownIndex:    index,
+			h:           h,
 			Shares:      nil,
 			Commitments: nil,
 		}
