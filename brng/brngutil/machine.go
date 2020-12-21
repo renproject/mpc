@@ -19,7 +19,6 @@ type PlayerMachine struct {
 	row        []brng.Sharing
 
 	batchSize uint32
-	indices   []secp256k1.Fn
 	ownIndex  secp256k1.Fn
 	h         secp256k1.Point
 
@@ -33,7 +32,6 @@ func (pm PlayerMachine) SizeHint() int {
 		pm.consID.SizeHint() +
 		surge.SizeHint(pm.row) +
 		surge.SizeHint(pm.batchSize) +
-		surge.SizeHint(pm.indices) +
 		surge.SizeHint(pm.ownIndex) +
 		surge.SizeHint(pm.h)
 }
@@ -53,10 +51,6 @@ func (pm PlayerMachine) Marshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	buf, rem, err = surge.Marshal(pm.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, err
-	}
-	buf, rem, err = surge.Marshal(pm.indices, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -82,10 +76,6 @@ func (pm *PlayerMachine) Unmarshal(buf []byte, rem int) ([]byte, int, error) {
 		return buf, rem, err
 	}
 	buf, rem, err = surge.Unmarshal(&pm.batchSize, buf, rem)
-	if err != nil {
-		return buf, rem, err
-	}
-	buf, rem, err = surge.Unmarshal(&pm.indices, buf, rem)
 	if err != nil {
 		return buf, rem, err
 	}
@@ -280,7 +270,6 @@ func NewMachine(
 			consID:      consID,
 			row:         row,
 			batchSize:   uint32(b),
-			indices:     indices,
 			ownIndex:    index,
 			h:           h,
 			Shares:      nil,
