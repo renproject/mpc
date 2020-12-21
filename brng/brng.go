@@ -8,10 +8,11 @@ import (
 	"github.com/renproject/shamir"
 )
 
-// New creates a new BRNG state machine for the given indices and pedersen
-// parameter h. The given index represents the index of the created player. The
-// batch size represents the number of instances of the algorithm to be run in
-// parallel.
+// New creates a random batch of sharings that will be sent to the other
+// players during the BRNG algorithm. The verifiable sharings will correspond
+// to the given indices and pedersen parameter h. The given index represents
+// the index of the created player. The batch size represents the number of
+// instances of the algorithm to be run in parallel.
 //
 // Panics: This function will panic if either the batch size or the
 // reconstruction threshold (k) are less than 1, or if the Pedersen parameter
@@ -102,17 +103,17 @@ func IsValid(
 	return nil
 }
 
-// HandleConsensusOutput performs the state transition for the BRNger state
-// machine upon receiving the slice of verifiable shares that is output by the
-// consensus protocol. It is assumed that the consensus protocol will decide on
-// an output such that >=k players will find that their inputs to this function
-// are valid. It is assumed that the player will use IsValid during the
-// consensus protocol, and if it is found that the shares in the output of the
-// consensus protocol are not valid for this player, the shares argument should
-// be nil. In this case, the corresponding output shares will also be nil.
-// Every time this function is called, it is assumed that the given commitments
-// are valid, which should be the case if they came from a commited block from
-// the consensus algorithm.
+// HandleConsensusOutput computes the output shares and commitments for the
+// BRNG algorithm upon receiving the slice of verifiable shares that is output
+// by the consensus protocol. It is assumed that the consensus protocol will
+// decide on an output such that >=k players will find that their inputs to
+// this function are valid. It is assumed that the player will use IsValid
+// during the consensus protocol, and if it is found that the shares in the
+// output of the consensus protocol are not valid for this player, the shares
+// argument should be nil. In this case, the corresponding output shares will
+// also be nil. Every time this function is called, it is assumed that the
+// given commitments are valid, which should be the case if they came from a
+// commited block from the consensus algorithm.
 func HandleConsensusOutput(
 	sharesBatch []shamir.VerifiableShares, commitmentsBatch [][]shamir.Commitment,
 ) (
