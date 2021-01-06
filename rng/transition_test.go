@@ -185,7 +185,7 @@ var _ = Describe("RNG/RZG state transitions", func() {
 				}).To(Panic())
 			})
 
-			Specify("too small commitment threshold (k)", func() {
+			Specify("too small output threshold (k)", func() {
 				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
 				brngShareBatch, brngCommitmentBatch := rngutil.BRNGOutputBatch(index, b, c, k, h)
 				// For RNG, the number of coefficients that are specified needs
@@ -225,8 +225,12 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 			Specify("inconsistent commitment dimensions (threshold)", func() {
 				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
+				// Having a batch size of at least 2 ensures we can test this condition.
+				if b == 1 {
+					b++
+				}
 				brngShareBatch, brngCommitmentBatch := rngutil.BRNGOutputBatch(index, b, c, k, h)
-				brngCommitmentBatch[0][0] = shamir.Commitment{}
+				brngCommitmentBatch[1][0] = shamir.Commitment{}
 				Expect(func() {
 					rng.New(index, indices, h, brngShareBatch, brngCommitmentBatch, isZero)
 				}).To(Panic())

@@ -57,6 +57,10 @@ func New(
 	if k <= 1 {
 		panic(fmt.Sprintf("k must be greater than 1, got: %v", k))
 	}
+	threshold := brngCommitmentBatch[0][0].Len()
+	if threshold < 2 {
+		panic(fmt.Sprintf("threshold must be greater than 1, got: %v", threshold))
+	}
 
 	var requiredBrngBatchSize int
 	if isZero {
@@ -72,10 +76,10 @@ func New(
 			panic("invalid commitment dimensions")
 		}
 		for _, commitment := range commitments {
-			if commitment.Len() != int(k) {
+			if commitment.Len() != threshold {
 				panic(fmt.Sprintf(
 					"inconsistent commitment threshold: expected %v, got %v",
-					k, commitment.Len(),
+					threshold, commitment.Len(),
 				))
 			}
 		}
