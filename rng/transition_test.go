@@ -39,10 +39,10 @@ var _ = Describe("RNG/RZG state transitions", func() {
 		// Batch size
 		b := 3 + rand.Intn(3)
 
-		// Shamir secret sharing threshold
+		// Threshold of RNG outputs
 		k := 3 + rand.Intn(n-3)
 
-		var c int
+		c := 3 + rand.Intn(n-3)
 		if isZero {
 			c = k - 1
 		} else {
@@ -79,9 +79,9 @@ var _ = Describe("RNG/RZG state transitions", func() {
 			})
 
 			It("should correctly compute the shares and commitments", func() {
-				_, indices, index, b, _, k, h := RandomTestParameters(isZero)
+				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
 				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
-					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
+					rngutil.RNGSharesBatch(indices, index, b, k, c, h, isZero)
 				_, directedOpenings, _ := rng.New(
 					index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero,
 				)
@@ -95,9 +95,9 @@ var _ = Describe("RNG/RZG state transitions", func() {
 
 		Context("handling share batches", func() {
 			Specify("invalid share batches should return an error", func() {
-				_, indices, index, b, _, k, h := RandomTestParameters(isZero)
+				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
 				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
-					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
+					rngutil.RNGSharesBatch(indices, index, b, k, c, h, isZero)
 				rnger, _, _ := rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 				// Pick an index other than our own.
@@ -117,9 +117,9 @@ var _ = Describe("RNG/RZG state transitions", func() {
 			})
 
 			Specify("upon receiving the kth valid share batch, the secrets should be reconstructed", func() {
-				_, indices, index, b, _, k, h := RandomTestParameters(isZero)
+				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
 				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
-					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
+					rngutil.RNGSharesBatch(indices, index, b, k, c, h, isZero)
 				rnger, _, _ := rng.New(index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero)
 
 				// The own player's openings have already been processed.
@@ -143,9 +143,9 @@ var _ = Describe("RNG/RZG state transitions", func() {
 			})
 
 			It("the reconstructed secrets should be valid with respect to the commitments", func() {
-				_, indices, index, b, _, k, h := RandomTestParameters(isZero)
+				_, indices, index, b, c, k, h := RandomTestParameters(isZero)
 				ownSetsOfShares, ownSetsOfCommitments, openingsByPlayer, _ :=
-					rngutil.RNGSharesBatch(indices, index, b, k, h, isZero)
+					rngutil.RNGSharesBatch(indices, index, b, k, c, h, isZero)
 				rnger, _, commitments := rng.New(
 					index, indices, h, ownSetsOfShares, ownSetsOfCommitments, isZero,
 				)
