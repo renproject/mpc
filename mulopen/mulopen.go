@@ -120,8 +120,10 @@ func New(
 
 	// Handle own message immediately.
 	output, err := mulopener.HandleShareBatch(messageBatch)
-	if output != nil || err != nil {
+	if output != nil {
 		panic("unexpected result handling own message")
+	} else if err != nil {
+		panic(fmt.Sprintf("unexpected result handling own message: %v", err))
 	}
 
 	return mulopener, messageBatch
