@@ -121,6 +121,14 @@ github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d/go.mod h1:c3At6R
 github.com/prometheus/tsdb v0.6.2-0.20190402121629-4f204dcbc150/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
 github.com/renproject/secp256k1 v0.0.0-20200702062750-43cb0b3fed27 h1:sOfJHVu3014QmZYqvPTT91qCiaS0Ki8TorQdetUPo84=
 github.com/renproject/secp256k1 v0.0.0-20200702062750-43cb0b3fed27/go.mod h1:KPbbvwaU8dmK2eqr+xccakbFA11EfOQU9gB8jPT0zDs=
+github.com/renproject/secp256k1 v0.0.0-20210111035356-d34e0ef6ea88 h1:rzrMfIhoDLBCalf4tDNBCzvYqtMRO2AqBrPg/8JD6cA=
+github.com/renproject/secp256k1 v0.0.0-20210111035356-d34e0ef6ea88/go.mod h1:KPbbvwaU8dmK2eqr+xccakbFA11EfOQU9gB8jPT0zDs=
+github.com/renproject/secp256k1 v0.0.0-20210111051029-8e2f767f467d h1:XlaiVnbDyaHf84vKoXZUFhqhyXlPwvs86iAM/FxXf7Y=
+github.com/renproject/secp256k1 v0.0.0-20210111051029-8e2f767f467d/go.mod h1:KPbbvwaU8dmK2eqr+xccakbFA11EfOQU9gB8jPT0zDs=
+github.com/renproject/secp256k1 v0.0.0-20210111054507-2bf1cb1b5d52 h1:uGTFvftA0Ej6Zw98NPUY1GBpWrzxN0IWo9bTUXuCjXo=
+github.com/renproject/secp256k1 v0.0.0-20210111054507-2bf1cb1b5d52/go.mod h1:KPbbvwaU8dmK2eqr+xccakbFA11EfOQU9gB8jPT0zDs=
+github.com/renproject/secp256k1 v0.0.0-20210112034404-b92b3ead59de h1:BZQ+VKcg/X49GvHRvhodStAcW/PmL76ecAvyG+yxThQ=
+github.com/renproject/secp256k1 v0.0.0-20210112034404-b92b3ead59de/go.mod h1:KPbbvwaU8dmK2eqr+xccakbFA11EfOQU9gB8jPT0zDs=
 github.com/renproject/shamir v0.0.0-20200714060738-6f2f6544a8a2 h1:R+6Vrc7J6tLXuIjRFq6xqdtR/pOLQILIQdlblhJ8L+4=
 github.com/renproject/shamir v0.0.0-20200714060738-6f2f6544a8a2/go.mod h1:XhsCmIdNZpa7+Ph+/xQ3x0lz8nOZxatEubAkH1KkPOk=
 github.com/renproject/shamir v0.0.0-20200723234417-b5514e4134f6 h1:fMw+0NlRqeIHwIRCyeADN0lMff3EMIGCYHUjpc9/nEE=
