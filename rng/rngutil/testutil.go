@@ -153,7 +153,7 @@ func BRNGOutputFull(
 func RNGSharesBatch(
 	indices []secp256k1.Fn,
 	index secp256k1.Fn,
-	b, k int,
+	b, k, threshold int,
 	h secp256k1.Point,
 	isZero bool,
 ) (
@@ -173,7 +173,7 @@ func RNGSharesBatch(
 
 	var rngShares shamir.VerifiableShares
 	for i := 0; i < b; i++ {
-		brngShares[i], brngComs[i], rngShares, coms[i] = RNGShares(indices, index, k, h, isZero)
+		brngShares[i], brngComs[i], rngShares, coms[i] = RNGShares(indices, index, k, threshold, h, isZero)
 
 		for j, share := range rngShares {
 			shares[indices[j]][i] = share
@@ -190,7 +190,7 @@ func RNGSharesBatch(
 func RNGShares(
 	indices []secp256k1.Fn,
 	index secp256k1.Fn,
-	k int,
+	k, threshold int,
 	h secp256k1.Point,
 	isZero bool,
 ) (shamir.VerifiableShares, []shamir.Commitment, shamir.VerifiableShares, shamir.Commitment) {
@@ -198,9 +198,9 @@ func RNGShares(
 	var coefSharesTrans []shamir.VerifiableShares
 	var coefComms []shamir.Commitment
 	if isZero {
-		coefSharesTrans, coefComms = BRNGOutputFull(indices, k-1, k, h)
+		coefSharesTrans, coefComms = BRNGOutputFull(indices, threshold-1, k, h)
 	} else {
-		coefSharesTrans, coefComms = BRNGOutputFull(indices, k, k, h)
+		coefSharesTrans, coefComms = BRNGOutputFull(indices, threshold, k, h)
 	}
 
 	com := compute.ShareCommitment(index, coefComms)

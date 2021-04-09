@@ -19,8 +19,8 @@ var _ = Describe("BRNG", func() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	RandomTestParameters := func() (int, uint32, uint32, int, []secp256k1.Fn, secp256k1.Fn, secp256k1.Point) {
-		n := shamirutil.RandRange(5, 20)
-		k := shamirutil.RandRange(1, (n/2)-1)
+		n := shamirutil.RandRange(7, 20)
+		k := shamirutil.RandRange(2, (n/2)-1)
 		b := shamirutil.RandRange(1, 5)
 		t := shamirutil.RandRange(k, n)
 		indices := shamirutil.RandomIndices(n)
